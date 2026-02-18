@@ -1,4 +1,4 @@
-# 🪙 DeepCoin: Agentic AI for Archaeological Numismatics
+# 🪙 DeepCoin-Core: Industrial AI for Archaeological Numismatics
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.5+-red.svg)](https://pytorch.org/)
@@ -6,7 +6,7 @@
 [![Next.js](https://img.shields.io/badge/Next.js-15+-black.svg)](https://nextjs.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> **An intelligent multi-agent system that transforms archaeological coin classification from a manual expert task into an automated AI-powered workflow with historical synthesis.**
+> **DeepCoin is an end-to-end industrial AI solution designed to identify, classify, and analyze degraded archaeological coins. By combining Deep Learning (CNNs) for physical feature extraction and Generative AI (LangGraph Agents) for historical reasoning, DeepCoin transforms raw, corroded numismatic data into verified historical reports. Built with a scalable microservices architecture using FastAPI, Next.js, and AWS (via LocalStack).**
 
 ![DeepCoin Architecture](docs/architecture_diagram.png)
 
@@ -14,13 +14,30 @@
 
 ## 🎯 Project Overview
 
-**DeepCoin** is a production-grade AI system designed to solve the complex challenge of identifying and classifying ancient coins from photographs. Built for a final-year engineering internship project (PFE) in Tunisia, this project demonstrates cutting-edge integration of:
+**DeepCoin-Core** is an end-to-end industrial AI solution that bridges the gap between **computer vision** and **historical intelligence** for archaeological numismatics. The system combines:
 
-- 🧠 **Computer Vision**: EfficientNet-B3 CNN for fine-grained image classification
-- 🤖 **Agentic AI**: LangGraph-powered multi-agent orchestration
-- 📚 **Retrieval-Augmented Generation (RAG)**: Historical context synthesis
-- ☁️ **Cloud-Native Architecture**: LocalStack AWS simulation
-- 🌐 **Modern Web Stack**: Next.js 15 + FastAPI + PostgreSQL
+### **Core Innovation: Two-Stage AI Pipeline**
+
+1. **Deep Learning Stage (Physical Analysis)**
+   - **EfficientNet-B3 CNN** trained on 7,677+ ancient coin images
+   - Handles severe degradation: corrosion, wear, fragmentation
+   - CLAHE preprocessing reveals hidden surface details
+   - Transfer learning from ImageNet for robust feature extraction
+
+2. **Generative AI Stage (Historical Reasoning)**
+   - **LangGraph multi-agent orchestration** for complex decision-making
+   - **RAG (Retrieval-Augmented Generation)** with ChromaDB vector database
+   - Synthesizes CNN predictions into verified historical narratives
+   - Human-in-the-loop validation for quality assurance
+
+### **Technology Stack Highlights**
+
+- 🧠 **Deep Learning**: PyTorch 2.5, EfficientNet-B3, OpenCV preprocessing
+- 🤖 **Agentic AI**: LangGraph state machines, GPT-4o-mini synthesis
+- 📚 **RAG System**: ChromaDB vector database, semantic search
+- ☁️ **Cloud-Native**: LocalStack AWS simulation (S3, Lambda)
+- 🌐 **Web Stack**: Next.js 15 (React) + FastAPI + PostgreSQL
+- 🐳 **DevOps**: Docker Compose, GitHub Actions CI/CD
 
 ### The Challenge
 
@@ -30,25 +47,38 @@ Archaeological coins are exceptionally difficult to classify due to:
 - **Fragmentation**: Broken or incomplete specimens
 - **Data scarcity**: Long-tail distribution with many rare types
 
-### The Solution
+### The Solution: Hybrid Deep Learning + Generative AI
 
-A **multi-agent AI system** that:
-1. **Enhances** coin images using CLAHE preprocessing
-2. **Classifies** using transfer learning (ImageNet → Coins)
-3. **Validates** predictions through cross-referencing
-4. **Synthesizes** historical reports via RAG + GenAI
+**DeepCoin-Core** employs a two-stage intelligent pipeline:
 
----
+#### **Stage 1: Deep Learning Classification**
+1. **Preprocessing Engine**: CLAHE enhancement + aspect-preserving resize
+2. **CNN Training**: EfficientNet-B3 fine-tuned on 438 coin classes
+3. **Feature Extraction**: 1536-dimensional visual embeddings
+4. **Prediction**: Softmax probabilities across coin types
 
 ## ✨ Key Features
 
-### 🔬 Advanced Computer Vision
-- **EfficientNet-B3** architecture for optimal accuracy/efficiency
-- **CLAHE enhancement** reveals details in worn coins
-- **Aspect-preserving preprocessing** prevents geometric distortion
-- **Transfer learning** from ImageNet (1.2M images)
-
-### 🤖 Intelligent Agent Orchestration
+### 🔬 Deep Learning Computer Vision Pipeline
+- **EfficientNet-B3** CNN (12M parameters) fine-tuned for numismatics
+- **CLAHE enhancement** (LAB color space) reveals worn coin details
+- **Aspect-preserving preprocessing** maintains coin geometry (299×299)
+- **Transfer learning** from ImageNet → 10-100x less training data needed
+- **Data augmentation** (rotation, brightness, elastic transforms)
+### 🤖 Generative AI Agent Orchestration (LangGraph)
+- **Orchestrator**: State machine with conditional routing & cycles
+- **Vision Agent**: Wraps CNN inference + Grad-CAM visualization
+- **Research Agent**: RAG system (ChromaDB + Wikipedia API + GPT-4o)
+- **Validator Agent**: Historical consistency checks (dates, emperors, mints)
+- **Synthesis Agent**: Markdown → PDF report generation with citations
+### 🌐 Industrial Microservices Architecture
+- **FastAPI** backend (async, type-safe, auto-documented API)
+- **Next.js 15** frontend (React Server Components, TypeScript)
+- **PostgreSQL** database (ACID compliance, JSONB support)
+- **Redis** cache (session management, API rate limiting)
+- **LocalStack** AWS emulation (S3 storage, Lambda inference)
+- **Docker Compose** multi-container orchestration
+- **Nginx** reverse proxy with load balancing
 - **Vision Agent**: CNN-based classification pipeline
 - **Research Agent**: RAG system with ChromaDB vector database
 - **Validator Agent**: Historical consistency verification
@@ -65,40 +95,84 @@ A **multi-agent AI system** that:
 ```
 Confidence > 85%  → Auto-approve & log
 Confidence 60-85% → Request human review
-Confidence < 60%  → Flag for expert analysis
-```
-
----
-
-## 🏗️ Architecture
+## 🏗️ System Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                  USER INTERFACE (Next.js)                   │
-│           Image Upload → Real-time Results → PDF            │
+│           FRONTEND (Next.js 15 + TypeScript)                │
+│  • Image Upload Component (drag & drop)                     │
+│  • Real-time Classification Dashboard                       │
+│  • Confidence Visualization (charts)                        │
+│  • PDF Report Viewer & Download                             │
+└─────────────────────────────────────────────────────────────┘
+                            ↓ REST API / WebSocket
+┌─────────────────────────────────────────────────────────────┐
+│              BACKEND API (FastAPI + Python)                 │
+│  • POST /api/classify - Upload & classify coin              │
+│  • GET /api/history/{id} - Retrieve historical context      │
+│  • GET /api/validate/{id} - Expert review queue             │
+│  • WebSocket /ws - Real-time agent progress streaming       │
 └─────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
-│                   BACKEND API (FastAPI)                     │
-│          /classify | /history | /validate | WebSocket      │
+│           DEEP LEARNING INFERENCE ENGINE                    │
+│  ┌───────────────────────────────────────────────────┐     │
+│  │  1. CLAHE Preprocessing (OpenCV)                  │     │
+│  │  2. EfficientNet-B3 Forward Pass (PyTorch)        │     │
+│  │  3. Softmax Probabilities (438 classes)           │     │
+│  │  4. Grad-CAM Attention Maps                       │     │
+│  └───────────────────────────────────────────────────┘     │
+│         Output: {"class": 3987, "prob": 0.87, ...}         │
 └─────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
-│              ORCHESTRATOR (LangGraph)                       │
-│        State Machine with Human-in-the-Loop                 │
+│      AGENTIC ORCHESTRATOR (LangGraph State Machine)         │
+│  • Conditional Routing (confidence-based)                   │
+│  • State Persistence (checkpoints)                          │
+│  • Human-in-the-Loop Breakpoints                            │
+│  • Retry Logic & Error Handling                             │
 └─────────────────────────────────────────────────────────────┘
                             ↓
         ┌───────────────────┼───────────────────┐
         ↓                   ↓                   ↓
-┌──────────────┐   ┌──────────────┐   ┌──────────────┐
-│ Vision Agent │   │Research Agent│   │Validator Agent│
-│ EfficientNet │   │  ChromaDB    │   │ Cross-check  │
-│     B3       │   │     RAG      │   │  Historical  │
-└──────────────┘   └──────────────┘   └──────────────┘
+┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+│  VISION AGENT   │ │ RESEARCH AGENT  │ │ VALIDATOR AGENT │
+│                 │ │                 │ │                 │
+│ • Extract CNN   │ │ • Query ChromaDB│ │ • Date checks   │
+│   predictions   │ │   vector DB     │ │ • Emperor/mint  │
+│ • Generate      │ │ • Wikipedia API │ │   consistency   │
+│   attention     │ │ • GPT-4o-mini   │ │ • Anomaly       │
+│   maps          │ │   synthesis     │ │   detection     │
+│ • Confidence    │ │ • Source        │ │ • Confidence    │
+│   scoring       │ │   attribution   │ │   adjustment    │
+└─────────────────┘ └─────────────────┘ └─────────────────┘
         ↓                   ↓                   ↓
         └───────────────────┼───────────────────┘
                             ↓
-                   ┌──────────────┐
+        ┌───────────────────────────────────────┐
+        │       SYNTHESIS AGENT                 │
+        │  • Aggregate all agent outputs        │
+        │  • Calculate final confidence score   │
+        │  • Generate Markdown report           │
+        │  • Convert to professional PDF        │
+        │  • Include citations & sources        │
+        └───────────────────────────────────────┘
+                            ↓
+        ┌───────────────────────────────────────┐
+        │        DECISION LAYER                 │
+        │  Confidence > 85%: ✅ Auto-approve    │
+        │  Confidence 60-85%: ⚠️ Human review   │
+        │  Confidence < 60%: 🚩 Flag expert     │
+        └───────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│               DATA PERSISTENCE LAYER                        │
+│  • PostgreSQL: Users, classifications, audit logs           │
+│  • ChromaDB: Historical text embeddings (RAG)               │
+│  • Redis: Session cache, API rate limiting                  │
+│  • LocalStack S3: Image storage (simulated AWS)             │
+└─────────────────────────────────────────────────────────────┘
+```                ┌──────────────┐
                    │  Synthesis   │
                    │    Agent     │
                    │ PDF Reports  │
@@ -120,8 +194,8 @@ Confidence < 60%  → Flag for expert analysis
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/yourusername/deepcoin.git
-cd deepcoin
+git clone https://github.com/ChaiebDhia/DeepCoin-Core.git
+cd DeepCoin-Core
 
 # 2. Create virtual environment
 python -m venv venv
@@ -145,15 +219,15 @@ python src/data_pipeline/prep_engine.py
 ### Project Structure
 
 ```
-deepcoin/
+DeepCoin-Core/
 ├── src/
-│   ├── data_pipeline/      # Data preprocessing & augmentation
-│   │   ├── auditor.py      # Dataset analysis
-│   │   └── prep_engine.py  # CLAHE + resizing pipeline
-│   ├── core/               # ML core components
-│   │   └── model_factory.py # EfficientNet-B3 definition
-│   ├── agents/             # LangGraph agent implementations
-│   ├── api/                # FastAPI backend
+│   ├── data_pipeline/      # Deep Learning data preprocessing
+│   │   ├── auditor.py      # Dataset analysis & long-tail filtering
+│   │   └── prep_engine.py  # CLAHE enhancement + resize pipeline
+│   ├── core/               # CNN architecture & training
+│   │   └── model_factory.py # EfficientNet-B3 model definition
+│   ├── agents/             # Generative AI agents (LangGraph)
+│   ├── api/                # FastAPI microservices backend
 │   └── ...
 ├── data/
 │   ├── raw/                # Original CN dataset (gitignored)
@@ -175,19 +249,23 @@ deepcoin/
 - **Original Classes**: 9,716 unique coin types
 - **Challenge**: Severe long-tail distribution
 
-### Our Filtered Dataset
+### Our Filtered Dataset (Deep Learning Ready)
 - **Filtered Classes**: 438 coin types (≥10 images each)
 - **Total Images**: 7,677 preprocessed images
 - **Average per Class**: 17.5 images
-- **Format**: 299×299 RGB JPG
+- **Format**: 299×299 RGB JPG (EfficientNet-B3 input size)
+- **Preprocessing**: CLAHE enhancement + aspect-preserving resize
+- **Train/Val/Test Split**: 70/15/15 stratified split
 
-**Rationale**: Quality over quantity - CNNs require minimum samples for reliable feature learning.
+**Rationale**: CNNs require minimum 10 samples per class for reliable feature learning. Transfer learning from ImageNet reduces this requirement from thousands to tens of images.
 
 ---
 
 ## 🧠 Technical Deep Dive
 
-### Image Preprocessing Pipeline
+### Stage 1: Deep Learning Pipeline
+
+#### Image Preprocessing Engine
 
 #### 1. CLAHE Enhancement
 ```python
@@ -211,21 +289,34 @@ img = cv2.cvtColor(img, cv2.COLOR_LAB2BGR)
 - Add black padding to reach 299×299
 - No geometric distortion of coin features
 
-### Model Architecture
+#### CNN Architecture & Training
 
-**EfficientNet-B3** (12M parameters)
-- **Input**: 299×299×3 RGB images
-- **Backbone**: Pre-trained on ImageNet
-- **Head**: Custom classifier with dropout (p=0.3)
-- **Output**: 438-way softmax (coin types)
+**EfficientNet-B3** Deep Learning Model:
+- **Parameters**: 12M (optimized for mobile/edge deployment)
+- **Input**: 299×299×3 RGB tensor
+- **Backbone**: Pre-trained on ImageNet (1.2M images, 1000 classes)
+- **Feature Extractor**: 1536-dimensional embeddings
+- **Classifier Head**: Dropout (p=0.3) + Linear(1536 → 438)
+- **Output**: 438-way softmax probabilities
 
-**Transfer Learning Strategy**:
-1. Load ImageNet weights (generic visual features)
-2. Replace classification head
-3. Fine-tune entire network on coins
-4. Early stopping on validation accuracy
+**Training Pipeline**:
+1. **Loss Function**: CrossEntropyLoss (multi-class classification)
+2. **Optimizer**: AdamW (lr=1e-4, weight_decay=0.01)
+3. **Scheduler**: CosineAnnealingLR (warm restarts)
+4. **Data Augmentation**: 
+   - Rotation (±15°)
+   - Brightness/Contrast (±20%)
+   - Elastic transforms (simulates coin deformation)
+5. **Regularization**: Dropout + weight decay + early stopping
+6. **Batch Size**: 32 (gradient accumulation for larger effective batch)
+7. **Epochs**: 50 with early stopping (patience=10)
 
-### Multi-Agent System (Coming Soon)
+**Transfer Learning Justification**:
+- ImageNet pre-training provides low-level features (edges, textures)
+- Fine-tuning adapts high-level features to numismatic patterns
+- Reduces training data requirement by 10-100x
+
+### Stage 2: Generative AI Multi-Agent System (Coming Soon)
 
 **Vision Agent** → Runs CNN inference  
 **Research Agent** → Queries historical database (RAG)  
@@ -352,12 +443,12 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 ## 📞 Contact
 
-**Author**: [Your Name]  
-**Email**: [your.email@example.com]  
-**LinkedIn**: [linkedin.com/in/yourprofile](https://linkedin.com/in/yourprofile)  
-**GitHub**: [@yourusername](https://github.com/yourusername)  
+**Author**: Dhia Chaieb  
+**Email**: dhiashayeb6@gmail.com  
+**LinkedIn**: [linkedin.com/in/dhiachaieb](https://linkedin.com/in/dhiachaieb)  
+**GitHub**: [@ChaiebDhia](https://github.com/ChaiebDhia)  
 
-**Project Link**: [https://github.com/yourusername/deepcoin](https://github.com/yourusername/deepcoin)
+**Project Link**: [https://github.com/ChaiebDhia/DeepCoin-Core](https://github.com/ChaiebDhia/DeepCoin-Core)
 
 ---
 
