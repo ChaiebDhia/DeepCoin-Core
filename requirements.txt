@@ -1,0 +1,47 @@
+# Python Dependencies for DeepCoin-Core
+
+# Deep Learning
+torch==2.5.0
+torchvision==0.25.0
+opencv-python==4.10.0.84
+albumentations==1.4.20
+
+# Data Science
+numpy==2.2.0
+pandas==2.2.3
+matplotlib==3.9.0
+scikit-learn==1.6.0
+tqdm==4.67.3
+
+# Backend API
+fastapi==0.115.0
+uvicorn==0.40.0
+pydantic==2.10.0
+python-multipart==0.0.10
+python-jose[cryptography]==3.3.0
+
+# Agentic AI
+langchain==0.3.0
+langgraph==0.3.0
+langchain-openai==0.3.0
+chromadb==0.6.0
+sentence-transformers==3.3.0
+
+# Database
+psycopg2-binary==2.9.10
+sqlalchemy==2.0.36
+alembic==1.14.0
+redis==5.2.0
+
+# Cloud & DevOps
+boto3==1.35.0
+localstack==3.8.0
+
+# Testing
+pytest==8.3.0
+pytest-asyncio==0.24.0
+httpx==0.28.0
+
+# Utilities
+python-dotenv==1.0.1
+pyyaml==6.0.2
