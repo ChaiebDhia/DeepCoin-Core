@@ -1,0 +1,3 @@
+# This file ensures the models/ directory is tracked by Git
+# Trained model checkpoints (.pth, .pt) will be placed here
+# Note: Large model files are gitignored, only structure is tracked
