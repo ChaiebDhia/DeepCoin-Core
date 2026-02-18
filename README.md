@@ -8,8 +8,6 @@
 
 > **DeepCoin is an end-to-end industrial AI solution designed to identify, classify, and analyze degraded archaeological coins. By combining Deep Learning (CNNs) for physical feature extraction and Generative AI (LangGraph Agents) for historical reasoning, DeepCoin transforms raw, corroded numismatic data into verified historical reports. Built with a scalable microservices architecture using FastAPI, Next.js, and AWS (via LocalStack).**
 
-![DeepCoin Architecture](docs/architecture_diagram.png)
-
 ---
 
 ## 🎯 Project Overview
@@ -97,82 +95,76 @@ Confidence > 85%  → Auto-approve & log
 Confidence 60-85% → Request human review
 ## 🏗️ System Architecture
 
+### High-Level Architecture
+
+```mermaid
+graph TB
+    A["🌐 Frontend (Next.js 15)"]
+    B["⚡ Backend API (FastAPI)"]
+    C["🧠 Deep Learning Engine (PyTorch)"]
+    D["🤖 Orchestrator (LangGraph)"]
+    E["👁️ Vision Agent"]
+    F["📚 Research Agent"]
+    G["✓ Validator Agent"]
+    H["📝 Synthesis Agent"]
+    I["💾 Data Layer (PostgreSQL + ChromaDB)"]
+    
+    A -->|REST API| B
+    B -->|Inference Request| C
+    C -->|CNN Predictions| D
+    D -->|Route Tasks| E
+    D -->|Route Tasks| F
+    D -->|Route Tasks| G
+    E -->|Results| H
+    F -->|Context| H
+    G -->|Validation| H
+    H -->|Final Report| B
+    B -->|Persist| I
 ```
-┌─────────────────────────────────────────────────────────────┐
-│           FRONTEND (Next.js 15 + TypeScript)                │
-│  • Image Upload Component (drag & drop)                     │
-│  • Real-time Classification Dashboard                       │
-│  • Confidence Visualization (charts)                        │
-│  • PDF Report Viewer & Download                             │
-└─────────────────────────────────────────────────────────────┘
-                            ↓ REST API / WebSocket
-┌─────────────────────────────────────────────────────────────┐
-│              BACKEND API (FastAPI + Python)                 │
-│  • POST /api/classify - Upload & classify coin              │
-│  • GET /api/history/{id} - Retrieve historical context      │
-│  • GET /api/validate/{id} - Expert review queue             │
-│  • WebSocket /ws - Real-time agent progress streaming       │
-└─────────────────────────────────────────────────────────────┘
-                            ↓
-┌─────────────────────────────────────────────────────────────┐
-│           DEEP LEARNING INFERENCE ENGINE                    │
-│  ┌───────────────────────────────────────────────────┐     │
-│  │  1. CLAHE Preprocessing (OpenCV)                  │     │
-│  │  2. EfficientNet-B3 Forward Pass (PyTorch)        │     │
-│  │  3. Softmax Probabilities (438 classes)           │     │
-│  │  4. Grad-CAM Attention Maps                       │     │
-│  └───────────────────────────────────────────────────┘     │
-│         Output: {"class": 3987, "prob": 0.87, ...}         │
-└─────────────────────────────────────────────────────────────┘
-                            ↓
-┌─────────────────────────────────────────────────────────────┐
-│      AGENTIC ORCHESTRATOR (LangGraph State Machine)         │
-│  • Conditional Routing (confidence-based)                   │
-│  • State Persistence (checkpoints)                          │
-│  • Human-in-the-Loop Breakpoints                            │
-│  • Retry Logic & Error Handling                             │
-└─────────────────────────────────────────────────────────────┘
-                            ↓
-        ┌───────────────────┼───────────────────┐
-        ↓                   ↓                   ↓
-┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
-│  VISION AGENT   │ │ RESEARCH AGENT  │ │ VALIDATOR AGENT │
-│                 │ │                 │ │                 │
-│ • Extract CNN   │ │ • Query ChromaDB│ │ • Date checks   │
-│   predictions   │ │   vector DB     │ │ • Emperor/mint  │
-│ • Generate      │ │ • Wikipedia API │ │   consistency   │
-│   attention     │ │ • GPT-4o-mini   │ │ • Anomaly       │
-│   maps          │ │   synthesis     │ │   detection     │
-│ • Confidence    │ │ • Source        │ │ • Confidence    │
-│   scoring       │ │   attribution   │ │   adjustment    │
-└─────────────────┘ └─────────────────┘ └─────────────────┘
-        ↓                   ↓                   ↓
-        └───────────────────┼───────────────────┘
-                            ↓
-        ┌───────────────────────────────────────┐
-        │       SYNTHESIS AGENT                 │
-        │  • Aggregate all agent outputs        │
-        │  • Calculate final confidence score   │
-        │  • Generate Markdown report           │
-        │  • Convert to professional PDF        │
-        │  • Include citations & sources        │
-        └───────────────────────────────────────┘
-                            ↓
-        ┌───────────────────────────────────────┐
-        │        DECISION LAYER                 │
-        │  Confidence > 85%: ✅ Auto-approve    │
-        │  Confidence 60-85%: ⚠️ Human review   │
-        │  Confidence < 60%: 🚩 Flag expert     │
-        └───────────────────────────────────────┘
-                            ↓
-┌─────────────────────────────────────────────────────────────┐
-│               DATA PERSISTENCE LAYER                        │
-│  • PostgreSQL: Users, classifications, audit logs           │
-│  • ChromaDB: Historical text embeddings (RAG)               │
-│  • Redis: Session cache, API rate limiting                  │
-│  • LocalStack S3: Image storage (simulated AWS)             │
-└─────────────────────────────────────────────────────────────┘
-```                ┌──────────────┐
+
+### Detailed Component Flow
+
+**1️⃣ Frontend Layer (Next.js 15 + TypeScript)**
+- Image upload component (drag & drop)
+- Real-time classification dashboard
+- Confidence visualization charts
+- PDF report viewer & download
+
+**2️⃣ Backend API (FastAPI + Python)**
+- `POST /api/classify` - Upload & classify coin
+- `GET /api/history/{id}` - Retrieve historical context
+- `GET /api/validate/{id}` - Expert review queue
+- `WebSocket /ws` - Real-time agent progress streaming
+
+**3️⃣ Deep Learning Inference Engine**
+- CLAHE Preprocessing (OpenCV)
+- EfficientNet-B3 Forward Pass (PyTorch)
+- Softmax Probabilities (438 classes)
+- Grad-CAM Attention Maps
+- Output: `{"class": 3987, "prob": 0.87, ...}`
+
+**4️⃣ Agentic Orchestrator (LangGraph State Machine)**
+- Conditional routing (confidence-based)
+- State persistence (checkpoints)
+- Human-in-the-loop breakpoints
+- Retry logic & error handling
+
+**5️⃣ Multi-Agent System**
+- **Vision Agent**: Extract CNN predictions, generate attention maps
+- **Research Agent**: Query ChromaDB vector DB, Wikipedia API, GPT-4o synthesis
+- **Validator Agent**: Date checks, emperor/mint consistency, anomaly detection
+- **Synthesis Agent**: Aggregate outputs, generate PDF reports with citations
+
+**6️⃣ Decision Layer**
+- ✅ Confidence > 85%: Auto-approve
+- ⚠️ Confidence 60-85%: Human review
+- 🚩 Confidence < 60%: Flag for expert
+
+**7️⃣ Data Persistence Layer**
+- **PostgreSQL**: Users, classifications, audit logs
+- **ChromaDB**: Historical text embeddings (RAG)
+- **Redis**: Session cache, API rate limiting
+- **LocalStack S3**: Image storage (simulated AWS)                ┌──────────────┐
                    │  Synthesis   │
                    │    Agent     │
                    │ PDF Reports  │
@@ -327,31 +319,7 @@ img = cv2.cvtColor(img, cv2.COLOR_LAB2BGR)
 
 ---
 
-## 📈 Current Status
 
-### ✅ Completed (Phase 1)
-- [x] Project structure & environment setup
-- [x] Data auditing & long-tail analysis
-- [x] Image preprocessing pipeline (CLAHE + padding)
-- [x] EfficientNet-B3 model definition
-- [x] Dataset filtering (438 classes, 7,677 images)
-
-### 🔄 In Progress (Phase 2)
-- [ ] PyTorch DataLoader with augmentation
-- [ ] Training pipeline (loss, optimizer, scheduler)
-- [ ] Model evaluation metrics
-- [ ] Checkpointing & model versioning
-
-### ⏳ Planned (Phases 3-7)
-- [ ] FastAPI backend (/classify endpoint)
-- [ ] Next.js 15 frontend
-- [ ] LangGraph multi-agent orchestration
-- [ ] ChromaDB RAG system
-- [ ] LocalStack cloud simulation
-- [ ] CI/CD pipeline (GitHub Actions)
-- [ ] Docker deployment
-
----
 
 ## 🛠️ Technology Stack
 
@@ -387,26 +355,7 @@ Combine LLM generation with real-time document retrieval to prevent hallucinatio
 
 ---
 
-## 🎓 Academic Context
 
-**Institution**: [Your University], Tunisia  
-**Project Type**: Final Year Engineering Internship (PFE)  
-**Domain**: Computer Vision, Deep Learning, Agentic AI  
-**Duration**: 16 weeks (February - June 2026)  
-
-**Supervisor Requirements Met**:
-- ✅ Archaeological coin recognition system
-- ✅ CNN implementation (EfficientNet)
-- ✅ Image preprocessing pipeline
-- ✅ Database construction & filtering
-
-**Value-Added Beyond Requirements**:
-- 🚀 Multi-agent orchestration (LangGraph)
-- 🚀 RAG historical synthesis
-- 🚀 Cloud-native architecture (LocalStack)
-- 🚀 Production-ready deployment
-
----
 
 ## 🤝 Contributing
 
@@ -444,11 +393,13 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 ## 📞 Contact
 
 **Author**: Dhia Chaieb  
-**Email**: dhiashayeb6@gmail.com  
+**Institution**: ESPRIT - School of Engineering  
+**Email**: dhia.chaieb@esprit.tn  
 **LinkedIn**: [linkedin.com/in/dhiachaieb](https://linkedin.com/in/dhiachaieb)  
 **GitHub**: [@ChaiebDhia](https://github.com/ChaiebDhia)  
 
-**Project Link**: [https://github.com/ChaiebDhia/DeepCoin-Core](https://github.com/ChaiebDhia/DeepCoin-Core)
+**Project Link**: [https://github.com/ChaiebDhia/DeepCoin-Core](https://github.com/ChaiebDhia/DeepCoin-Core)  
+**Company**: [YEBNI - Information & Communication](https://yebni.com)
 
 ---
 
@@ -459,15 +410,12 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 - **Speed**: <500ms inference time per image
 - **Scalability**: Handle 1000+ concurrent requests (simulated)
 
-### Career Impact
+### Innovation Impact
 - **Portfolio Differentiator**: Stand out in fullstack/AI job applications
 - **Technical Depth**: Demonstrate end-to-end system design skills
 - **Modern Stack**: Showcase 2026 industry-standard technologies
-
-### Academic Achievement
-- **PFE Grade**: Excellent (18+/20)
-- **Innovation**: Multi-agent approach exceeds typical student projects
-- **Documentation**: Comprehensive technical writing
+- **Hybrid Architecture**: Combine Deep Learning + Generative AI effectively
+- **Production-Ready**: Enterprise-grade microservices deployment
 
 ---
 
