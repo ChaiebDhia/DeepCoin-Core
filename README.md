@@ -99,27 +99,45 @@ Confidence 60-85% → Request human review
 
 ```mermaid
 graph TB
-    A["🌐 Frontend (Next.js 15)"]
-    B["⚡ Backend API (FastAPI)"]
-    C["🧠 Deep Learning Engine (PyTorch)"]
-    D["🤖 Orchestrator (LangGraph)"]
-    E["👁️ Vision Agent"]
-    F["📚 Research Agent"]
-    G["✓ Validator Agent"]
-    H["📝 Synthesis Agent"]
-    I["💾 Data Layer (PostgreSQL + ChromaDB)"]
+    START["📸 User Uploads Image"]
+    PREPROCESS["🔧 CLAHE Preprocessing"]
+    VISION["🧠 EfficientNet-B3 CNN"]
+    GATEKEEPER{"🚦 Gatekeeper<br/>Route by Confidence"}
+    INVESTIGATOR["🔍 Visual Investigator<br/>VLM Description"]
+    VALIDATOR["⚖️ Forensic Validator<br/>Anomaly Detection"]
+    HISTORIAN["📚 Historian<br/>RAG Retrieval"]
+    HUMAN{"👤 Human Review?<br/>High-Risk Flag"}
+    SYNTHESIS["📝 Editor-in-Chief<br/>Report Generation"]
+    END["✅ Final Report"]
     
-    A -->|REST API| B
-    B -->|Inference Request| C
-    C -->|CNN Predictions| D
-    D -->|Route Tasks| E
-    D -->|Route Tasks| F
-    D -->|Route Tasks| G
-    E -->|Results| H
-    F -->|Context| H
-    G -->|Validation| H
-    H -->|Final Report| B
-    B -->|Persist| I
+    START --> PREPROCESS
+    PREPROCESS --> VISION
+    VISION --> GATEKEEPER
+    GATEKEEPER -->|"Confidence < 40%"| INVESTIGATOR
+    GATEKEEPER -->|"Confidence 40-85%"| VALIDATOR
+    GATEKEEPER -->|"Confidence > 85%"| HISTORIAN
+    INVESTIGATOR --> SYNTHESIS
+    VALIDATOR --> HUMAN
+    HISTORIAN --> SYNTHESIS
+    HUMAN -->|"Forgery/Unknown"| SYNTHESIS
+    HUMAN -->|"Approved"| SYNTHESIS
+    SYNTHESIS --> END
+```
+
+### LangGraph State Machine Flow
+
+```python
+# State Transitions (Pseudocode)
+START → PREPROCESS → VISION → GATEKEEPER (Router)
+
+if confidence > 0.85:
+    GATEKEEPER → HISTORIAN → SYNTHESIS → END
+
+elif 0.40 <= confidence <= 0.85:
+    GATEKEEPER → VALIDATOR → HUMAN_CHECK → SYNTHESIS → END
+
+else:  # confidence < 0.40
+    GATEKEEPER → INVESTIGATOR → SYNTHESIS → END
 ```
 
 ### Detailed Component Flow
@@ -149,11 +167,33 @@ graph TB
 - Human-in-the-loop breakpoints
 - Retry logic & error handling
 
-**5️⃣ Multi-Agent System**
-- **Vision Agent**: Extract CNN predictions, generate attention maps
-- **Research Agent**: Query ChromaDB vector DB, Wikipedia API, GPT-4o synthesis
-- **Validator Agent**: Date checks, emperor/mint consistency, anomaly detection
-- **Synthesis Agent**: Aggregate outputs, generate PDF reports with citations
+**5️⃣ Multi-Agent System (The "Sovereign Squad")**
+
+1. **The Gatekeeper (Orchestrator)** - Brain of the LangGraph state machine
+   - Routes based on CNN confidence score
+   - High confidence (>85%) → Historian
+   - Medium confidence (40-85%) → Forensic Validator  
+   - Low confidence (<40%) → Visual Investigator
+
+2. **The Visual Investigator (Attribute Expert)** - Handles unknown/degraded coins
+   - Uses Vision-Language Model (GPT-4o-mini) for visual description
+   - Describes: "Silver metal, bearded profile, Greek inscription ΒΑΣΙΛΕΩΣ"
+   - Ensures never returns empty "I don't know" response
+
+3. **The Forensic Validator (Truth Seeker)** - Detects anomalies & forgeries
+   - OpenCV analysis: color histograms, dimension verification
+   - Cross-references physical properties vs historical records
+   - Flags inconsistencies: "CNN says Gold Stater, but histogram shows 80% grey"
+
+4. **The Historian (RAG Specialist)** - Retrieves historical intelligence
+   - Queries ChromaDB vector database for precise context
+   - Fetches: emperor biography, mint location, economic significance
+   - No guessing - only verified historical sources
+
+5. **The Editor-in-Chief (Synthesis Agent)** - Final report generator
+   - Compiles all agent outputs into structured Markdown/PDF
+   - Adds "Verified by Expert" badge if human review occurred
+   - Professional citations and source attribution
 
 **6️⃣ Decision Layer**
 - ✅ Confidence > 85%: Auto-approve
@@ -328,8 +368,10 @@ img = cv2.cvtColor(img, cv2.COLOR_LAB2BGR)
 | **Frontend** | Next.js 15, TypeScript, Tailwind CSS | Modern web UI |
 | **Backend** | FastAPI, Python 3.11, Uvicorn | High-performance API |
 | **ML/AI** | PyTorch 2.5, EfficientNet-B3, OpenCV | Computer vision |
-| **Agents** | LangGraph, LangChain, OpenAI API | Multi-agent orchestration |
-| **Vector DB** | ChromaDB | RAG knowledge base |
+| **Agent Orchestration** | LangGraph (State Machines) | Production-grade cycles & conditional routing |
+| **Vision-Language Model** | GPT-4o-mini (OpenAI API) | Visual description for unknown coins |
+| **Vector DB** | ChromaDB / Pinecone | RAG historical knowledge retrieval |
+| **Computer Vision** | OpenCV (cv2) | Forensic analysis: histograms, dimension checks |
 | **Database** | PostgreSQL, Redis | Persistence & caching |
 | **Cloud Sim** | LocalStack | AWS S3/Lambda emulation |
 | **DevOps** | Docker, GitHub Actions, Nginx | CI/CD & deployment |
