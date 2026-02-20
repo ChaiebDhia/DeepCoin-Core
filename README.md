@@ -55,6 +55,17 @@ Archaeological coins are exceptionally difficult to classify due to:
 3. **Feature Extraction**: 1536-dimensional visual embeddings
 4. **Prediction**: Softmax probabilities across coin types
 
+#### **Stage 2: Agentic Historical Synthesis**
+5. **Vision Agent**: Extracts CNN predictions + Grad-CAM attention maps
+6. **Research Agent**: RAG queries ChromaDB for historical context
+7. **Validator Agent**: Cross-references physical properties vs historical records
+8. **Synthesis Agent**: Generates professional PDF reports with citations
+
+### **Resilience & Robustness**
+
+**Graceful Degradation & Attribute-Based Reasoning**:
+When the CNN Core encounters an out-of-distribution (unknown) coin, the system automatically pivots to a **Multi-Modal Reasoning flow**. It leverages a **Vision-Language Agent** (GPT-4o-mini) to perform zero-shot attribute extraction (metal type, iconography, script) and a **Vector Similarity Search** to provide the most likely historical context, ensuring the user always receives a valuable analytical output.
+
 ## ✨ Key Features
 
 ### 🔬 Deep Learning Computer Vision Pipeline
@@ -63,12 +74,15 @@ Archaeological coins are exceptionally difficult to classify due to:
 - **Aspect-preserving preprocessing** maintains coin geometry (299×299)
 - **Transfer learning** from ImageNet → 10-100x less training data needed
 - **Data augmentation** (rotation, brightness, elastic transforms)
+- **Ensemble predictions** for robust classification
+
 ### 🤖 Generative AI Agent Orchestration (LangGraph)
 - **Orchestrator**: State machine with conditional routing & cycles
 - **Vision Agent**: Wraps CNN inference + Grad-CAM visualization
 - **Research Agent**: RAG system (ChromaDB + Wikipedia API + GPT-4o)
 - **Validator Agent**: Historical consistency checks (dates, emperors, mints)
 - **Synthesis Agent**: Markdown → PDF report generation with citations
+
 ### 🌐 Industrial Microservices Architecture
 - **FastAPI** backend (async, type-safe, auto-documented API)
 - **Next.js 15** frontend (React Server Components, TypeScript)
@@ -77,22 +91,12 @@ Archaeological coins are exceptionally difficult to classify due to:
 - **LocalStack** AWS emulation (S3 storage, Lambda inference)
 - **Docker Compose** multi-container orchestration
 - **Nginx** reverse proxy with load balancing
-- **Vision Agent**: CNN-based classification pipeline
-- **Research Agent**: RAG system with ChromaDB vector database
-- **Validator Agent**: Historical consistency verification
-- **Synthesis Agent**: Professional PDF report generation
-
-### 🌐 Production-Ready Architecture
-- **FastAPI** backend with async operations
-- **Next.js 15** frontend with Server Components
-- **PostgreSQL** for persistent storage
-- **LocalStack** for AWS S3/Lambda simulation
-- **Docker Compose** for orchestration
 
 ### 📊 Intelligent Decision Making
 ```
 Confidence > 85%  → Auto-approve & log
 Confidence 60-85% → Request human review
+Confidence < 60%  → Flag for expert analysis
 ## 🏗️ System Architecture
 
 ### High-Level Architecture
@@ -347,15 +351,6 @@ img = cv2.cvtColor(img, cv2.COLOR_LAB2BGR)
 - ImageNet pre-training provides low-level features (edges, textures)
 - Fine-tuning adapts high-level features to numismatic patterns
 - Reduces training data requirement by 10-100x
-
-### Stage 2: Generative AI Multi-Agent System (Coming Soon)
-
-**Vision Agent** → Runs CNN inference  
-**Research Agent** → Queries historical database (RAG)  
-**Validator Agent** → Cross-references predictions  
-**Synthesis Agent** → Generates PDF reports  
-
-**Orchestrator**: LangGraph state machine with conditional routing
 
 ---
 
