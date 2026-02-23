@@ -12,7 +12,9 @@ def get_deepcoin_model(num_classes):
     in_features = model.classifier[1].in_features
     
     model.classifier = nn.Sequential(
-        nn.Dropout(p=0.3, inplace=True), # Prevents the AI from 'memorizing' (Overfitting)
+        nn.Dropout(p=0.4, inplace=True), # Increased 0.3→0.4: 40% of neurons randomly
+                                          # disabled per forward pass → forces remaining
+                                          # neurons to learn robust features, not memorize
         nn.Linear(in_features, num_classes)
     )
     
