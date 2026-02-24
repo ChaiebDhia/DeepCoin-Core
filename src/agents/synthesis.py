@@ -36,9 +36,24 @@ _C_ORANGE      = (200, 100,  20)
 _C_RULE        = (200, 210, 225)   # light border lines
 
 
+# Greek → Latin transliteration (dict-based)
+_GREEK_MAP: dict = {
+    "Α":"A",  "Β":"B",  "Γ":"G",  "Δ":"D",  "Ε":"E",  "Ζ":"Z",
+    "Η":"E",  "Θ":"TH", "Ι":"I",  "Κ":"K",  "Λ":"L",  "Μ":"M",
+    "Ν":"N",  "Ξ":"X",  "Ο":"O",  "Π":"P",  "Ρ":"R",  "Σ":"S",
+    "Τ":"T",  "Υ":"Y",  "Φ":"PH", "Χ":"KH", "Ψ":"PS", "Ω":"O",
+    "α":"a",  "β":"b",  "γ":"g",  "δ":"d",  "ε":"e",  "ζ":"z",
+    "η":"e",  "θ":"th", "ι":"i",  "κ":"k",  "λ":"l",  "μ":"m",
+    "ν":"n",  "ξ":"x",  "ο":"o",  "π":"p",  "ρ":"r",  "σ":"s",
+    "ς":"s",  "τ":"t",  "υ":"y",  "φ":"ph", "χ":"kh", "ψ":"ps",
+    "ω":"o",
+}
+
+
 def _s(text: str) -> str:
-    """Replace non-latin-1 characters with '?' so fpdf2 (Helvetica) can render them."""
-    return str(text).encode("latin-1", "replace").decode("latin-1")
+    """Transliterate Greek to Latin, then encode to latin-1 safely."""
+    out = "".join(_GREEK_MAP.get(c, c) for c in str(text))
+    return out.encode("latin-1", "replace").decode("latin-1")
 
 
 def _basename(path: str) -> str:
@@ -229,9 +244,6 @@ class Synthesis:
                 _info_box(f, f"Suggested CN type: {inv['suggested_type_id']}  "
                              f"(visual description + semantic KB search)")
             f.ln(7)
-
-        # ── footer band ───────────────────────────────────────────────────────
-        _draw_footer_band(f)
 
         # ── save ──────────────────────────────────────────────────────────────
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
