@@ -389,8 +389,8 @@ DeepCoin-Core/
 │   └── build_knowledge_base.py     # CSV + Nomisma → ChromaDB [Layer 2]
 │
 ├── models/
-│   ├── best_model.pth              # V3 weights (epoch 52, test 79.08%) ✅
-│   ├── best_model_v1_80pct.pth     # V1 backup (79.60%) ✅ DO NOT DELETE
+│   ├── best_model.pth              # V3 weights (epoch 52, val 79.25%, test 79.08%, TTA 80.03%) ✅
+│   ├── best_model_v1_80pct.pth     # Early checkpoint (epoch 3, val 21.33%) — misleading name, NOT the 80% model
 │   └── class_mapping.pth           # {class_to_idx, idx_to_class, n=438} ✅
 │
 ├── data/
@@ -435,7 +435,7 @@ The system is built in strict dependency order. Each layer is completed and test
 
 ```python
 model         = EfficientNet-B3 (ImageNet pretrained, Dropout=0.4)
-optimizer     = AdamW(lr=1e-4, weight_decay=1e-4)
+optimizer     = AdamW(lr=1e-4, weight_decay=0.01)
 scheduler     = CosineAnnealingLR(T_max=100, eta_min=1e-6)
 loss          = CrossEntropyLoss(label_smoothing=0.1)
 augmentation  = Albumentations pipeline (rotation, brightness, elastic)
