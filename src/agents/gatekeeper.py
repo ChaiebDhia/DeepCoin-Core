@@ -190,9 +190,10 @@ class Gatekeeper:
                 ts       = __import__("datetime").datetime.now().strftime("%Y%m%d_%H%M%S")
                 pdf_path = str(_REPORTS_DIR / f"report_{img_stem}_{ts}.pdf")
                 try:
-                    synthesis.to_pdf(report, pdf_path)
+                    synthesis.to_pdf(state, pdf_path)   # pass full state, not markdown string
                 except Exception as _pdf_err:
                     print(f"[Gatekeeper] PDF error: {_pdf_err}")
+                    import traceback; traceback.print_exc()
                     pdf_path = None
             return {**state, "report": report, "pdf_path": pdf_path}
 

@@ -3,287 +3,506 @@ src/agents/synthesis.py
 ========================
 Layer 3 — Synthesis Agent
 
-Collects ALL agent outputs from the LangGraph state and assembles
-the final DeepCoin report in two formats:
-  1. Markdown string  (used in API response, frontend display)
-  2. PDF file         (saved to disk, downloadable)
+Produces two outputs from the LangGraph state:
+  1. A structured plain-text string  (API / logs)
+  2. A professional enterprise-grade PDF (fpdf2, direct draw — no Markdown)
 
-Engineering notes:
-  - One method: synthesize(state) → str (markdown)
-  - One method: to_pdf(markdown, output_path) → saves PDF
-  - PDF uses fpdf2 (pure Python, no system dependencies)
-  - No LLM calls here — all LLM work happened in earlier agents
+PDF design:
+  - No Markdown syntax characters (* # ` [ ] -)
+  - No ASCII art
+  - Proper bordered tables with alternating row shading
+  - Branded navy header band + timestamp
+  - Section titles as blue-ruled uppercase headings
+  - Confidence as percentage only
+  - Greek / non-latin chars replaced gracefully (latin-1 font limitation)
 """
 
 from __future__ import annotations
 
+import os
 from datetime import datetime
-from typing import Any
 
+
+# ── colour palette (R, G, B) ──────────────────────────────────────────────────
+_C_BRAND_DARK  = (15,  40,  80)    # deep navy  — header/footer band
+_C_BRAND_MID   = (30,  80, 160)    # mid blue   — section rule lines
+_C_BRAND_LIGHT = (220, 230, 245)   # pale blue  — table header row bg
+_C_ROW_ALT     = (245, 247, 250)   # near-white — alternating table rows
+_C_TEXT        = (30,  30,  30)    # near-black — body text
+_C_MUTED       = (110, 110, 110)   # grey       — secondary / label text
+_C_WHITE       = (255, 255, 255)
+_C_GREEN       = (30,  130,  80)
+_C_ORANGE      = (200, 100,  20)
+_C_RULE        = (200, 210, 225)   # light border lines
+
+
+def _s(text: str) -> str:
+    """Replace non-latin-1 characters with '?' so fpdf2 (Helvetica) can render them."""
+    return str(text).encode("latin-1", "replace").decode("latin-1")
+
+
+def _basename(path: str) -> str:
+    return path.replace("\\", "/").split("/")[-1] if path else "N/A"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Main class
+# ═══════════════════════════════════════════════════════════════════════════════
 
 class Synthesis:
     """
     Synthesis agent — assembles the final report from LangGraph state.
 
-    Expected state keys (all optional — agent handles missing data gracefully):
-        cnn_prediction   : dict   (class_id, label, confidence, top5, tta_used)
-        route_taken      : str    ("historian" | "validator" | "investigator")
-        historian_result : dict   (from Historian agent)
-        validator_result : dict   (from Validator agent)
-        investigator_result : dict (from Investigator agent)
-        image_path       : str
+    State keys used (all optional):
+        image_path          : str
+        cnn_prediction      : dict  {label, confidence, top5, tta_used}
+        route_taken         : str   historian | validator | investigator
+        historian_result    : dict
+        validator_result    : dict
+        investigator_result : dict
     """
 
+    # ── public ────────────────────────────────────────────────────────────────
+
     def synthesize(self, state: dict) -> str:
-        """
-        Main entry point — returns a full Markdown report string.
-        """
+        """Returns a structured plain-text summary (no Markdown, no special chars)."""
         cnn   = state.get("cnn_prediction", {})
         route = state.get("route_taken", "unknown")
+        h     = state.get("historian_result", {})
+        ts    = datetime.now().strftime("%Y-%m-%d  %H:%M:%S")
+        img   = _basename(state.get("image_path", ""))
+        label = cnn.get("label", "N/A")
+        conf  = cnn.get("confidence", 0.0)
 
-        sections: list[str] = [
-            self._header(cnn, state.get("image_path", "")),
-            self._classification_section(cnn),
+        lines = [
+            "=" * 62,
+            "  DeepCoin  —  Numismatic Classification Report",
+            f"  Generated : {ts}",
+            "=" * 62,
+            "",
+            f"  Image          : {img}",
+            f"  CN Type        : {label}",
+            f"  Confidence     : {conf:.1%}",
+            f"  Pipeline Route : {route.upper()}",
+            "",
         ]
 
-        if route == "historian" or "historian_result" in state:
-            sections.append(self._historian_section(state.get("historian_result", {})))
+        if h:
+            lines += [
+                "  HISTORICAL RECORD",
+                "  " + "-" * 44,
+                f"  Mint           : {h.get('mint', '')}",
+                f"  Region         : {h.get('region', '')}",
+                f"  Date           : {h.get('date', '')}",
+                f"  Period         : {h.get('period', '')}",
+                f"  Material       : {h.get('material', '')}",
+                f"  Denomination   : {h.get('denomination', '')}",
+                f"  Obverse        : {h.get('obverse', '')}",
+                f"  Reverse        : {h.get('reverse', '')}",
+                f"  Persons        : {h.get('persons', '')}",
+                "",
+            ]
+            if h.get("narrative"):
+                lines += ["  Expert Commentary:", f"  {h['narrative']}", ""]
+            if h.get("source_url"):
+                lines += [f"  Source: {h['source_url']}", ""]
 
-        if route == "validator" or "validator_result" in state:
-            sections.append(self._validator_section(state.get("validator_result", {})))
-            # Validator route also runs historian for context
-            if "historian_result" in state and route == "validator":
-                sections.append(self._historian_section(state.get("historian_result", {})))
+        lines += [
+            "=" * 62,
+            "  DeepCoin-Core  |  ESPRIT School of Engineering  |  YEBNI",
+            "  corpus-nummorum.eu",
+            "=" * 62,
+        ]
+        return "\n".join(lines)
 
-        if route == "investigator" or "investigator_result" in state:
-            sections.append(self._investigator_section(state.get("investigator_result", {})))
-
-        sections.append(self._footer())
-        return "\n".join(sections)
-
-    def to_pdf(self, markdown_content: str, output_path: str) -> None:
+    def to_pdf(self, state: dict, output_path: str) -> None:
         """
-        Convert the Markdown report to a PDF file.
-        Uses fpdf2 — strips Markdown formatting, writes clean A4 PDF.
+        Build an enterprise-grade PDF directly from the LangGraph state dict.
+        All drawing is explicit — zero Markdown parsing.
         """
         from fpdf import FPDF
         from fpdf.enums import XPos, YPos
-        import re, os
 
-        def _safe(text: str) -> str:
-            """Replace unmappable characters with '?' for latin-1 PDF rendering."""
-            return text.encode("latin-1", "replace").decode("latin-1")
+        cnn   = state.get("cnn_prediction", {})
+        route = state.get("route_taken", "unknown")
+        h     = state.get("historian_result", {})
+        v     = state.get("validator_result", {})
+        inv   = state.get("investigator_result", {})
+        img   = _basename(state.get("image_path", ""))
+        ts    = datetime.now().strftime("%d %B %Y    %H:%M")
 
-        # Margins BEFORE add_page so effective_page_width is correct
-        pdf = FPDF()
-        pdf.set_margins(20, 20, 20)
-        pdf.set_auto_page_break(auto=True, margin=15)
-        pdf.add_page()
+        # ── page setup ────────────────────────────────────────────────────────
+        f = FPDF()
+        f.set_margins(20, 15, 20)
+        f.set_auto_page_break(auto=True, margin=20)
+        f.add_page()
 
-        for line in markdown_content.split("\n"):
-            try:
-                # Skip Markdown table separator rows (|---|---|)
-                if re.match(r"^\s*\|[-| :]+\|\s*$", line):
-                    continue
+        # ── header band ───────────────────────────────────────────────────────
+        _draw_header_band(f, ts, img)
 
-                # Convert pipe-table data rows to readable text
-                if line.startswith("|") and line.endswith("|"):
-                    cells = [c.strip() for c in line.strip("|").split("|")]
-                    cells = [re.sub(r"[*_`]+", "", c).strip() for c in cells if c.strip()]
-                    if cells:
-                        row_text = "  |  ".join(cells)
-                        if row_text.strip():
-                            pdf.set_font("Helvetica", "", 10)
-                            pdf.set_x(pdf.l_margin)
-                            pdf.multi_cell(0, 6, _safe(row_text),
-                                           new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                    continue
+        # ── result summary stripe ─────────────────────────────────────────────
+        _draw_result_stripe(f, cnn)
+        f.ln(6)
 
-                # Strip remaining Markdown markers for regular lines
-                clean = re.sub(r"[*_`#]+", "", line).strip()
-                if not clean:
-                    pdf.ln(3)
-                    continue
+        # ── CNN classification ────────────────────────────────────────────────
+        _section_title(f, "CNN Classification")
+        _kv_table(f, [
+            ("Predicted Type",  _s(str(cnn.get("label", "N/A")))),
+            ("Confidence",      f"{cnn.get('confidence', 0):.1%}"),
+            ("Model",           "EfficientNet-B3  (438 classes)"),
+            ("Pipeline Route",  route.upper()),
+            ("TTA Applied",     "Yes" if cnn.get("tta_used") else "No"),
+        ])
 
-                if line.startswith("# "):
-                    pdf.set_font("Helvetica", "B", 16)
-                    pdf.cell(0, 10, _safe(clean), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                    pdf.ln(2)
-                elif line.startswith("## "):
-                    pdf.set_font("Helvetica", "B", 13)
-                    pdf.cell(0, 8, _safe(clean), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                    pdf.ln(1)
-                elif line.startswith("### "):
-                    pdf.set_font("Helvetica", "B", 11)
-                    pdf.cell(0, 7, _safe(clean), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                elif line.startswith("---"):
-                    pdf.ln(2)
-                    pdf.set_draw_color(180, 180, 180)
-                    pdf.line(pdf.get_x(), pdf.get_y(), pdf.w - 20, pdf.get_y())
-                    pdf.ln(2)
-                else:
-                    pdf.set_font("Helvetica", "", 10)
-                    pdf.set_x(pdf.l_margin)
-                    pdf.multi_cell(0, 6, _safe(clean),
-                                   new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-            except Exception as _line_err:
-                # Skip lines that can't render; log for debug
-                print(f"[PDF] skipped line: {_line_err}")
-                continue
+        top5 = cnn.get("top5", [])
+        if top5:
+            f.ln(4)
+            _subsection_title(f, "Top-5 Predictions")
+            _confidence_table(f, top5)
+        f.ln(7)
 
-        # Write binary to avoid Windows codec errors
+        # ── historical record ─────────────────────────────────────────────────
+        if h:
+            _section_title(f, "Historical Record")
+            rows = [
+                ("CN Type ID",    str(h.get("type_id",    ""))),
+                ("Mint",          h.get("mint",           "")),
+                ("Region",        h.get("region",         "")),
+                ("Date",          h.get("date",           "")),
+                ("Period",        h.get("period",         "")),
+                ("Material",      h.get("material",       "")),
+                ("Denomination",  h.get("denomination",   "")),
+                ("Obverse",       h.get("obverse",        "")),
+                ("Reverse",       h.get("reverse",        "")),
+                ("Persons",       h.get("persons",        "")),
+            ]
+            _kv_table(f, [(k, _s(val)) for k, val in rows if val])
+
+            if h.get("narrative"):
+                f.ln(4)
+                _subsection_title(f, "Expert Commentary")
+                _body_paragraph(f, h["narrative"])
+
+            if h.get("source_url"):
+                f.ln(2)
+                _source_line(f, h["source_url"])
+            f.ln(7)
+
+        # ── forensic validation ───────────────────────────────────────────────
+        if v:
+            _section_title(f, "Forensic Validation")
+            _status_badge(f, v.get("match", True))
+            _kv_table(f, [
+                ("Status",            _s(v.get("status", "").upper())),
+                ("Detected Material", _s(v.get("detected_material", ""))),
+                ("Expected Material", _s(v.get("expected_material", ""))),
+            ])
+            if v.get("warning"):
+                f.ln(3)
+                _warning_box(f, v["warning"])
+            f.ln(7)
+
+        # ── visual investigation ──────────────────────────────────────────────
+        if inv:
+            _section_title(f, "Visual Investigation  (Low-Confidence Route)")
+            if inv.get("visual_description"):
+                _body_paragraph(f, inv["visual_description"])
+
+            feats = inv.get("detected_features", {})
+            if feats:
+                f.ln(3)
+                _subsection_title(f, "Detected Attributes")
+                _kv_table(f, [
+                    (k.replace("_", " ").title(), _s(str(val)))
+                    for k, val in feats.items()
+                    if val and val not in ("unknown", [], "")
+                ])
+
+            kb = inv.get("kb_matches", [])
+            if kb:
+                f.ln(3)
+                _subsection_title(f, "Closest Knowledge Base Matches")
+                _kb_table(f, kb[:3])
+
+            if inv.get("suggested_type_id"):
+                f.ln(3)
+                _info_box(f, f"Suggested CN type: {inv['suggested_type_id']}  "
+                             f"(visual description + semantic KB search)")
+            f.ln(7)
+
+        # ── footer band ───────────────────────────────────────────────────────
+        _draw_footer_band(f)
+
+        # ── save ──────────────────────────────────────────────────────────────
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
         with open(output_path, "wb") as fout:
-            pdf.output(fout)
-
-    def _process_line_placeholder(self): pass  # remove in next cleanup
-
-    # ── private section builders ─────────────────────────────────────────────────
-
-    def _header(self, cnn: dict, image_path: str) -> str:
-        ts   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        img  = image_path.split("/")[-1].split("\\")[-1] if image_path else "N/A"
-        label = cnn.get("label", "Unknown")
-        conf  = cnn.get("confidence", 0.0)
-        return (
-            f"# DeepCoin Classification Report\n\n"
-            f"**Date**: {ts}  \n"
-            f"**Image**: {img}  \n"
-            f"**Result**: {label} ({conf:.1%} confidence)  \n"
-            f"**Source**: Corpus Nummorum (corpus-nummorum.eu)  \n\n"
-            f"---"
-        )
-
-    def _classification_section(self, cnn: dict) -> str:
-        label = cnn.get("label", "Unknown")
-        conf  = cnn.get("confidence", 0.0)
-        tta   = " (TTA)" if cnn.get("tta_used") else ""
-        top5  = cnn.get("top5", [])
-        conf_bar = _bar(conf)
-
-        top5_lines = ""
-        if top5:
-            top5_lines = "\n**Top-5 predictions:**\n"
-            for t in top5:
-                bar = _bar(t["confidence"])
-                top5_lines += f"- `{t['label']}` {bar} {t['confidence']:.1%}\n"
-
-        return (
-            f"\n## CNN Classification\n\n"
-            f"| Field | Value |\n"
-            f"|---|---|\n"
-            f"| **Predicted type** | `{label}` |\n"
-            f"| **Confidence** | {conf:.1%}{tta} {conf_bar} |\n"
-            f"| **Model** | EfficientNet-B3 (438 classes) |\n"
-            f"{top5_lines}"
-        )
-
-    def _historian_section(self, h: dict) -> str:
-        if not h:
-            return "\n## Historical Record\n\n*No KB record available.*"
-
-        fields = [
-            ("Type ID",      h.get("type_id",      "")),
-            ("Mint",         h.get("mint",          "")),
-            ("Region",       h.get("region",        "")),
-            ("Date",         h.get("date",          "")),
-            ("Period",       h.get("period",        "")),
-            ("Material",     h.get("material",      "")),
-            ("Denomination", h.get("denomination",  "")),
-            ("Obverse",      h.get("obverse",       "")),
-            ("Reverse",      h.get("reverse",       "")),
-            ("Persons",      h.get("persons",       "")),
-        ]
-        table_rows = "\n".join(
-            f"| **{k}** | {v} |"
-            for k, v in fields if v
-        )
-        narrative = h.get("narrative", "")
-        source    = h.get("source_url", "")
-        llm_note  = " *(AI narrative)*" if h.get("llm_used") else ""
-
-        return (
-            f"\n## Historical Record\n\n"
-            f"| Field | Value |\n"
-            f"|---|---|\n"
-            f"{table_rows}\n\n"
-            + (f"### Expert Commentary{llm_note}\n\n{narrative}\n\n" if narrative else "")
-            + (f"**Source**: [{source}]({source})\n" if source else "")
-        )
-
-    def _validator_section(self, v: dict) -> str:
-        if not v:
-            return ""
-        status   = v.get("status", "unknown")
-        detected = v.get("detected_material", "unknown")
-        expected = v.get("expected_material", "unknown")
-        warning  = v.get("warning", "")
-        match    = v.get("match", True)
-
-        badge = "**Material: Consistent**" if match else "**Material: Mismatch**"
-        icon  = "\u2705" if match else "\u26a0\ufe0f"
-
-        return (
-            f"\n## Forensic Validation\n\n"
-            f"{icon} {badge}\n\n"
-            f"| | |\n"
-            f"|---|---|\n"
-            f"| **Status** | {status.upper()} |\n"
-            f"| **Detected material** | {detected} |\n"
-            f"| **Expected material** | {expected} |\n"
-            + (f"\n> {warning}\n" if warning else "")
-        )
-
-    def _investigator_section(self, inv: dict) -> str:
-        if not inv:
-            return ""
-        desc     = inv.get("visual_description", "")
-        features = inv.get("detected_features", {})
-        kb_hits  = inv.get("kb_matches", [])
-        suggest  = inv.get("suggested_type_id")
-        llm_note = " *(Gemini Vision)*" if inv.get("llm_used") else ""
-
-        feat_lines = ""
-        if features:
-            feat_lines = "\n**Detected attributes:**\n"
-            for k, v in features.items():
-                if v and v != "unknown" and v != []:
-                    feat_lines += f"- **{k.replace('_', ' ').title()}**: {v}\n"
-
-        kb_lines = ""
-        if kb_hits:
-            kb_lines = "\n**Closest KB matches (semantic):**\n"
-            for hit in kb_hits[:3]:
-                kb_lines += (
-                    f"- `CN_{hit['type_id']}` — {hit.get('mint','')} "
-                    f"{hit.get('date','')} [{hit['score']:.2f}]\n"
-                )
-
-        suggest_line = (
-            f"\n> **Best guess**: CN type `{suggest}` (from visual description + KB search)\n"
-            if suggest else ""
-        )
-
-        return (
-            f"\n## Visual Investigation (Low Confidence){llm_note}\n\n"
-            f"{desc}\n"
-            f"{feat_lines}"
-            f"{kb_lines}"
-            f"{suggest_line}"
-        )
-
-    def _footer(self) -> str:
-        return (
-            "\n---\n\n"
-            "*Generated by **DeepCoin-Core** — EfficientNet-B3 + LangGraph Multi-Agent System*  \n"
-            "*ESPRIT School of Engineering / YEBNI*  \n"
-            "*Data source: [Corpus Nummorum](https://www.corpus-nummorum.eu)*"
-        )
+            f.output(fout)
 
 
-# ── helpers ──────────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# Drawing helpers
+# ═══════════════════════════════════════════════════════════════════════════════
 
-def _bar(score: float, width: int = 10) -> str:
-    """ASCII confidence bar, e.g. [#######---] 70%"""
-    filled = int(score * width)
-    return f"[{'#' * filled}{'-' * (width - filled)}]"
+def _ew(f) -> float:
+    """Effective (printable) page width in mm."""
+    return f.w - f.l_margin - f.r_margin
+
+
+def _draw_header_band(f, ts: str, img: str) -> None:
+    from fpdf.enums import XPos, YPos
+    # Navy band
+    f.set_fill_color(*_C_BRAND_DARK)
+    f.rect(0, 0, f.w, 30, style="F")
+
+    # Left: product name
+    f.set_xy(20, 6)
+    f.set_text_color(*_C_WHITE)
+    f.set_font("Helvetica", "B", 18)
+    f.cell(90, 10, "DeepCoin", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+    f.set_xy(20, 17)
+    f.set_font("Helvetica", "", 9)
+    f.set_text_color(180, 200, 230)
+    f.cell(90, 6, "Numismatic Intelligence System  |  ESPRIT / YEBNI")
+
+    # Right: timestamp + filename
+    f.set_font("Helvetica", "", 8)
+    f.set_text_color(180, 200, 230)
+    f.set_xy(f.w - 85, 8)
+    f.cell(65, 5, _s(ts), align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    f.set_xy(f.w - 85, 14)
+    f.cell(65, 5, _s(img), align="R")
+
+    f.set_text_color(*_C_TEXT)
+    f.set_xy(f.l_margin, 36)
+
+
+def _draw_result_stripe(f, cnn: dict) -> None:
+    from fpdf.enums import XPos, YPos
+    label = _s(str(cnn.get("label", "N/A")))
+    conf  = cnn.get("confidence", 0.0)
+
+    y = f.get_y()
+    f.set_fill_color(*_C_BRAND_LIGHT)
+    f.set_draw_color(*_C_BRAND_LIGHT)
+    f.rect(f.l_margin, y, _ew(f), 16, style="FD")
+
+    f.set_xy(f.l_margin + 5, y + 3)
+    f.set_font("Helvetica", "B", 13)
+    f.set_text_color(*_C_BRAND_DARK)
+    f.cell(60, 8, f"CN Type  {label}")
+
+    f.set_xy(f.l_margin + 70, y + 5)
+    f.set_font("Helvetica", "", 10)
+    f.set_text_color(*_C_MUTED)
+    f.cell(50, 6, f"Confidence:  {conf:.1%}")
+
+    f.set_text_color(*_C_TEXT)
+    f.set_draw_color(*_C_RULE)
+    f.set_xy(f.l_margin, y + 16)
+
+
+def _section_title(f, title: str) -> None:
+    from fpdf.enums import XPos, YPos
+    f.set_x(f.l_margin)
+    f.set_font("Helvetica", "B", 11)
+    f.set_text_color(*_C_BRAND_DARK)
+    f.cell(0, 7, _s(title.upper()), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    # Blue rule
+    y = f.get_y()
+    f.set_draw_color(*_C_BRAND_MID)
+    f.line(f.l_margin, y, f.l_margin + _ew(f), y)
+    f.set_draw_color(*_C_RULE)
+    f.set_text_color(*_C_TEXT)
+    f.ln(3)
+
+
+def _subsection_title(f, title: str) -> None:
+    from fpdf.enums import XPos, YPos
+    f.set_x(f.l_margin)
+    f.set_font("Helvetica", "B", 9)
+    f.set_text_color(*_C_MUTED)
+    f.cell(0, 6, _s(title.upper()), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    f.set_text_color(*_C_TEXT)
+    f.ln(1)
+
+
+def _kv_table(f, rows: list) -> None:
+    """Two-column key/value table with borders and alternating shading."""
+    from fpdf.enums import XPos, YPos
+    if not rows:
+        return
+    col_k = 52
+    col_v = _ew(f) - col_k
+    row_h = 7
+
+    # Column header
+    f.set_fill_color(*_C_BRAND_LIGHT)
+    f.set_draw_color(*_C_RULE)
+    f.set_font("Helvetica", "B", 9)
+    f.set_text_color(*_C_BRAND_DARK)
+    f.set_x(f.l_margin)
+    f.cell(col_k, row_h, "  Field",  border=1, fill=True,
+           new_x=XPos.RIGHT, new_y=YPos.TOP)
+    f.cell(col_v, row_h, "  Value",  border=1, fill=True,
+           new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+    for i, (key, val) in enumerate(rows):
+        f.set_fill_color(*(_C_ROW_ALT if i % 2 == 0 else _C_WHITE))
+        f.set_x(f.l_margin)
+
+        # Key
+        f.set_font("Helvetica", "B", 9)
+        f.set_text_color(*_C_MUTED)
+        f.cell(col_k, row_h, f"  {_s(key)}", border="LBR", fill=True,
+               new_x=XPos.RIGHT, new_y=YPos.TOP)
+
+        # Value — multi_cell for long text, anchored to left margin after
+        f.set_font("Helvetica", "", 9)
+        f.set_text_color(*_C_TEXT)
+        f.multi_cell(col_v, row_h, f"  {_s(val)}", border="LBR", fill=True,
+                     new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+    f.set_text_color(*_C_TEXT)
+    f.set_draw_color(*_C_RULE)
+
+
+def _confidence_table(f, top5: list) -> None:
+    """Rank / CN Type / Confidence three-column table."""
+    from fpdf.enums import XPos, YPos
+    ew = _ew(f)
+    c1, c3 = 24, 38
+    c2 = ew - c1 - c3
+    row_h = 7
+
+    f.set_fill_color(*_C_BRAND_LIGHT)
+    f.set_draw_color(*_C_RULE)
+    f.set_font("Helvetica", "B", 9)
+    f.set_text_color(*_C_BRAND_DARK)
+    f.set_x(f.l_margin)
+    for label, w in [("Rank", c1), ("CN Type", c2), ("Confidence", c3)]:
+        f.cell(w, row_h, f"  {label}", border=1, fill=True,
+               new_x=XPos.RIGHT, new_y=YPos.TOP)
+    f.set_xy(f.l_margin, f.get_y() + row_h)
+
+    for i, t in enumerate(top5):
+        f.set_fill_color(*(_C_ROW_ALT if i % 2 == 0 else _C_WHITE))
+        f.set_font("Helvetica", "B" if i == 0 else "", 9)
+        f.set_text_color(*(_C_BRAND_DARK if i == 0 else _C_TEXT))
+        f.set_x(f.l_margin)
+        for val, w in [
+            (str(i + 1),                        c1),
+            (_s(str(t.get("label", ""))),         c2),
+            (f"{t.get('confidence', 0):.1%}",   c3),
+        ]:
+            f.cell(w, row_h, f"  {val}", border="LBR", fill=True,
+                   new_x=XPos.RIGHT, new_y=YPos.TOP)
+        f.set_xy(f.l_margin, f.get_y() + row_h)
+
+    f.set_text_color(*_C_TEXT)
+
+
+def _kb_table(f, matches: list) -> None:
+    """CN Type / Score / Mint / Date four-column table."""
+    from fpdf.enums import XPos, YPos
+    ew = _ew(f)
+    c1, c2, c3 = 28, 24, 55
+    c4 = ew - c1 - c2 - c3
+    row_h = 7
+
+    f.set_fill_color(*_C_BRAND_LIGHT)
+    f.set_draw_color(*_C_RULE)
+    f.set_font("Helvetica", "B", 9)
+    f.set_text_color(*_C_BRAND_DARK)
+    f.set_x(f.l_margin)
+    for label, w in [("Type", c1), ("Score", c2), ("Mint", c3), ("Date", c4)]:
+        f.cell(w, row_h, f"  {label}", border=1, fill=True,
+               new_x=XPos.RIGHT, new_y=YPos.TOP)
+    f.set_xy(f.l_margin, f.get_y() + row_h)
+
+    for i, hit in enumerate(matches):
+        f.set_fill_color(*(_C_ROW_ALT if i % 2 == 0 else _C_WHITE))
+        f.set_font("Helvetica", "", 9)
+        f.set_text_color(*_C_TEXT)
+        f.set_x(f.l_margin)
+        for val, w in [
+            (_s(str(hit.get("type_id", ""))),   c1),
+            (f"{hit.get('score', 0):.2f}",      c2),
+            (_s(hit.get("mint", "")),            c3),
+            (_s(hit.get("date", "")),            c4),
+        ]:
+            f.cell(w, row_h, f"  {val}", border="LBR", fill=True,
+                   new_x=XPos.RIGHT, new_y=YPos.TOP)
+        f.set_xy(f.l_margin, f.get_y() + row_h)
+
+    f.set_text_color(*_C_TEXT)
+
+
+def _body_paragraph(f, text: str) -> None:
+    from fpdf.enums import XPos, YPos
+    f.set_font("Helvetica", "", 10)
+    f.set_text_color(*_C_TEXT)
+    f.set_x(f.l_margin)
+    f.multi_cell(_ew(f), 6, _s(text), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+
+def _source_line(f, url: str) -> None:
+    from fpdf.enums import XPos, YPos
+    f.set_font("Helvetica", "I", 8)
+    f.set_text_color(*_C_MUTED)
+    f.set_x(f.l_margin)
+    f.cell(0, 5, f"Source: {_s(url)}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    f.set_text_color(*_C_TEXT)
+
+
+def _status_badge(f, match: bool) -> None:
+    from fpdf.enums import XPos, YPos
+    color = _C_GREEN if match else _C_ORANGE
+    label = "MATERIAL CONSISTENT" if match else "MATERIAL MISMATCH"
+    f.set_fill_color(*color)
+    f.set_text_color(*_C_WHITE)
+    f.set_font("Helvetica", "B", 9)
+    f.set_x(f.l_margin)
+    f.cell(62, 8, f"  {label}", fill=True, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    f.set_text_color(*_C_TEXT)
+    f.ln(3)
+
+
+def _warning_box(f, text: str) -> None:
+    from fpdf.enums import XPos, YPos
+    f.set_fill_color(255, 243, 220)
+    f.set_draw_color(*_C_ORANGE)
+    f.set_font("Helvetica", "I", 9)
+    f.set_text_color(*_C_ORANGE)
+    f.set_x(f.l_margin)
+    f.multi_cell(_ew(f), 6, f"  Note: {_s(text)}", border=1, fill=True,
+                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    f.set_text_color(*_C_TEXT)
+    f.set_draw_color(*_C_RULE)
+
+
+def _info_box(f, text: str) -> None:
+    from fpdf.enums import XPos, YPos
+    f.set_fill_color(*_C_BRAND_LIGHT)
+    f.set_draw_color(*_C_BRAND_MID)
+    f.set_font("Helvetica", "I", 9)
+    f.set_text_color(*_C_BRAND_DARK)
+    f.set_x(f.l_margin)
+    f.multi_cell(_ew(f), 6, f"  {_s(text)}", border=1, fill=True,
+                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    f.set_text_color(*_C_TEXT)
+    f.set_draw_color(*_C_RULE)
+
+
+def _draw_footer_band(f) -> None:
+    from fpdf.enums import XPos, YPos
+    f.set_y(f.h - 14)
+    f.set_fill_color(*_C_BRAND_DARK)
+    f.rect(0, f.h - 14, f.w, 14, style="F")
+    f.set_xy(20, f.h - 10)
+    f.set_text_color(180, 200, 230)
+    f.set_font("Helvetica", "", 8)
+    f.cell(110, 5, "DeepCoin-Core  |  ESPRIT School of Engineering  |  YEBNI")
+    f.set_xy(f.w - 65, f.h - 10)
+    f.cell(45, 5, "corpus-nummorum.eu", align="R")
+    f.set_text_color(*_C_TEXT)
