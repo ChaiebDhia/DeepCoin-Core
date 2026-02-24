@@ -59,7 +59,7 @@ ENGINEERING_JOURNAL.md
 NOTES.md
 data/raw/
 data/processed/
-data/metadata/
+data/metadata/chroma_db/
 models/*.pth
 models/*.pt
 *.log
