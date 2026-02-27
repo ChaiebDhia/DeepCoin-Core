@@ -312,8 +312,9 @@ Persistent context file committed: `ca96c10`.
 
 ### CURRENT STATUS — Enterprise Layer 3 Upgrade (active)
 
-**STEP 0 IN PROGRESS** — `build_knowledge_base.py` rewritten with `--all-types` flag.
-Full 9,716-type scrape launched. Saves every 50 records to `cn_types_metadata_full.json`.
+**STEP 0 ✅ DONE** — `build_knowledge_base.py` rewritten with `--all-types` flag. Resume scrape running.
+**STEP 1 ✅ DONE** — `src/core/rag_engine.py` built and smoke-tested (6,876 records, 34,380 BM25 chunks, RRF merge).
+**STEP 2 IN PROGRESS** — waiting for full scrape to finish, then rebuild ChromaDB (5 chunks × ~9,686 types).
 See **Section 7 (Enterprise Upgrade Plan)** for the 8-step build order.
 
 ---
@@ -722,7 +723,9 @@ This pattern = zero hallucination on structured facts, LLM only adds interpretat
          Code complete + smoke test passed. Full scrape running (~2h 42min).
          Output: data/metadata/cn_types_metadata_full.json
          Bug fixed: ETA formula (divided by 60 twice — now divides by 3600 for hours)
-🔲 STEP 1: Build src/core/rag_engine.py (NEW FILE — hybrid search foundation)
+✅ STEP 1: Build src/core/rag_engine.py (NEW FILE — hybrid search foundation)
+         Code complete + smoke test passed. 6,876 records, 34,380 chunks, BM25 working.
+         Commit: 514d674
 🔲 STEP 2: Rebuild ChromaDB index (5 chunks × 9,716 types = 48,580 vectors)
 🔲 STEP 3: Upgrade historian.py (true RAG + "Related Types" section)
 🔲 STEP 4: Upgrade investigator.py (full KB search + local CV fallback)
@@ -773,7 +776,7 @@ C:\Users\Administrator\deepcoin\
 │   │   ├── dataset.py            ✅ DeepCoinDataset + Albumentations transforms
 │   │   ├── inference.py          ✅ CoinInference (TTA, device auto-resolve)
 │   │   ├── knowledge_base.py     ✅ ChromaDB wrapper — NEEDS UPGRADE (438→9716, chunking)
-│   │   └── rag_engine.py         🔲 NEW — hybrid BM25+vector+RRF search engine
+│   │   └── rag_engine.py         ✅ NEW — hybrid BM25+vector+RRF search engine (STEP 1 DONE)
 │   ├── agents/
 │   │   ├── gatekeeper.py         ✅ LangGraph orchestrator — NEEDS logging+retry
 │   │   ├── historian.py          ✅ LLM narrative — NEEDS true RAG upgrade
@@ -1097,8 +1100,9 @@ python scripts/test_pipeline.py
 
 **Build order reminder (Section 7):**
 ```
-✅ STEP 0 — build_knowledge_base.py --all-types   DONE (scrape running)
-🔲 STEP 1 — src/core/rag_engine.py  (NEW FILE — hybrid BM25+vector+RRF)
+✅ STEP 0 — build_knowledge_base.py --all-types   DONE (resume scrape running)
+✅ STEP 1 — src/core/rag_engine.py  DONE (BM25+vector+RRF, 6876 records, commit 514d674)
+🔲 STEP 2 — rebuild ChromaDB        (5 chunks × ~9,686 = ~48,430 vectors)
 🔲 STEP 2 — rebuild ChromaDB        (5 chunks × 9,716 = 48,580 vectors)
 🔲 STEP 3 — historian.py upgrade    (true RAG + [CONTEXT N] injection)
 🔲 STEP 4 — investigator.py upgrade (local CV fallback + full KB search)
