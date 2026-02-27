@@ -242,6 +242,23 @@ kb.build_from_metadata(path) # batch upsert (50/batch)
 get_knowledge_base()         # module-level singleton
 ```
 
+**BEFORE the upgrade — what the KB is today:**
+- 438 coin types only (the CNN training subset — 4.5% of the full CN domain)
+- Each coin stored as ONE 200-word text blob: all fields concatenated into a paragraph
+- ChromaDB encodes that blob into one 384-dim vector
+- When the Historian needs facts it calls `search_by_id("1015")` → gets the blob → sends the ENTIRE blob to Gemini
+- Gemini sees an unstructured paragraph and must guess which field is which
+- If the CNN predicted a coin type that's outside the 438 (or a truly unknown coin), the KB returns nothing
+
+**AFTER the upgrade — what the KB will become:**
+- All 9,716 CN types (one-time scrape, ~2.7 hours) — the KB now covers the FULL domain
+- Each coin split into 5 focused chunks: `identity`, `obverse`, `reverse`, `material`, `context`
+- 9,716 × 5 = 48,580 vectors in ChromaDB (~180 MB on disk)
+- Hybrid search: BM25 keyword search + vector semantic search, merged with RRF formula
+- Historian injects each chunk as a labeled `[CONTEXT N]` block → Gemini can only state facts from the context → zero hallucination
+- Investigator searches ALL 9,716 types (no filter) → unknown coins now surface real matches
+- `in_training_set: bool` tag on every record → easy to see if a match is CNN-known or KB-only
+
 **Known gaps (to fix in enterprise upgrade):**
 1. Only 438 types → should be ALL 9,716
 2. One blob per coin → should be 5 semantic chunks
@@ -253,6 +270,16 @@ get_knowledge_base()         # module-level singleton
 ### PHASE 7 — All 5 Agents (February 2026) ✅ WORKING
 
 End-to-end test passing: type 1015, 91.1% confidence, historian route, PDF generated.
+
+**The 5 agents and what each one does:**
+
+| File | Role | Input | Output |
+|------|------|-------|--------|
+| `gatekeeper.py` | Orchestrator — runs the LangGraph state machine, routes by confidence | image path | final state dict |
+| `historian.py` | Pulls KB facts + calls Gemini to write historical narrative | CNN prediction dict | narrative, mint, date, material... |
+| `investigator.py` | For unknown coins — sends image to Gemini Vision, extracts visual attributes, cross-refs KB | image path | visual description, detected features, KB matches |
+| `validator.py` | OpenCV forensic check — detects gold/silver/bronze from HSV pixel analysis, compares to expected material | image path + CNN prediction | match/mismatch, warning |
+| `synthesis.py` | Assembles ALL agent outputs into one structured plain-text summary and a professional PDF | full CoinState dict | PDF file + text report |
 
 See **Section 6 (Layer-by-Layer)** for exact per-agent code details.
 
