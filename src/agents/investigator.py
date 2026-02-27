@@ -6,15 +6,22 @@ Layer 3 — Investigator Agent
 Triggered when CNN confidence < 0.40 (model is unsure).
 Pipeline:
   1. Load coin image → base64 encode
-  2. Send to Gemini 2.5 Flash Vision with a structured numismatic prompt
+  2. Send to a vision-capable LLM with a structured numismatic prompt:
+       a. qwen3-vl:4b via Ollama  (offline, OLLAMA_HOST set)
+       b. Gemini 2.5 Flash Vision (cloud, GITHUB_TOKEN or GOOGLE_API_KEY)
+       c. OpenCV local fallback   (always available, no LLM required)
   3. Parse response into structured attributes
-  4. Optional: cross-reference the description against the KB
-     to find the closest matching type
+  4. Cross-reference the description against the full RAG corpus
+     (9,541 types) to surface the closest matching coin type
 
 Engineering notes:
-  - Same LLM client as Historian (GitHub Models / Google AI Studio)
-  - Image is sent as base64 data URL, not a file upload
-  - KB cross-reference gives a "best guess" type even at low CNN confidence
+  - Vision model selected via _get_llm(capability='vision') — same priority
+    chain as Historian, but routes to qwen3-vl:4b instead of gemma3:4b
+  - Image is sent as base64 data URL (OpenAI multimodal message format)
+  - KB cross-reference uses the RAG engine (9,541 types) not the legacy KB
+    (438 types) — critical for unknown coins outside the CNN training set
+  - OpenCV fallback: HSV histogram + Sobel edge analysis — always runs when
+    no vision LLM is configured, ensuring the pipeline never returns empty
 """
 
 from __future__ import annotations
@@ -24,8 +31,9 @@ import os
 from pathlib import Path
 
 from src.core.knowledge_base import get_knowledge_base
+from src.core.rag_engine     import get_rag_engine
 
-# Reuse the same LLM loader as Historian
+# Reuse the same LLM loader as Historian (already handles text/vision split)
 from src.agents.historian import _get_llm
 
 
@@ -58,7 +66,8 @@ class Investigator:
     """
 
     def __init__(self) -> None:
-        self._kb = get_knowledge_base()
+        self._kb  = get_knowledge_base()   # legacy KB (438 types) — fallback only
+        self._rag = get_rag_engine()        # full corpus (9,541 types) — primary
 
     # ── public ────────────────────────────────────────────────────────────────
 
@@ -77,11 +86,36 @@ class Investigator:
         # 1. Gemini Vision description
         description, features, llm_used = self._describe_image(image_path, confidence, top5)
 
-        # 2. KB cross-reference: use the visual description as a semantic query
+        # 2. KB cross-reference via RAG engine (9,541 types, hybrid BM25+vector)
+        #    WHY RAG not legacy KB:
+        #        The Investigator runs on LOW-confidence coins — coins the CNN
+        #        struggled to classify.  These are often types outside the 438
+        #        CNN training classes.  The legacy KB covers only those 438.
+        #        The RAG engine covers all 9,541 scraped types, so an unknown
+        #        coin from any part of the CN corpus can still surface a match.
         kb_matches: list[dict] = []
         suggested_type_id: int | None = None
         if description:
-            kb_matches = self._kb.search(description, n=3)
+            raw_matches = self._rag.search(description, n=3)
+            # RAG search returns chunk-level hits; normalise to record-level dicts
+            kb_matches = []
+            seen_ids: set = set()
+            for hit in raw_matches:
+                tid = hit.get("type_id")
+                if tid in seen_ids:
+                    continue
+                seen_ids.add(tid)
+                record = self._rag.get_by_id(tid) or hit
+                kb_matches.append({
+                    "type_id":      record.get("type_id", tid),
+                    "denomination": record.get("denomination", ""),
+                    "mint":         record.get("mint", ""),
+                    "region":       record.get("region", ""),
+                    "date":         record.get("date", ""),
+                    "material":     record.get("material", ""),
+                    "score":        hit.get("score", 0.0),
+                    "in_training_set": record.get("in_training_set", False),
+                })
             if kb_matches:
                 suggested_type_id = kb_matches[0]["type_id"]
 
@@ -97,12 +131,32 @@ class Investigator:
 
     def _describe_image(self, image_path: str, confidence: float, top5: list) -> tuple:
         """
-        Encode image as base64 and call Gemini Vision.
+        Encode image as base64 and send to the vision-capable LLM.
+
+        Uses _get_llm(capability="vision") so the correct model is selected:
+          - Gemini 2.5 Flash (if GITHUB_TOKEN or GOOGLE_API_KEY set)
+          - qwen3-vl:4b via Ollama (if OLLAMA_HOST set, fully offline)
+          - Fallback description (if nothing configured)
+
+        WHY capability="vision" matters:
+            gemma3:4b (the text model) is text-only — it cannot accept images.
+            qwen3-vl:4b is a Vision-Language model — it processes image+text.
+            Requesting the wrong model would raise an API error.
+            The capability parameter routes to the right model automatically.
+
         Returns (description_str, features_dict, llm_was_used).
         """
-        client, model = _get_llm()
+        client, model = _get_llm(capability="vision")
         if client is None:
-            return _fallback_description(), _empty_features(), False
+            # No vision LLM configured — run local OpenCV analysis instead.
+            # WHY not just return an error string:
+            #   The Investigator's whole purpose is to describe unknown coins.
+            #   Even without an LLM, OpenCV can extract metal color (HSV),
+            #   edge sharpness (Sobel), and coin region statistics.
+            #   The description is coarser than an LLM's, but it is real data
+            #   that the RAG cross-reference can still query meaningfully.
+            desc, feats = _opencv_fallback(image_path)
+            return desc, feats, False
 
         # Read and base64-encode the image
         try:
@@ -149,14 +203,20 @@ class Investigator:
                          "image_url": {"url": f"data:{mime};base64,{b64}"}},
                     ],
                 }],
-                max_tokens=600,
+                max_tokens=1500,   # reasoning models (qwen3-vl) think internally
+                                   # before writing content — needs headroom or
+                                   # content comes back empty with finish_reason=length
                 temperature=0.3,
             )
             description = resp.choices[0].message.content.strip()
-            features    = _parse_features(description)
+            # Some reasoning models return empty content + populated reasoning field
+            # when max_tokens is too low. Guard against that edge case.
+            if not description:
+                description = getattr(resp.choices[0].message, "reasoning", "") or ""
+            features = _parse_features(description)
             return description, features, True
         except Exception as e:
-            return f"Gemini Vision unavailable: {e}", _empty_features(), False
+            return f"Vision LLM unavailable: {e}", _empty_features(), False
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────────
@@ -170,11 +230,106 @@ def _empty_features() -> dict:
         "condition":         "unknown",
     }
 
-def _fallback_description() -> str:
-    return (
-        "Visual analysis unavailable (LLM not configured). "
-        "Set GITHUB_TOKEN or GOOGLE_API_KEY environment variable."
-    )
+def _opencv_fallback(image_path: str) -> tuple[str, dict]:
+    """
+    Local OpenCV coin analysis — runs when no vision LLM is configured.
+
+    WHAT: Performs three analyses on the coin image:
+      1. HSV histogram on the central 60% crop → infer metal color
+         (silver: low saturation / gold: warm hue 15-35 / bronze: hue 5-25)
+      2. Sobel edge density on greyscale → estimate condition
+         (high edge density = well-preserved details; low = worn/corroded)
+      3. Overall brightness and saturation stats → support metal inference
+
+    WHY this ordering:
+      Metal color is the most valuable attribute for KB cross-referencing.
+      It immediately narrows the search space: silver vs bronze vs gold.
+      Edge density tells us coin condition, which affects attribution.
+
+    WHY central 60% crop:
+      Coin edges are often dark (patina, mounting damage, photography shadow).
+      The central region contains the primary design and most informative pixels.
+
+    Returns (description_str, features_dict).
+    """
+    import cv2
+    import numpy as np
+
+    features = _empty_features()
+    lines    = []
+
+    try:
+        img = cv2.imread(image_path)
+        if img is None:
+            raise ValueError(f"cv2.imread returned None for {image_path}")
+
+        h, w = img.shape[:2]
+        # Central 60% crop
+        y0, y1 = int(h * 0.20), int(h * 0.80)
+        x0, x1 = int(w * 0.20), int(w * 0.80)
+        crop = img[y0:y1, x0:x1]
+
+        hsv  = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV).reshape(-1, 3)
+        H, S, V = hsv[:, 0].astype(float), hsv[:, 1].astype(float), hsv[:, 2].astype(float)
+
+        mean_s = float(S.mean())
+        mean_v = float(V.mean())
+        mean_h = float(H.mean())
+
+        # ── Metal detection ───────────────────────────────────────────────────
+        gold_mask   = ((H >= 15) & (H <= 35) & (S >= 80)).sum() / len(H)
+        bronze_mask = ((H >=  5) & (H <= 25) & (S >= 50)).sum() / len(H)
+        silver_mask = (S < 40).sum() / len(H)
+
+        THRESHOLD = 0.15   # at least 15% of pixels must satisfy the mask
+        if gold_mask > THRESHOLD:
+            metal = "gold"
+        elif bronze_mask > THRESHOLD and bronze_mask > silver_mask:
+            metal = "bronze"
+        elif silver_mask > THRESHOLD:
+            metal = "silver"
+        else:
+            metal = "unknown metal"
+
+        features["metal_color"] = metal
+        lines.append(
+            f"METAL/MATERIAL: Pixel analysis (HSV) suggests this is a {metal} coin "
+            f"(mean saturation {mean_s:.0f}/255, mean brightness {mean_v:.0f}/255)."
+        )
+
+        # ── Condition via Sobel edge density ──────────────────────────────────
+        grey       = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        sobelx     = cv2.Sobel(grey, cv2.CV_64F, 1, 0, ksize=3)
+        sobely     = cv2.Sobel(grey, cv2.CV_64F, 0, 1, ksize=3)
+        edge_mag   = np.sqrt(sobelx**2 + sobely**2)
+        edge_score = float(edge_mag.mean())
+
+        if edge_score > 25:
+            condition = "well-preserved"
+            cond_note = "high edge density suggests clear detail preservation"
+        elif edge_score > 12:
+            condition = "worn"
+            cond_note = "moderate edge density suggests partial wear"
+        else:
+            condition = "corroded"
+            cond_note = "low edge density suggests heavy wear or corrosion"
+
+        features["condition"] = condition
+        lines.append(
+            f"CONDITION: {condition.capitalize()} "
+            f"(Sobel edge score {edge_score:.1f} — {cond_note})."
+        )
+
+        lines.append(
+            "NOTE: This description was generated by local OpenCV analysis (no vision LLM "
+            "configured). For a detailed numismatic description, set OLLAMA_HOST and run "
+            "'ollama pull qwen3-vl:4b'."
+        )
+
+    except Exception as e:
+        lines.append(f"OpenCV analysis failed: {e}")
+
+    return " ".join(lines), features
 
 def _parse_features(description: str) -> dict:
     """
