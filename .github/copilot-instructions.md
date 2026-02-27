@@ -355,6 +355,90 @@ class CoinState(TypedDict, total=False):
 
 ---
 
+### Why CNN AND KB — They Cannot Replace Each Other
+
+This question will come from the encadrant: *"If you scrape 9,716 types from the KB, why did you train a CNN? Why not just use the scraper?"*
+
+**Answer: The CNN and KB solve completely different problems. Neither can do the other's job.**
+
+| | CNN | Knowledge Base (KB) |
+|---|---|---|
+| **Input** | Raw pixel photograph | Text query or coin type_id |
+| **Output** | "This looks like type 1015" (visual identity) | "Type 1015 is a silver drachm from Maroneia, 365–330 BC" (factual knowledge) |
+| **What it learns** | Visual patterns — portrait style, iconography, metal texture, patina, geometric proportions | Nothing — it is a lookup table with semantic search on top |
+| **Can it analyse a photo?** | Yes — that is its entire purpose | No — it has no vision, only text |
+| **Can it explain history?** | No — it outputs a class index (e.g. `438`) | Yes — it stores the full structured record |
+| **Generalises to unseen coins?** | Yes — extracts 1536-dim features, returns most visually similar known type | No — if type_id is not in the KB, it returns nothing |
+
+**The scraping is data collection. The CNN is pattern recognition. The KB is the encyclopedia. RAG is the retrieval engine.**
+
+A library full of books does not replace a librarian who can look at an artefact and say "this belongs on shelf 7." A librarian who knows which shelf it is on cannot write the book's contents from scratch.
+
+---
+
+### What Happens With Unknown Coins — 3 Cases
+
+#### Case A — CNN trained on it, KB has it (438 CNN classes)
+```
+CNN: "type 1015, 91% confidence"
+Route: Historian
+KB: returns type 1015 record (mint, date, material, obverse, reverse, persons...)
+RAG: retrieves 5 focused chunks → injects as [CONTEXT N] blocks → Gemini writes grounded narrative
+Report: full professional PDF with historical analysis, forensic check, and visual attributes
+```
+
+#### Case B — CNN never trained on it, but KB has it (types 439–9,716 after upgrade)
+```
+CNN: misidentifies it as the closest visual match, but confidence is low (< 40%)
+Route: Investigator (low confidence triggers VLM path)
+Gemini Vision: analyses the photo → "silver coin, helmeted portrait right, legend ΑΝΤΙΟΧΟΥ, eagle reverse"
+KB search (full 9,716 corpus): finds CN type 7432 — Seleucid tetradrachm of Antiochos I
+Report says: "CNN could not classify this coin (not in training set).
+             Visual analysis matched CN type 7432 from knowledge base.
+             Confidence: KB match only — not CNN-verified."
+```
+This case transforms from a failure into a success specifically because the KB covers all 9,716 types.
+
+#### Case C — Not in CNN, not in KB (completely unknown coin)
+```
+CNN: low confidence, Investigator route
+Gemini Vision: still describes the coin — metal, portrait type, legend fragments, symbols
+KB search: returns the 3 closest cultural neighbours (similar dynasty, region, period)
+Report says: "No exact match in Corpus Nummorum. Closest neighbours: [3 types listed].
+             Visual attributes detected: silver, laureate portrait, eagle reverse, possible Greek legend."
+```
+The system never returns "I don't know." It always returns maximum useful information. This is the *graceful degradation* principle built into the architecture.
+
+---
+
+### What RAG Does — The Three-Word Summary: "Makes Gemini Cite Its Sources"
+
+**Without RAG (today):**
+```
+KB returns one 200-word blob → pasted into Gemini prompt → Gemini writes a paragraph
+Problem: Gemini can misread fields, mix up obverse/reverse, or invent plausible-sounding facts
+         because it sees unstructured text with no enforcement
+```
+
+**With RAG (after upgrade):**
+```
+KB returns 5 focused chunks (identity, obverse, reverse, material, context)
+→ Each chunk injected as a labeled block:
+    [CONTEXT 1 — Identity]  type: 1015 | denom: drachm | region: Thrace | date: 365-330 BC
+    [CONTEXT 2 — Obverse]   prancing horse right | legend: MAR
+    [CONTEXT 3 — Reverse]   bunch of grapes | legend: EPI ZINONOS
+    [CONTEXT 4 — Material]  silver | weight: 2.44 g | mint: Maroneia
+    [CONTEXT 5 — Context]   persons: Magistrate Zenon
+→ Strict prompt instruction: "Using ONLY the contexts above (cite [CONTEXT N]),
+   write a 3-paragraph analysis. Do not add any fact not present in the context."
+→ Gemini writes a grounded, citable narrative
+```
+
+RAG = **R**etrieve the right chunks → **A**ugment the prompt with them → **G**enerate from those facts only.
+The LLM is used for natural language writing quality, not for inventing historical knowledge.
+
+---
+
 ## 4. COMPLETE TECHNOLOGY STACK
 
 ### Deep Learning
