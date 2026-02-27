@@ -312,7 +312,8 @@ Persistent context file committed: `ca96c10`.
 
 ### CURRENT STATUS — Enterprise Layer 3 Upgrade (active)
 
-All 6 key files fully audited. Plan approved. NO code changed yet.
+**STEP 0 IN PROGRESS** — `build_knowledge_base.py` rewritten with `--all-types` flag.
+Full 9,716-type scrape launched. Saves every 50 records to `cn_types_metadata_full.json`.
 See **Section 7 (Enterprise Upgrade Plan)** for the 8-step build order.
 
 ---
@@ -717,15 +718,18 @@ This pattern = zero hallucination on structured facts, LLM only adds interpretat
 
 ### Build Order (strict dependency sequence)
 ```
-STEP 0: Expand build_knowledge_base.py → --all-types flag (scrape 9,716)
-STEP 1: Build src/core/rag_engine.py (NEW FILE — hybrid search foundation)
-STEP 2: Rebuild ChromaDB index (5 chunks × 9,716 types = 48,580 vectors)
-STEP 3: Upgrade historian.py (true RAG + "Related Types" section)
-STEP 4: Upgrade investigator.py (full KB search + local CV fallback)
-STEP 5: Upgrade validator.py (confidence scoring + multi-scale HSV)
-STEP 6: Upgrade gatekeeper.py (logging + retry + graceful degradation)
-STEP 7: End-to-end test all 3 routes
-STEP 8: Commit and push
+✅ STEP 0: Expand build_knowledge_base.py → --all-types flag (scrape 9,716)
+         Code complete + smoke test passed. Full scrape running (~2h 42min).
+         Output: data/metadata/cn_types_metadata_full.json
+         Bug fixed: ETA formula (divided by 60 twice — now divides by 3600 for hours)
+🔲 STEP 1: Build src/core/rag_engine.py (NEW FILE — hybrid search foundation)
+🔲 STEP 2: Rebuild ChromaDB index (5 chunks × 9,716 types = 48,580 vectors)
+🔲 STEP 3: Upgrade historian.py (true RAG + "Related Types" section)
+🔲 STEP 4: Upgrade investigator.py (full KB search + local CV fallback)
+🔲 STEP 5: Upgrade validator.py (confidence scoring + multi-scale HSV)
+🔲 STEP 6: Upgrade gatekeeper.py (logging + retry + graceful degradation)
+🔲 STEP 7: End-to-end test all 3 routes
+🔲 STEP 8: Commit and push
 ```
 
 ---
@@ -984,6 +988,26 @@ records = [r for r in metadata if "error" not in r]
 
 ---
 
+#### Bug 11 — ETA printed as "~161h 56min" instead of "~2h 41min"
+- **File:** `scripts/build_knowledge_base.py` → `main()` ETA block
+- **When:** First full `--all-types` run (9,716 types). ETA line read "~161h 56min at 1 req/sec".
+- **Root cause:** The formula divided by 60 once, treating the result as hours:
+  ```python
+  eta_min = len(class_ids) // 60   # 9716 // 60 = 161 ← this is MINUTES, not hours
+  eta_sec = len(class_ids) % 60
+  print(f"~{eta_min}h {eta_sec:02d}min")  # printed 161h 56min ← WRONG
+  ```
+  At 1 req/sec, 9,716 requests = 9,716 **seconds** total. Correct conversion needs `// 3600` for hours.
+- **Fix:**
+  ```python
+  _total_s  = len(class_ids)           # seconds at 1 req/sec
+  eta_hours = _total_s // 3600         # 9716 // 3600 = 2
+  eta_min   = (_total_s % 3600) // 60  # (9716 % 3600) // 60 = 41
+  print(f"~{eta_hours}h {eta_min:02d}min at 1 req/sec")  # ~2h 41min ← CORRECT
+  ```
+
+---
+
 ### KNOWN ISSUES (scheduled for enterprise upgrade)
 
 | Component | Issue | Planned Fix |
@@ -1058,24 +1082,28 @@ Priority 4: Wikipedia API (last resort)
 3. Or say: **"What is the current status and what should we do next?"**
 4. Always activate venv first: `& C:\Users\Administrator\deepcoin\venv\Scripts\Activate.ps1`
 5. Iron rule still applies: **discuss plan first → wait for "go" → then build.**
-6. Current next action: verify `data/raw/` folder exists on disk (needed for STEP 0 of the upgrade plan), then begin building the `--all-types` flag in `scripts/build_knowledge_base.py`.
+6. Current next action: Wait for the full scrape to complete (`cn_types_metadata_full.json`),
+   then start **STEP 1** — building `src/core/rag_engine.py` (hybrid BM25 + vector + RRF).
 
 ```powershell
 # Quick health check on resume
 & C:\Users\Administrator\deepcoin\venv\Scripts\Activate.ps1
-Get-ChildItem "C:\Users\Administrator\deepcoin\data\raw" -ErrorAction SilentlyContinue | Measure-Object
+# Check scrape progress
+Get-Item "C:\Users\Administrator\deepcoin\data\metadata\cn_types_metadata_full.json" -ErrorAction SilentlyContinue | Select-Object Name, Length, LastWriteTime
+# Check record count
+python -c "import json; d=json.load(open('data/metadata/cn_types_metadata_full.json',encoding='utf-8')); print(f'{len(d)} records scraped')"
 python scripts/test_pipeline.py
 ```
 
 **Build order reminder (Section 7):**
 ```
-STEP 0 — build_knowledge_base.py --all-types flag   (check data/raw/ first)
-STEP 1 — src/core/rag_engine.py  (NEW FILE — hybrid BM25+vector+RRF)
-STEP 2 — rebuild ChromaDB        (5 chunks × 9,716 = 48,580 vectors)
-STEP 3 — historian.py upgrade    (true RAG + [CONTEXT N] injection)
-STEP 4 — investigator.py upgrade (local CV fallback + full KB search)
-STEP 5 — validator.py upgrade    (confidence score + multi-scale HSV)
-STEP 6 — gatekeeper.py upgrade   (logging + retry + graceful degradation)
-STEP 7 — end-to-end test         (all 3 routes)
-STEP 8 — commit + push + update this file
+✅ STEP 0 — build_knowledge_base.py --all-types   DONE (scrape running)
+🔲 STEP 1 — src/core/rag_engine.py  (NEW FILE — hybrid BM25+vector+RRF)
+🔲 STEP 2 — rebuild ChromaDB        (5 chunks × 9,716 = 48,580 vectors)
+🔲 STEP 3 — historian.py upgrade    (true RAG + [CONTEXT N] injection)
+🔲 STEP 4 — investigator.py upgrade (local CV fallback + full KB search)
+🔲 STEP 5 — validator.py upgrade    (confidence score + multi-scale HSV)
+🔲 STEP 6 — gatekeeper.py upgrade   (logging + retry + graceful degradation)
+🔲 STEP 7 — end-to-end test         (all 3 routes)
+🔲 STEP 8 — commit + push + update this file
 ```
