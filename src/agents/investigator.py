@@ -203,9 +203,10 @@ class Investigator:
                          "image_url": {"url": f"data:{mime};base64,{b64}"}},
                     ],
                 }],
-                max_tokens=1500,   # reasoning models (qwen3-vl) think internally
-                                   # before writing content — needs headroom or
-                                   # content comes back empty with finish_reason=length
+                max_tokens=3000,   # reasoning models (qwen3-vl) output <think>...</think>
+                                   # blocks before the answer — needs extra headroom.
+                                   # 1500 was too tight; bumped to 3000 so the
+                                   # structured answer is never cut off.
                 temperature=0.3,
             )
             description = resp.choices[0].message.content.strip()
@@ -213,6 +214,12 @@ class Investigator:
             # when max_tokens is too low. Guard against that edge case.
             if not description:
                 description = getattr(resp.choices[0].message, "reasoning", "") or ""
+            # qwen3-vl (and other thinking models) prefix the actual answer with
+            # their internal chain-of-thought wrapped in <think>...</think> tags.
+            # Strip those blocks so only the final structured response is stored.
+            # WHY: The thinking text contains speculative reasoning, not numismatic
+            # facts. Passing it to RAG search would dilute the query signal.
+            description = _strip_think_tags(description)
             features = _parse_features(description)
             return description, features, True
         except Exception as e:
@@ -229,6 +236,32 @@ def _empty_features() -> dict:
         "symbols":           [],
         "condition":         "unknown",
     }
+
+def _strip_think_tags(text: str) -> str:
+    """
+    Remove <think>...</think> blocks emitted by reasoning models (qwen3-vl, etc.).
+
+    WHAT: Uses a regex to strip everything between <think> and </think> tags,
+          including the tags themselves, then strips surrounding whitespace.
+
+    WHY: qwen3-vl in its default configuration outputs its internal chain-of-
+         thought before the structured answer. Example output shape:
+             <think>
+             The coin appears to be... let me think step by step...
+             </think>
+             1. METAL/MATERIAL: silver...
+         Only the part AFTER </think> is the actual numismatic analysis.
+         If the tags are absent (e.g. Gemini, gemma3), this function is a no-op.
+
+    WHY remove rather than extract the thinking section:
+         The thinking content is speculative mid-reasoning text. Storing it in
+         the report or passing it as a RAG query string would add noise.
+         The structured answer (after </think>) is what the Synthesiser uses.
+    """
+    import re
+    # Strip <think>...</think> blocks (non-greedy, handles multi-line)
+    cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+    return cleaned.strip()
 
 def _opencv_fallback(image_path: str) -> tuple[str, dict]:
     """
