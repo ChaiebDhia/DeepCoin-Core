@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: February 27, 2026
+# Last updated: February 27, 2026 — COMPLETE verified rewrite, all 6 agent files cross-checked, full history included
 
 ---
 
@@ -35,7 +35,262 @@ Build an end-to-end industrial AI system that:
 
 ---
 
-## 2. ARCHITECTURE — TWO-STAGE HYBRID PIPELINE
+## 2. COMPLETE PROJECT HISTORY — FROM RAW DATA TO NOW
+
+This is the full chronological record. Every phase, every problem, every fix.
+
+---
+
+### PHASE 0 — Environment Setup (early February 2026) ✅
+
+**What we did:**
+- Created `C:\Users\Administrator\deepcoin\` directory structure
+- Initialized Python 3.11 virtual environment at `venv\`
+- Set up Git repo: `https://github.com/ChaiebDhia/DeepCoin-Core`
+- Created `.gitignore` (excludes: `data/`, `models/`, `venv/`, `.env`, `notes.md`, `The Project.md`)
+- Created `requirements.txt` (50+ deps), professional `README.md`, `.gitkeep` files
+
+**Problems:** None. Clean setup.
+
+---
+
+### PHASE 1 — Dataset Auditing (mid February 2026) ✅
+
+**Tool:** `src/data_pipeline/auditor.py`
+
+**Discovery — Long-tail distribution problem:**
+```
+Raw dataset: 115,160 images across 9,716 coin types (folders in data/raw/)
+Most types have only 1–3 images → neural network cannot learn from that
+Decision: apply ≥10 images per class threshold
+Result: 9,716 types → 438 viable classes, 7,677 images retained
+```
+
+Why ≥10 is the right cutoff: Transfer learning (ImageNet pretrained) reduces minimum data need from ~1,000 to ~10 images/class. Below 10, the model memorises rather than generalises.
+
+---
+
+### PHASE 1b — Preprocessing Engine (mid February 2026) ✅
+
+**File:** `src/data_pipeline/prep_engine.py`
+
+**Step 1 — CLAHE in LAB colour space:**
+- Convert BGR → LAB (separates luminance L from colour channels A, B)
+- Apply CLAHE to L channel only: `clipLimit=2.0, tileGridSize=(8,8)`
+- Convert back to BGR
+- Why LAB not RGB: RGB CLAHE distorts metal patina colours (the green/brown oxidation proving archaeological authenticity). LAB preserves colours while enhancing contrast on the luminance channel.
+
+**Step 2 — Aspect-preserving resize to 299×299:**
+- Scale so longest edge = 299; use `INTER_AREA` (downscale) or `INTER_CUBIC` (upscale)
+- Pad shorter edge with black zeros to reach 299×299
+- Why not simple resize: stretch deforms coin geometry. The model must learn coins are round.
+
+**Output:** `data/processed/[class_id]/[files]` — 7,677 images, 438 class folders.
+
+---
+
+### PHASE 2 — Dataset Class (February 20, 2026) ✅
+
+**File:** `src/core/dataset.py` (248 lines)
+
+`DeepCoinDataset(Dataset)` — PyTorch bridge between disk and training loop.
+- Lazy loading: stores `(path, label)` tuples — NOT pixel arrays. Loading 7,677 images raw = 2.6 GB RAM. Lazy loading = one batch at a time = feasible.
+- `class_to_idx`: maps folder name to integer (`"1015" → 0`). Neural networks only understand numbers.
+- `get_train_transforms()`: 6 Albumentations augmentations + ImageNet normalisation
+- `get_val_transforms()`: normalise only (honest evaluation — no augmentation)
+
+**Augmentations:**
+```python
+A.Rotate(limit=15, p=0.5)                        # tilted photos
+A.RandomBrightnessContrast(0.2, 0.2, p=0.5)      # lighting variation
+A.GaussNoise(p=0.3)                               # low-quality cameras
+A.ElasticTransform(p=0.3)                         # worn/bent coins
+A.HorizontalFlip(p=0.5)                           # either orientation
+A.Normalize([0.485,0.456,0.406],[0.229,0.224,0.225])  # ImageNet stats — MANDATORY
+```
+ImageNet normalisation is MANDATORY. EfficientNet-B3 was pretrained with these exact stats. Wrong values → pretrained features activate incorrectly → ~15-20% accuracy loss.
+
+**Critical discovery from `scripts/test_dataset.py`:**
+```
+Min images per class:  5  (class 5181)
+Max images per class: 204 (class 3987)
+Imbalance ratio:      40:1  ← must be corrected during training
+```
+
+---
+
+### PHASE 3 — Model Architecture (February 2026) ✅
+
+**File:** `src/core/model_factory.py`
+
+`get_deepcoin_model(num_classes=438, dropout=0.4)`:
+- Base: `torchvision.models.efficientnet_b3(pretrained=True)` — ImageNet weights
+- Replace head: `nn.Linear(1536, 1000)` → `nn.Sequential(nn.Dropout(0.4), nn.Linear(1536, 438))`
+- Dropout 0.4: 40% of neurons zeroed per forward pass → cannot rely on any single neuron → less memorisation
+
+Why EfficientNet-B3: compound scaling (depth + width + resolution simultaneously). B3 = best accuracy/parameter ratio for 4.3 GB VRAM. B7 would need ~8 GB.
+
+The 1536-dim vector before the head = coin's "fingerprint" — 18 convolution layers encoding all visual features.
+
+---
+
+### PHASE 4 — Training V3 (February 2026) ✅
+
+**File:** `scripts/train.py` (729 lines)
+
+```python
+optimizer     = AdamW(lr=1e-4, weight_decay=0.01)
+scheduler     = CosineAnnealingLR(T_max=100, eta_min=1e-6)
+loss          = CrossEntropyLoss(label_smoothing=0.1)
+augmentation  = Albumentations (6 transforms)
+mixup_alpha   = 0.2        # Beta(0.2,0.2) blending
+amp           = GradScaler('cuda') + autocast('cuda')   # halves VRAM
+gradient_clip = max_norm=1.0
+batch_size    = 16         # 4.3 GB VRAM constraint
+early_stop    = patience=10 on val accuracy
+seed          = 42
+```
+
+Mixup: `mixed = λ×A + (1-λ)×B` with `λ ~ Beta(0.2,0.2)`. Smooth decision boundaries. Reduces train/val gap by ~3-4% on small datasets.
+
+AMP: float16 gradients → halves VRAM, ~2× faster/epoch. GradScaler prevents underflow that would corrupt float16.
+
+WeightedRandomSampler: weight_i = 1/count(class_i) → each class seen approximately equally → fixes 40:1 imbalance.
+
+**Data split (stratified, seed=42):**
+```
+Train:      5,374  (70%)  — sampler applied
+Validation: 1,151  (15%)  — no augmentation
+Test:       1,152  (15%)  — run ONCE at end
+```
+
+**Results:**
+```
+Best epoch:         52 / 100
+Val accuracy:       79.25%
+Test accuracy:      79.08%  (single-pass)
+TTA accuracy (×8):  80.03%  ← official result
+Macro F1:           0.7763  (438 classes)
+Top confusion:      3314 → 3987  (10× misclassification)
+Training time:      ~103 min on RTX 3050 Ti
+Early stop:         epoch 62 (10 epochs no improvement)
+```
+
+---
+
+### PHASE 4b — TTA Evaluation (February 2026) ✅
+
+**File:** `scripts/evaluate_tta.py`
+
+TTA (Test-Time Augmentation): 8 forward passes per coin, averaged softmax:
+```
+Pass 1: original
+Pass 2: horizontal flip
+Pass 3: vertical flip
+Pass 4: both flips
+Pass 5-8: four 85% corner crops
+```
+Same coin, 8 orientations → averaged prediction reduces noise → +0.78% gain.
+
+**Saved artefacts:**
+```
+models/best_model.pth          ← V3, epoch 52 — THE REAL MODEL
+models/best_model_v1_80pct.pth ← MISLEADING NAME. Epoch 3, val 21.33%. NOT the 80% model. Ignore.
+models/class_mapping.pth       ← {class_to_idx, idx_to_class, n:438}
+```
+
+---
+
+### PHASE 5 — Inference Engine (February 2026) ✅
+
+**Files:** `src/core/inference.py`, `scripts/predict.py`
+
+`CoinInference` — production wrapper:
+- `predict(image_path, tta=False)` → `{class_id, label, confidence, top5, tta_used}`
+
+**Bug found and fixed (Bug #2 — see Section 12):**
+```
+"auto" string passed directly to model.to("auto") → RuntimeError
+Fix: resolve before passing: device = "cuda" if torch.cuda.is_available() else "cpu"
+```
+
+---
+
+### PHASE 6 — Knowledge Base (February 2026) ✅ (needs upgrade)
+
+**Files:** `src/core/knowledge_base.py` (343 lines), `scripts/build_knowledge_base.py` (296 lines)
+
+**Scraper:** Fetches `https://www.corpus-nummorum.eu/types/{id}` at 1 req/sec. Parses `<dl>` blocks → 15 structured fields. Saves every 50 types (crash-safe). SSL verification disabled (lab env).
+
+**KB state:**
+- ChromaDB `PersistentClient` at `data/metadata/chroma_db/`
+- Collection `cn_coin_types`, embedding `all-MiniLM-L6-v2` (384-dim, cosine, CPU, 22 MB)
+- 434 documents (4 types returned HTTP errors → filtered)
+- Document format: one 200-word text blob per coin type
+
+**Scraper bugs found and fixed (see Section 11 for details):**
+- SSL certificate errors → disabled cert verification
+- Emoji/navigation chars in scraped HTML → regex cleanup
+- Mint field contained "Region:" suffix → regex split
+- 4/438 types returned HTTP errors → error records filtered in `build_from_metadata()`
+
+**API:**
+```python
+kb.search(query, n, where)   # cosine similarity: 1.0 - distance
+kb.search_by_id(type_id)     # exact ID lookup via ChromaDB .get()
+kb.build_from_metadata(path) # batch upsert (50/batch)
+get_knowledge_base()         # module-level singleton
+```
+
+**Known gaps (to fix in enterprise upgrade):**
+1. Only 438 types → should be ALL 9,716
+2. One blob per coin → should be 5 semantic chunks
+3. Vector-only search → no BM25, no hybrid, no RRF
+4. `in_training_set` tag MISSING from `build_metadata_dict()`
+
+---
+
+### PHASE 7 — All 5 Agents (February 2026) ✅ WORKING
+
+End-to-end test passing: type 1015, 91.1% confidence, historian route, PDF generated.
+
+See **Section 6 (Layer-by-Layer)** for exact per-agent code details.
+
+---
+
+### PHASE 8 — Bug Fixing Marathon (February 2026) ✅
+
+All bugs fully documented in **Section 11 (Known Bugs)**.
+
+---
+
+### PHASE 9 — End-to-End Test (February 2026) ✅
+
+**File:** `scripts/test_pipeline.py`
+
+```
+Input:    data/processed/1015/any_coin.jpg
+CNN:      type 1015, 91.1% confidence
+Route:    historian
+KB:       found — Maroneia, Thrace, c.365-330 BC, silver drachm
+LLM:      narrative generated (GITHUB_TOKEN) or fallback (no key)
+PDF:      written to reports/
+Exit:     0
+```
+
+Latest clean commit: `113514b` — Greek transliteration + footer band fix.
+Persistent context file committed: `ca96c10`.
+
+---
+
+### CURRENT STATUS — Enterprise Layer 3 Upgrade (active)
+
+All 6 key files fully audited. Plan approved. NO code changed yet.
+See **Section 7 (Enterprise Upgrade Plan)** for the 8-step build order.
+
+---
+
+## 3. ARCHITECTURE — TWO-STAGE HYBRID PIPELINE
 
 ### Stage 1 — Deep Learning (Visual Classification)
 ```
@@ -60,20 +315,20 @@ All paths → Synthesis Agent → PDF report
 All agents share a single LangGraph `CoinState` TypedDict:
 ```python
 class CoinState(TypedDict, total=False):
-    image_path        : str
-    use_tta           : bool
-    cnn_prediction    : dict   # {class_id, label, confidence, top5}
-    route_taken       : Literal["historian", "validator", "investigator"]
-    historian_result  : dict
-    validator_result  : dict
+    image_path         : str
+    use_tta            : bool
+    cnn_prediction     : dict   # {class_id, label, confidence, top5}
+    route_taken        : Literal["historian", "validator", "investigator"]
+    historian_result   : dict
+    validator_result   : dict
     investigator_result: dict
-    report            : str    # final Markdown
-    pdf_path          : Optional[str]
+    report             : str    # final Markdown
+    pdf_path           : Optional[str]
 ```
 
 ---
 
-## 3. COMPLETE TECHNOLOGY STACK
+## 4. COMPLETE TECHNOLOGY STACK
 
 ### Deep Learning
 | Component | Version | Detail |
@@ -139,7 +394,7 @@ class CoinState(TypedDict, total=False):
 
 ---
 
-## 4. CNN MODEL — FULL DETAILS
+## 5. CNN MODEL — FULL DETAILS
 
 ### Architecture
 - **Model**: EfficientNet-B3 (compound scaling: balanced depth/width/resolution)
@@ -203,7 +458,7 @@ models/class_mapping.pth        # {class_to_idx: {"1015": 0, ...}, idx_to_class:
 
 ---
 
-## 5. LAYER-BY-LAYER STATUS
+## 6. LAYER-BY-LAYER STATUS
 
 ### Layer 0 — CNN Training ✅ COMPLETE
 File: `scripts/train.py` (729 lines)
@@ -294,7 +549,7 @@ Stack: pytest 8.x, Jest, Playwright, GitHub Actions (`.github/workflows/ci.yml`)
 
 ---
 
-## 6. THE ENTERPRISE UPGRADE PLAN (CURRENT ACTIVE WORK)
+## 7. THE ENTERPRISE UPGRADE PLAN (CURRENT ACTIVE WORK)
 
 This is the work happening NOW before moving to Layer 4.
 
@@ -364,7 +619,7 @@ STEP 8: Commit and push
 
 ---
 
-## 7. KEY ENGINEERING DECISIONS (with rationale)
+## 8. KEY ENGINEERING DECISIONS (with rationale)
 
 | Decision | Choice | Why |
 |----------|--------|-----|
@@ -385,7 +640,7 @@ STEP 8: Commit and push
 
 ---
 
-## 8. FILE STRUCTURE (complete)
+## 9. FILE STRUCTURE (complete)
 
 ```
 C:\Users\Administrator\deepcoin\
@@ -456,7 +711,7 @@ C:\Users\Administrator\deepcoin\
 
 ---
 
-## 9. ENVIRONMENT AND PATHS
+## 10. ENVIRONMENT AND PATHS
 
 ```powershell
 # Activate venv (always do this first)
@@ -487,7 +742,7 @@ rank-bm25  ← to be installed during RAG upgrade
 
 ---
 
-## 10. COMMIT HISTORY (significant milestones)
+## 11. COMMIT HISTORY (significant milestones)
 
 | Commit | Description |
 |--------|-------------|
@@ -503,27 +758,141 @@ rank-bm25  ← to be installed during RAG upgrade
 
 ---
 
-## 11. KNOWN BUGS AND RESOLVED BUGS
-
-### Resolved ✅
-- `IndentationError` in `historian.py` — leftover TODO stub in method
-- `RuntimeError: device 'auto'` — `"auto"` was passed directly to `model.to(device)` instead of being resolved to `"cuda"` or `"cpu"` first
-- `multi_cell` horizontal space error in `synthesis.py` — needed `set_x()` before every `multi_cell` call
-- Greek `???` characters in PDF — Greek Unicode (ΚΕΡ) was not supported by fpdf2 default font; fixed with `_GREEK_MAP` dict-based transliteration
-- Branding footer band appearing on extra page — `_draw_footer_band()` call removed (header band already carries branding)
-- `to_pdf()` signature mismatch — changed from `(markdown_str, path)` to `(state_dict, path)` and updated gatekeeper call accordingly
-
-### Known (to fix in enterprise upgrade)
-- `knowledge_base.py`: 1 blob per coin instead of 5 semantic chunks
-- `knowledge_base.py`: only 438 types instead of 9,716
-- `historian.py`: raw document blob passed to LLM — not true RAG
-- `investigator.py`: 100% dependent on Gemini Vision — no local CV fallback
-- `validator.py`: binary match/mismatch — no confidence score
-- `gatekeeper.py`: `print()` statements instead of `logging` module
+## 12. KNOWN BUGS AND RESOLVED BUGS
 
 ---
 
-## 12. DATA SOURCES AND FALLBACK CHAIN
+### FULLY RESOLVED BUGS ✅
+
+#### Bug 1 — `IndentationError` in `historian.py`
+- **When:** First test run of historian agent
+- **Symptom:** `IndentationError: unexpected indent` at startup
+- **Root cause:** A leftover `pass` / TODO stub inside a method body was deleted, leaving orphaned indentation on the next line
+- **Fix:** Cleaned the method body — removed the stub, completed the method properly
+
+---
+
+#### Bug 2 — `RuntimeError: Invalid device string 'auto'`
+- **File:** `src/agents/gatekeeper.py` → propagated from device config
+- **When:** First time running the full pipeline with `device="auto"`
+- **Symptom:** `RuntimeError: Invalid device string: 'auto'` from PyTorch
+- **Root cause:** `"auto"` was passed directly as a device string to `CoinInference(device="auto")` → PyTorch only accepts `"cuda"`, `"cpu"`, `"cuda:0"` etc.
+- **Fix:** Added device resolution before instantiation:
+```python
+if device == "auto":
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+```
+
+---
+
+#### Bug 3 — `multi_cell` horizontal position drift in `synthesis.py`
+- **When:** Rendering bordered tables in the PDF
+- **Symptom:** Table cells overflowed page margins; text ran off the right edge
+- **Root cause:** fpdf2's `multi_cell()` does NOT preserve the X cursor. After each cell, the cursor drifted right. Subsequent `multi_cell()` calls started at the wrong X position.
+- **Fix:** Added `pdf.set_x(col_x)` immediately before every `multi_cell()` call to restore correct column position.
+
+---
+
+#### Bug 4 — Greek characters rendered as `???` in PDF
+- **File:** `src/agents/synthesis.py`
+- **When:** Rendering coins with Greek legends (e.g., `ΚΕΡ`, `ΜΑΡ`, `ΣΑΤ`)
+- **Symptom:** All Greek Unicode characters replaced by `?` in the PDF output
+- **Root cause:** fpdf2's built-in fonts (Helvetica/Arial) use Latin-1 encoding. Python's `str.encode("latin-1")` replaces any character outside the Latin-1 range (U+0100+) with `?`. Greek alphabet is U+0370–U+03FF — entirely outside Latin-1.
+- **Fix:** Added `_GREEK_MAP` dict (48 characters — full uppercase + lowercase Greek → Latin) and `_s(text)` wrapper function. **Every** text string passed to fpdf2 goes through `_s()` first:
+```python
+_GREEK_MAP = {"Α":"A","Β":"B","Γ":"G","Δ":"D","Ε":"E","Ζ":"Z","Η":"E",
+              "Θ":"TH","Ι":"I","Κ":"K","Λ":"L","Μ":"M","Ν":"N",
+              "Ξ":"X","Ο":"O","Π":"P","Ρ":"R","Σ":"S","Τ":"T",
+              "Υ":"Y","Φ":"PH","Χ":"CH","Ψ":"PS","Ω":"O", ...}
+
+def _s(text: str) -> str:
+    """Transliterate Greek, then encode to latin-1 safely."""
+    for gr, lat in _GREEK_MAP.items():
+        text = text.replace(gr, lat)
+    return text.encode("latin-1", "replace").decode("latin-1")
+```
+
+---
+
+#### Bug 5 — Extra blank page with branding footer
+- **File:** `src/agents/synthesis.py`
+- **When:** Any coin analysis that fills almost a full PDF page
+- **Symptom:** PDF had an extra blank page at the end with only the navy branding band
+- **Root cause:** `_draw_footer_band()` was called unconditionally at the end of `to_pdf()`. If the content had already filled the previous page to capacity, fpdf2 automatically opened a new page before rendering the footer band.
+- **Fix:** Removed `_draw_footer_band()` call entirely (the navy header band already carries branding). Footer was purely cosmetic and caused layout corruption.
+
+---
+
+#### Bug 6 — `to_pdf()` signature mismatch between Synthesis and Gatekeeper
+- **Files:** `src/agents/synthesis.py` (changed), `src/agents/gatekeeper.py` (also needed update)
+- **When:** PDF redesign refactor (replacing Markdown parsing with direct fpdf2 draw)
+- **Symptom:** `TypeError: to_pdf() takes 2 positional arguments but 3 were given`
+- **Root cause:** `synthesis.py` was refactored:
+  - Old: `to_pdf(markdown_str: str, path: str)` — took the text report as input
+  - New: `to_pdf(state: dict, path: str)` — takes the full CoinState dict directly
+  But `gatekeeper.py` was still calling the old signature: `synthesis.to_pdf(state["report"], pdf_path)`
+- **Fix:** Updated `synthesis_node` inside `gatekeeper.py`:
+```python
+# Old (broken):
+synthesis.to_pdf(state.get("report", ""), pdf_path)
+# New (correct):
+synthesis.to_pdf(state, pdf_path)
+```
+
+---
+
+#### Bugs 7-10 — Scraper bugs in `build_knowledge_base.py`
+
+**Bug 7 — SSL certificate error:**
+- **Symptom:** `ssl.SSLCertVerificationError` when fetching corpus-nummorum.eu in lab environment
+- **Root cause:** Corporate/lab network intercepts HTTPS — certificate chain validation fails
+- **Fix:** `ssl.create_default_context()` with `check_hostname=False, verify_mode=ssl.CERT_NONE`
+
+**Bug 8 — Emoji/navigation garbage in scraped text:**
+- **Symptom:** Metadata fields contained chars like `🔍❐✤` from website navigation icons
+- **Root cause:** BeautifulSoup extracts ALL text from `<dl>` elements including icon characters
+- **Fix:** `re.sub(r"[^\x00-\x7F\u00C0-\u024F\u0370-\u03FF]", "", s)` in `_clean()` function — strips non-Latin/non-Greek Unicode from all scraped text
+
+**Bug 9 — Mint field "Region:" contamination:**
+- **Symptom:** `mint = "Maroneia  Region: Thrace  Typology: Type Group X"`
+- **Root cause:** HTML `<dl>` for Mint sometimes contained the Region and Typology sub-labels inline with the value
+- **Fix:**
+```python
+mint_parts = re.split(r"\s+Region:", raw_mint)
+mint = mint_parts[0].strip()
+region = re.sub(r"\s+Typology.*", "", mint_parts[1]).strip() if len(mint_parts) > 1 else ""
+```
+
+**Bug 10 — 4 types returned HTTP errors:**
+- **Symptom:** After scraping 438 types, only 434 documents appeared in ChromaDB
+- **Root cause:** 4 type IDs in `class_mapping.pth` returned 404/500 from corpus-nummorum.eu (likely types removed from the database since the dataset was published)
+- **Fix:** `build_from_metadata()` filters error records:
+```python
+records = [r for r in metadata if "error" not in r]
+```
+
+---
+
+### KNOWN ISSUES (scheduled for enterprise upgrade)
+
+| Component | Issue | Planned Fix |
+|-----------|-------|-------------|
+| `knowledge_base.py` | 1 blob per coin instead of 5 semantic chunks | STEP 2 — rebuild with chunking |
+| `knowledge_base.py` | Only 438 types (4.5% of CN) | STEP 0+2 — scrape 9,716 + rebuild |
+| `knowledge_base.py` | No `in_training_set` tag | STEP 2 — add to metadata dict |
+| `historian.py` | Raw document blob to LLM — not true RAG | STEP 3 — hybrid search + [CONTEXT N] injection |
+| `historian.py` | No "Related Types" section | STEP 3 — second search over full KB |
+| `investigator.py` | 100% dependent on Gemini Vision | STEP 4 — local CV fallback (HSV+Sobel+ORB) |
+| `investigator.py` | Only searches 434-record KB | STEP 4 — full 9,716 corpus |
+| `validator.py` | Binary match/mismatch only | STEP 5 — confidence score 0-100% |
+| `validator.py` | Single scale (60% crop only) | STEP 5 — multi-scale 40/60/80% |
+| `gatekeeper.py` | `print()` statements only | STEP 6 — `logging.getLogger(__name__)` |
+| `gatekeeper.py` | No retry on 429/503 | STEP 6 — 2× retry with backoff |
+| `gatekeeper.py` | No per-node timing | STEP 6 — `time.perf_counter()` per node |
+
+---
+
+## 13. DATA SOURCES AND FALLBACK CHAIN
 
 ```
 Priority 1: CN Dataset metadata (primary)
@@ -546,7 +915,7 @@ Priority 4: Wikipedia API (last resort)
 
 ---
 
-## 13. PERFORMANCE TARGETS
+## 14. PERFORMANCE TARGETS
 
 | Metric | Target | Current |
 |--------|--------|---------|
@@ -559,7 +928,7 @@ Priority 4: Wikipedia API (last resort)
 
 ---
 
-## 14. ACADEMIC CONTEXT
+## 15. ACADEMIC CONTEXT
 
 - **Institution**: ESPRIT School of Engineering, Manouba, Tunisia
 - **Company**: YEBNI — Information & Communication, Tunisia (yebni.com)
@@ -571,10 +940,31 @@ Priority 4: Wikipedia API (last resort)
 
 ---
 
-## 15. HOW TO RESUME IN ANY NEW CHAT
+## 16. HOW TO RESUME IN ANY NEW CHAT
 
-1. The file you're reading is automatically injected — Copilot already knows everything.
-2. Say: **"Continue the enterprise upgrade of Layer 3 — we're at STEP [N] of the build order"**
+1. **This file is already injected.** Copilot knows everything — no re-explaining needed.
+2. Say: **"Continue the enterprise upgrade — we're at STEP [N] of the build order in Section 7."**
 3. Or say: **"What is the current status and what should we do next?"**
 4. Always activate venv first: `& C:\Users\Administrator\deepcoin\venv\Scripts\Activate.ps1`
-5. The rule is still: **discuss plan first, wait for "go", then build.**
+5. Iron rule still applies: **discuss plan first → wait for "go" → then build.**
+6. Current next action: verify `data/raw/` folder exists on disk (needed for STEP 0 of the upgrade plan), then begin building the `--all-types` flag in `scripts/build_knowledge_base.py`.
+
+```powershell
+# Quick health check on resume
+& C:\Users\Administrator\deepcoin\venv\Scripts\Activate.ps1
+Get-ChildItem "C:\Users\Administrator\deepcoin\data\raw" -ErrorAction SilentlyContinue | Measure-Object
+python scripts/test_pipeline.py
+```
+
+**Build order reminder (Section 7):**
+```
+STEP 0 — build_knowledge_base.py --all-types flag   (check data/raw/ first)
+STEP 1 — src/core/rag_engine.py  (NEW FILE — hybrid BM25+vector+RRF)
+STEP 2 — rebuild ChromaDB        (5 chunks × 9,716 = 48,580 vectors)
+STEP 3 — historian.py upgrade    (true RAG + [CONTEXT N] injection)
+STEP 4 — investigator.py upgrade (local CV fallback + full KB search)
+STEP 5 — validator.py upgrade    (confidence score + multi-scale HSV)
+STEP 6 — gatekeeper.py upgrade   (logging + retry + graceful degradation)
+STEP 7 — end-to-end test         (all 3 routes)
+STEP 8 — commit + push + update this file
+```
