@@ -137,21 +137,21 @@ All paths → Editor-in-Chief (Synthesis Agent)
 ## The 5-Agent Sovereign Squad
 
 ### 1. Gatekeeper (Orchestrator)
-The LangGraph state machine brain. Routes every analysis based on CNN confidence to the appropriate specialist. Manages the `CoinState` context shared by all agents. Handles retries, failures, and human-in-the-loop breakpoints.
+The LangGraph state machine brain. Routes every analysis based on CNN confidence to the appropriate specialist. Manages the `CoinState` shared by all agents. Features: structured `logging` with per-node timing (cnn / historian / validator / investigator / synthesis), retry with exponential backoff (2×, 1.5s→3.0s) on LLM 429/503 errors, and graceful per-node degradation — one failing agent stores `{"_error": ...}` in its result and lets the pipeline reach synthesis instead of crashing.
 
-**Routing thresholds**: `< 0.40` → Investigator | `0.40–0.85` → Validator | `> 0.85` → Historian
+**Routing thresholds**: `< 0.40` → Investigator | `0.40–0.85` → Validator + Historian | `> 0.85` → Historian
 
 ### 2. Visual Investigator (Attribute Expert)
-Handles low-confidence and out-of-distribution coins. Sends the coin image to a Vision-Language Model and extracts structured visual attributes — metal color, portrait direction, visible inscription characters, iconographic symbols. Guarantees a useful analytical output even when the CNN cannot classify.
+Handles low-confidence and out-of-distribution coins. Sends the coin image to a Vision-Language Model (`qwen3-vl:4b` via Ollama) and extracts structured visual attributes — metal color, portrait direction, visible inscription characters, iconographic symbols. When no vision model is available, falls back to a local OpenCV analysis: HSV histogram across 3 crop sizes for metal detection, Sobel edge density for condition estimate. Cross-references the full 9,541-type KB — not just the 438 CNN training types. Always returns a useful analytical output, even if the CNN cannot classify.
 
 ### 3. Forensic Validator (Truth Seeker)
-Applies OpenCV-based forensic analysis to mid-confidence predictions. Computes HSV color histograms to verify the detected metal type matches the expected metal for the predicted coin class. Flags inconsistencies and routes suspicious specimens to the human review queue.
+Applies multi-scale OpenCV HSV forensic analysis to mid-confidence predictions. Runs independently on three center-crop sizes (40% / 60% / 80%) and takes a majority vote on the detected metal (gold / bronze / silver). Returns `detection_confidence` (float 0–1, mean pixel coverage) and `uncertainty` (low/medium/high based on scale agreement). Compares detected metal against the KB-stored expected material for the predicted type. Flags material mismatches in the report.
 
 ### 4. Historian (RAG Specialist)
-Retrieves verified historical context for high-confidence predictions. Queries ChromaDB (populated from CN dataset metadata) using semantic search, enriches with Nomisma.org structured data (emperors, reign dates, mint locations), then uses an LLM to synthesize a narrative from those verified sources — never from the LLM's own memory alone.
+Retrieves verified historical context for high-confidence predictions. Queries the hybrid RAG engine (BM25 + ChromaDB vector + RRF merge over 47,705 chunks). Injects retrieved chunks as labeled `[CONTEXT 1–5]` blocks into the LLM prompt with a strict instruction: *"Using ONLY the contexts above (cite [CONTEXT N]), write a 3-paragraph professional analysis. Do not add any fact not present in the context."* Supports 4 LLM providers: GitHub Models → Google AI Studio → Ollama (gemma3:4b) → fallback (KB field concatenation, no hallucination).
 
 ### 5. Editor-in-Chief (Synthesis Agent)
-Compiles all agent outputs into a single structured Markdown report, then converts it to PDF. The report includes: coin image, classification confidence, historical narrative, forensic assessment, visual description (when Investigator was used), related coin types, complete source citations, and expert review status.
+Compiles all agent outputs into a single structured plain-text report and converts it to a professional PDF. PDF is rendered entirely with direct fpdf2 draw primitives — no Markdown parsing, no external font loading. Features: navy header band, bordered tables with alternating row shading, blue section rule lines, Greek-to-Latin transliteration (`_GREEK_MAP`, 48 chars) so ancient legends render correctly in Latin-1 encoded fonts.
 
 ---
 
@@ -160,18 +160,25 @@ Compiles all agent outputs into a single structured Markdown report, then conver
 All agents communicate exclusively through this shared state:
 
 ```python
-class CoinState(TypedDict):
-    image_path: str
-    preprocessed_image: bytes
-    cnn_prediction: dict        # {"class_id": int, "label": str, "confidence": float, "top5": list}
-    visual_description: str     # Populated by Investigator; empty string if not used
-    validation_result: dict     # Populated by Validator; empty dict if not used
-    historical_context: str     # Populated by Historian; empty string if not used
-    final_report: str           # Populated by Editor-in-Chief (Markdown)
-    human_review_required: bool
-    human_approved: bool
-    route_taken: Literal["investigator", "validator", "historian"]
+class CoinState(TypedDict, total=False):
+    # inputs
+    image_path          : str
+    use_tta             : bool
+    # after cnn_node
+    cnn_prediction      : dict    # {"class_id": int, "label": str, "confidence": float, "top5": list, "tta_used": bool}
+    route_taken         : Literal["historian", "validator", "investigator"]
+    # agent outputs
+    historian_result    : dict    # narrative, mint, date, material, llm_used, _error (if any)
+    validator_result    : dict    # status, detection_confidence, uncertainty, warning, _error (if any)
+    investigator_result : dict    # visual_description, detected_features, kb_matches, llm_used, _error (if any)
+    # per-node timing (seconds, set progressively by each node)
+    node_timings        : dict    # {"cnn": 0.54, "historian": 14.37, "synthesis": 0.47}
+    # final outputs
+    report              : str     # plain-text summary
+    pdf_path            : Optional[str]
 ```
+
+**Key design rule**: the `label` field (folder name = CN type ID, e.g. `"1015"`) must be used for all KB lookups, NOT `class_id` (which is the 0–437 softmax tensor index).
 
 ---
 
@@ -240,14 +247,17 @@ class CoinState(TypedDict):
 | Metric | Value | Notes |
 |---|---|---|
 | CNN Test Accuracy | 79.08% | Single-pass, 438 classes, 1,152 test images |
-| CNN Accuracy (TTA) | **80.03%** | 5-pass Test-Time Augmentation (+0.95%) |
+| CNN Accuracy (TTA) | **80.03%** | 8-pass Test-Time Augmentation (+0.78%) |
 | Mean F1 Score | 0.7763 | Macro-averaged across 438 classes |
 | Top Confusion Pair | 3314 → 3987 | 10× misclassification frequency |
-| Target Accuracy | >85% | Gap: ~5pp, addressable with ensemble/larger model |
-| Training Duration | ~103 min | RTX 3050 Ti (4.3GB VRAM), CUDA 12.4 |
+| Target Accuracy | >85% | Gap: ~5pp |
+| Training Duration | ~103 min | RTX 3050 Ti (4.3 GB VRAM), CUDA 12.4 |
 | Best Epoch | 52 / 100 | Val accuracy 79.25%, early stopping patience=10 |
-| Inference Target | <500ms | Per image end-to-end |
-| API Response Target | <2s | Upload → full report |
+| Pipeline (Historian) | ~15 s | CNN + RAG lookup + Ollama gemma3:4b + PDF |
+| Pipeline (Validator) | ~10 s | CNN + multi-scale HSV + Historian + PDF |
+| Pipeline (Investigator) | ~3 s | CNN + OpenCV fallback + KB search + PDF |
+| KB search latency | < 1 ms | ChromaDB + BM25, 47,705 vectors |
+| PDF generation | ~0.4 s | Direct fpdf2 draw, Greek transliteration |
 
 ---
 
@@ -306,12 +316,16 @@ pip install -r requirements.txt
 Create a `.env` file in the project root (never commit this file):
 
 ```env
-LLM_PROVIDER=github_models
-GITHUB_TOKEN=ghp_your_token_here        # GitHub PAT with models:read scope
-GOOGLE_AI_API_KEY=your_key_here         # Google AI Studio key (fallback)
-LLM_MODEL=Gemini-2.5-Flash
+# LLM providers (any one is enough — system tries in priority order)
+GITHUB_TOKEN=ghp_your_token_here        # GitHub PAT with models:read scope (Priority 1)
+GOOGLE_API_KEY=your_key_here            # Google AI Studio API key (Priority 2)
 
-CHROMA_DB_PATH=./data/chromadb
+# Local Ollama (Priority 3 — runs fully offline)
+OLLAMA_HOST=http://localhost:11434
+OLLAMA_MODEL=gemma3:4b
+OLLAMA_VISION_MODEL=qwen3-vl:4b        # For Investigator; fallback to OpenCV if not pulled
+
+# Database (Layers 4-6)
 POSTGRES_URL=postgresql://localhost:5432/deepcoin
 REDIS_URL=redis://localhost:6379
 LOCALSTACK_ENDPOINT=http://localhost:4566
@@ -343,6 +357,22 @@ python scripts/audit.py
 # Test-Time Augmentation evaluation
 python scripts/evaluate_tta.py
 # Result: +0.95% accuracy improvement
+```
+
+### Run the Full Pipeline (Layer 3 — Production Ready)
+
+```bash
+# Run all 3 routing paths (historian / validator / investigator)
+# Logs: per-node timing, confidence, route, PDF path
+python scripts/test_pipeline.py 2>$null
+
+# Example single image prediction (CLI)
+python scripts/predict.py data/processed/1015/CN_type_1015_cn_coin_5943_p.jpg --tta
+# Output: type=1015  confidence=91.1%  label=1015  tta=True
+
+# Rebuild ChromaDB (only needed if metadata changes)
+python scripts/rebuild_chroma.py
+# Duration: ~9 min  |  Output: 47,705 vectors in data/metadata/chroma_db_rag/
 ```
 
 ### Full Stack (Docker)
@@ -420,14 +450,21 @@ The system is built in strict dependency order. Each layer is completed and test
 
 | Layer | Name | Status | Description |
 |---|---|---|---|
-| 0 | Foundation | ✅ Complete | Trained CNN model at 80.03% accuracy |
-| 1 | Inference Engine | 🔲 Next | `inference.py` + `predict.py` — load model, classify new images |
-| 2 | Knowledge Base | 🔲 Pending | CN CSVs → ChromaDB vector DB for RAG |
-| 3 | Agents | 🔲 Pending | All 5 agents fully implemented and tested |
-| 4 | FastAPI Routes | 🔲 Pending | `/api/classify`, `/api/history`, WebSocket |
-| 5 | Next.js Frontend | 🔲 Pending | Upload UI, live progress, PDF viewer |
-| 6 | Docker + Infra | 🔲 Pending | Full Docker Compose stack, 7 services |
-| 7 | Tests + CI/CD | 🔲 Ongoing | pytest, GitHub Actions, black, flake8 |
+| 0 | CNN Training | ✅ Complete | EfficientNet-B3 trained at 80.03% TTA accuracy (438 classes, 7,677 images) |
+| 1 | Inference Engine | ✅ Complete | `inference.py` + `predict.py` — TTA, device auto-resolve, structured prediction dict |
+| 2 | Knowledge Base | ✅ Complete | 9,541 types scraped × 5 semantic chunks = 47,705 ChromaDB vectors + BM25 index |
+| 3 | Agent System | ✅ Complete | All 5 agents enterprise-grade; logging, retry, graceful degradation; 3/3 routes tested |
+| 4 | FastAPI Routes | 🔲 Next | `POST /api/classify`, `GET /api/history`, WebSocket live progress |
+| 5 | Next.js Frontend | 🔲 Pending | Upload UI, real-time agent progress, PDF inline viewer |
+| 6 | Docker + Infra | 🔲 Pending | Full Docker Compose stack (7 services), Redis cache, LocalStack S3 |
+| 7 | Tests + CI/CD | 🔲 Pending | pytest, Jest, Playwright, GitHub Actions |
+
+**Layer 3 end-to-end results (February 27, 2026):**
+```
+Route 1 — HISTORIAN    : type=1015   conf=91.1%   time=15.4s   PDF ✓   [PASS]
+Route 2 — VALIDATOR    : type=21027  conf=42.9%   material=consistent  det_conf=0.73  time=9.8s    PDF ✓   [PASS]
+Route 3 — INVESTIGATOR : type=544    conf=21.3%   KB_matches=3  llm=False (OpenCV fallback)  time=3.1s  PDF ✓   [PASS]
+```
 
 ---
 
@@ -459,8 +496,8 @@ seed          = 42
 | Preprocessing | CLAHE in LAB space | Enhances contrast without distorting metal color values |
 | Resize strategy | Aspect-preserving + zero-padding | Preserves coin geometry for accurate feature extraction |
 | Agent framework | LangGraph | Conditional routing, cycles, human-in-loop — impossible in CrewAI |
-| VLM provider | GitHub Models (Gemini 2.5 Flash) | Free with Copilot Pro student, vision-capable, OpenAI-compatible |
-| VLM fallback | Google AI Studio | Free tier 1,500 req/day; identical model; 1-line config switch |
+| LLM Provider Chain | Priority order | 1. GitHub Models (Gemini 2.5 Flash, free) → 2. Google AI Studio (free tier) → 3. Ollama gemma3:4b (local) → 4. Structured fallback (no LLM, no crash) |
+| Vision LLM | qwen3-vl:4b via Ollama | For Investigator; OpenCV fallback if not downloaded |
 | Primary data source | CN dataset metadata CSVs | On-disk, validated by Berlin-Brandenburg Academy of Sciences |
 | External data | Nomisma.org SPARQL | Academic numismatic linked open data — structured, authoritative |
 | Wikipedia | Last resort only | Unverifiable for facts; prose only; always flagged in output |
