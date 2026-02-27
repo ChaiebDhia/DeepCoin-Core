@@ -271,11 +271,20 @@ def scrape_all(
     # ── resume: load what was already scraped ──────────────────────────────────
     existing: dict[int, dict] = {}
     if resume and output_path.exists():
-        with open(output_path, encoding="utf-8") as f:
-            for record in json.load(f):
+        raw_records = json.load(open(output_path, encoding="utf-8"))
+        n_errors_skipped = 0
+        for record in raw_records:
+            # Only skip records that previously SUCCEEDED.
+            # Error records (DNS failures, timeouts) must be retried so
+            # that a transient network issue does not permanently exclude
+            # a type from the knowledge base.
+            if "error" not in record:
                 existing[record["type_id"]] = record
-        print(f"  Resume mode: {len(existing)} already scraped, "
-              f"{len(class_ids) - len(existing)} remaining")
+            else:
+                n_errors_skipped += 1
+        print(f"  Resume mode: {len(existing)} OK (kept), "
+              f"{n_errors_skipped} errors (will retry), "
+              f"{len(class_ids) - len(existing) - n_errors_skipped} new")
 
     results: list[dict] = list(existing.values())
     todo = [cid for cid in class_ids if cid not in existing]
