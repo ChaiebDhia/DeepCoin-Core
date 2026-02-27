@@ -289,7 +289,7 @@ class CoinState(TypedDict, total=False):
 - **Action**: VLM analysis (if key set) OR `_opencv_fallback()` → extract visual attributes → query full 9,541-type KB
 - **OpenCV fallback**: HSV 3-crop metal detection + Sobel edge density → condition estimate
 - **KB scope**: FULL `rag.search()` — all 9,541 types (NOT just 438 CNN training set)
-- **qwen3-vl:4b**: NOT downloaded yet. Pull when needed: `ollama pull qwen3-vl:4b`. Until then, OpenCV fallback is active.
+- **qwen3-vl:4b**: ✅ Downloaded and active (Feb 28). Uses Ollama at `OLLAMA_HOST`. Think-tag stripping applied (`_strip_think_tags()`).
 
 #### Synthesis (`src/agents/synthesis.py`)
 - **Input**: full `CoinState` dict
@@ -555,7 +555,7 @@ LOCALSTACK_ENDPOINT=http://localhost:4566
 | Primary LLM | GitHub Models / Gemini 2.5 Flash | Free with student Copilot Pro, vision-capable, OpenAI-compatible |
 | LLM fallback 1 | Google AI Studio / Gemini 2.5 Flash | Free tier 1,500 req/day; identical model |
 | LLM fallback 2 | Ollama gemma3:4b (downloaded) | Fully offline; 4.3GB VRAM fits |
-| Vision LLM | qwen3-vl:4b (NOT downloaded yet) | `ollama pull qwen3-vl:4b` when needed |
+| Vision LLM | qwen3-vl:4b ✅ downloaded | 4.4B Q4_K_M, ~3.1 GB VRAM, think-tag stripping applied |
 | Backend | FastAPI + Uvicorn | Async-first, auto-docs, fastest Python framework |
 | Frontend | Next.js 15 + TypeScript | Industry standard, React Server Components |
 | DB | PostgreSQL | ACID, JSONB support, production standard |

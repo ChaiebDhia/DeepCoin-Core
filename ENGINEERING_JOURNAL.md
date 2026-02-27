@@ -2044,7 +2044,8 @@ Commit 0cfe540
       - Majority vote: gold (H 15-35, S>80) / bronze (H 5-25, S 50-180) / silver (S<40)
       - Sobel gradient density -> condition estimate (higher = better preserved)
       - Returns structured description without any VLM/API call
-  Test: qwen3-vl:4b not downloaded -> fallback activates, "silver coin, well-preserved"
+  Test (Feb 27): qwen3-vl:4b not yet downloaded -> fallback activates, "silver coin, well-preserved"
+  Test (Feb 28): qwen3-vl:4b downloaded -> llm_used=True, <think> tags stripped, 3 KB matches, PDF saved
 
 Commit 3a82ba2
   feat: validator.py — multi-scale HSV + detection_confidence + uncertainty
@@ -3020,7 +3021,61 @@ The difference is not cosmetic. It is the difference between a student project a
 
 ---
 
+---
+
+## Section 23 — Commit c5b7f0d: qwen3-vl:4b activated + think-tag fix (February 28, 2026)
+
+### What happened
+User pulled `qwen3-vl:4b` via Ollama. `.env` already had `OLLAMA_HOST` and `OLLAMA_VISION_MODEL=qwen3-vl:4b` configured — Investigator switched from OpenCV fallback to real vision LLM immediately.
+
+### Bug found — qwen3-vl thinking output leaks into description
+
+**Symptom:** description started with `"Got it, let's tackle this coin analysis step by step. First, I need to look at the image..."` — this is the model's chain-of-thought reasoning, NOT the structured numismatic answer.
+
+**Why it happens:** qwen3 (and qwen3-vl) are reasoning models. By default they output a long internal monologue before their answer. In some deployments this is wrapped in `<think>...</think>` tags; in others it leaks as plain text.
+
+**Impact:** The RAG search query sent to ChromaDB was the thinking text, not the coin's visual attributes. This diluted the search signal — "Let me think step by step" matches nothing in the numismatic DB.
+
+**Fix — `_strip_think_tags(text: str) -> str` in `src/agents/investigator.py`:**
+```python
+import re
+def _strip_think_tags(text: str) -> str:
+    cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+    return cleaned.strip()
+```
+Called immediately after `resp.choices[0].message.content.strip()` before features are parsed.
+
+**Also bumped `max_tokens` from 1500 → 3000** so the thinking budget doesn't consume all tokens before the structured answer is written.
+
+### Verified output after fix
+```
+Description start: "### Structured Analysis of Ancient Coin\n\n#### 1. METAL/MATERIAL\nThe coin appears to be **bronze**..."
+```
+Clean, starts with the numbered structured answer. No thinking text.
+
+### Full pipeline re-verified (3/3 routes PASS)
+```
+Route 1 — HISTORIAN   : label=1015   conf=91.1%  llm_used=True   time=23.2s   [PASS]
+Route 2 — VALIDATOR   : label=12884  conf=42.9%  material=consistent  conf=0.73  time=9.8s   [PASS]
+Route 3 — INVESTIGATOR: label=532    conf=21.3%  llm_used=True (qwen3-vl:4b)  kb_matches=3  time=124.5s  [PASS]
+```
+
+Route 3 time (124.5s) is the cold-start cost: Ollama loads 3.1 GB of Q4_K_M weights from disk into VRAM on first call. Subsequent calls are ~15-30s.
+
+### Commit c5b7f0d — February 28, 2026
+```
+fix: strip qwen3-vl think tags from investigator description
+
+- add _strip_think_tags() helper — strips <think>...</think> blocks
+  that qwen3-vl emits before its structured answer
+- bump max_tokens 1500 -> 3000 to give thinking model headroom
+- investigator now uses qwen3-vl:4b (llm_used=True, 124s cold start)
+- all 3 pipeline routes still passing (3/3 PASS)
+```
+
+---
+
 *End of Engineering Journal*
 
-*This file is private and gitignored — for personal reference only.*  
-*Last updated: February 27, 2026 — Layer 3 Enterprise RAG Upgrade COMPLETE. Layer 4 (FastAPI) is next.*
+*This file is version-controlled in GitHub. Update it with every commit.*  
+*Last updated: February 28, 2026 — qwen3-vl:4b activated, all 3 routes verified. Layer 4 (FastAPI) is next.*
