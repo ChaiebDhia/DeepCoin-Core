@@ -119,7 +119,7 @@ class Gatekeeper:
 
     # ── public ────────────────────────────────────────────────────────────────
 
-    def analyze(self, image_path: str, tta: bool = False) -> dict:
+    def analyze(self, image_path: str, tta: bool = True) -> dict:
         """
         Run the full pipeline on one coin image.
 

@@ -660,12 +660,32 @@ def _draw_result_stripe(f, cnn: dict, route: str) -> None:
 
 
 def _section_title(f, title: str) -> None:
+    """
+    Render a section heading with a blue rule underneath.
+
+    Page-break guard: if less than 45 mm remain before the footer margin,
+    add a new page first.  This prevents the title from being stranded at
+    the bottom of a page while its table/body content starts on the next
+    page -- the most common layout complaint in PDF output.
+
+    45 mm = title row (12) + table-header row (8) + two data rows (14)
+              + body-text start cushion (11) -- enough to guarantee at
+              least the first meaningful content element stays with the title.
+
+    Colour: _C_BRAND_MID (mid blue, 30/80/160) instead of _C_BRAND_DARK so
+    the section heading is visually distinct from near-black body text and
+    from the deep-navy table header cells.
+    """
     from fpdf.enums import XPos, YPos
+    # Guard: if not enough room for title + at least 2 content rows, new page
+    if f.get_y() > f.h - f.b_margin - 45:
+        f.add_page()
+    f.ln(2)
     f.set_x(f.l_margin)
     f.set_font("Helvetica", "B", 11)
-    f.set_text_color(*_C_BRAND_DARK)
+    f.set_text_color(*_C_BRAND_MID)          # bright blue — distinct from body text
     f.cell(0, 7, _s(title.upper()), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    # Blue rule
+    # Blue rule under the title
     y = f.get_y()
     f.set_draw_color(*_C_BRAND_MID)
     f.line(f.l_margin, y, f.l_margin + _ew(f), y)
@@ -797,6 +817,11 @@ def _confidence_table(f, top5: list) -> None:
     c3    = ew - c1 - c2 - c4  # Coin Description (fills remaining ~98 mm)
     row_h = 7
 
+    # Guard: if header + all rows won't fit, start on a new page
+    total_table_h = row_h * (1 + len(top5))   # header row + data rows
+    if f.get_y() + total_table_h > f.h - f.b_margin - 14:
+        f.add_page()
+
     f.set_fill_color(*_C_BRAND_LIGHT)
     f.set_draw_color(*_C_RULE)
     f.set_font("Helvetica", "B", 9)
@@ -874,6 +899,11 @@ def _kb_table(f, matches: list) -> None:
     # Normalise scores to 0-100 % relative to top hit
     raw_scores = [hit.get("score", 0) for hit in matches]
     max_s = max(raw_scores) if raw_scores and max(raw_scores) > 0 else 1.0
+
+    # Guard: if header + all rows won't fit, start on a new page
+    total_table_h = row_h * (1 + len(matches))   # header row + data rows
+    if f.get_y() + total_table_h > f.h - f.b_margin - 14:
+        f.add_page()
 
     f.set_fill_color(*_C_BRAND_LIGHT)
     f.set_draw_color(*_C_RULE)

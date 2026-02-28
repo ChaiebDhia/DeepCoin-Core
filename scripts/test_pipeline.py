@@ -57,7 +57,7 @@ for i, tc in enumerate(TESTS, 1):
     print(sep)
     print(f"  Image: {tc['image']}")
 
-    result = gk.analyze(tc["image"], tta=False)
+    result = gk.analyze(tc["image"], tta=True)
     state  = result["state"]
 
     route  = state.get("route_taken", "?")

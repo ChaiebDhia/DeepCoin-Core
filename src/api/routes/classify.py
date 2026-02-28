@@ -112,7 +112,7 @@ def _sanitise_filename(name: str) -> str:
 async def classify(
     request:  Request,
     file:     UploadFile = File(..., description="Coin photograph (JPEG or PNG, max 10 MB)"),
-    tta:      bool       = Query(False, description="Test-Time Augmentation: +~1% accuracy, ~5× slower"),
+    tta:      bool       = Query(True,  description="Test-Time Augmentation (default on): +~1% accuracy, ~5× slower CNN pass"),
 ) -> ClassifyResponse:
     """
     POST /api/classify
