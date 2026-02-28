@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: February 27, 2026 — Enterprise RAG upgrade COMPLETE (STEPs 0-8 done). Layer 3 fully production-ready.
+# Last updated: February 28, 2026 — Layer 4 FastAPI backend COMPLETE. All smoke tests pass. Layer 5 (Next.js) is next.
 
 ---
 
@@ -875,9 +875,16 @@ All 5 agents fully upgraded. All 3 routes tested and passing.
 - Bug fixed: duplicate footer band removed (header already carries branding)
 - Signature change from `to_pdf(markdown_str, path)` → `to_pdf(state_dict, path)`
 
-### Layer 4 — FastAPI Backend 🔲 NEXT (Layer 3 enterprise upgrade complete)
-Files to create: `src/api/main.py`, `src/api/routes/classify.py`, `src/api/routes/history.py`, `src/api/schemas.py`
-Endpoints planned: `POST /api/classify`, `GET /api/health`, `GET /api/history`, `GET /api/history/{id}`, `WS /ws/classify/{session_id}`
+### Layer 4 — FastAPI Backend ✅ COMPLETE (commits 7055768, 4bb9878)
+- `src/api/main.py`: lifespan, real CORS (`ALLOWED_ORIGINS` env), real health endpoint (5 component checks → 503 if degraded)
+- `src/api/schemas.py`: Pydantic v2 — `ClassifyResponse`, `CnnResult`, `Top5Item`, `HistoryListResponse`, `HistorySummary`
+- `src/api/_store.py`: thread-safe JSON history store (Repository Pattern, `threading.Lock()`)
+- `src/api/routes/__init__.py`: package marker
+- `src/api/routes/classify.py`: `POST /api/classify` — 5-layer security (Content-Type, 10 MB limit, magic bytes, filename sanitize, UUID prefix); `asyncio.to_thread()` for non-blocking pipeline
+- `src/api/routes/history.py`: `GET /api/history` (paginated, newest-first) + `GET /api/history/{id}`
+- `GET /api/reports/{filename}`: PDF serving with path traversal protection
+- Smoke tests: health all-ok, classify type-1015 91.1% historiann 21.5s, history 1 item
+- Server start: `uvicorn src.api.main:app --port 8000 --log-level info`
 
 ### Layer 5 — Next.js Frontend 🔲 PENDING
 Directory: `frontend/`
@@ -1343,10 +1350,10 @@ Priority 4: Wikipedia API (last resort)
 ## 16. HOW TO RESUME IN ANY NEW CHAT
 
 1. **This file is already injected.** Copilot knows everything — no re-explaining needed.
-2. Say: **"Start Layer 4 — FastAPI backend."** or **"What is the current status and what should we do next?"**
+2. Say: **"Start Layer 5 — Next.js frontend."** or **"What is the current status and what should we do next?"**
 3. Always activate venv first: `& C:\Users\Administrator\deepcoin\venv\Scripts\Activate.ps1`
 4. Iron rule still applies: **discuss plan first → wait for "go" → then build.**
-5. All 8 enterprise upgrade steps are done. Layer 3 is production-ready. Layer 4 is next.
+5. Layer 4 is complete. API is live at port 8000. Layer 5 (Next.js) is next.
 
 ```powershell
 # Quick health check on resume
@@ -1370,5 +1377,14 @@ Write-Host "EXIT: $LASTEXITCODE"
 ✅ STEP 8 — commit + push                         pushed to GitHub     9622f66
 ```
 
-**NEXT: Layer 4 — FastAPI backend.**
-Say: "Start Layer 4 — FastAPI backend."
+**Layer 4 FastAPI backend: COMPLETE ✅**
+```
+✅ src/api/main.py         lifespan, CORS, real health              7055768
+✅ src/api/schemas.py      Pydantic v2 response contracts           7055768
+✅ src/api/_store.py       thread-safe JSON history store           7055768
+✅ src/api/routes/         classify.py + history.py                 7055768
+✅ ENGINEERING_JOURNAL.md  Section 23                               4bb9878
+```
+
+**NEXT: Layer 5 — Next.js frontend.**
+Say: "Start Layer 5 — Next.js frontend."
