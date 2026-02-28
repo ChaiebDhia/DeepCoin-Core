@@ -526,7 +526,7 @@ class _PDF:
                 self_pdf.set_text_color(180, 200, 230)
                 self_pdf.set_font("Helvetica", "", 8)
                 self_pdf.cell(110, 5,
-                    "DeepCoin-Core  |  ESPRIT School of Engineering  |  YEBNI")
+                    "DeepCoin-Core  |  Dhia Chaieb  |  ESPRIT School of Engineering  |  YEBNI")
                 self_pdf.set_xy(self_pdf.w - 65, self_pdf.h - 10)
                 # {nb} is replaced by fpdf2 with the total page count
                 self_pdf.cell(45, 5,
@@ -555,15 +555,21 @@ def _draw_header_band(f, ts: str, img: str) -> None:
     f.rect(0, 0, f.w, 30, style="F")
 
     # Left: product name
-    f.set_xy(20, 6)
+    f.set_xy(20, 5)
     f.set_text_color(*_C_WHITE)
     f.set_font("Helvetica", "B", 18)
     f.cell(90, 10, "DeepCoin", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
-    f.set_xy(20, 17)
+    f.set_xy(20, 16)
     f.set_font("Helvetica", "", 9)
     f.set_text_color(180, 200, 230)
     f.cell(90, 6, "Numismatic Intelligence System  |  ESPRIT / YEBNI")
+
+    # Attribution line — author, email, internship context
+    f.set_xy(20, 23)
+    f.set_font("Helvetica", "I", 7)
+    f.set_text_color(150, 175, 215)
+    f.cell(120, 5, "Prepared by: Dhia Chaieb  \u00b7  dhia.chaieb@esprit.tn  \u00b7  PFE 2025-2026  \u00b7  ESPRIT x YEBNI")
 
     # Right: timestamp + filename
     # WHY _safe() not _s() here:
@@ -902,11 +908,40 @@ def _kb_table(f, matches: list) -> None:
 
 
 def _body_paragraph(f, text: str) -> None:
+    """
+    Render multi-paragraph body text with smart page-break handling.
+
+    WHAT: Splits text on blank-line paragraph boundaries, renders each
+          paragraph individually.  Before each paragraph, checks whether at
+          least 25 mm of space remains — if not, adds a new page first.
+
+    WHY: fpdf2's multi_cell() auto-paginates mid-sentence, producing jarring
+         "...produced during the Hellenistic period [PAGE] between 148–90 BC"
+         breaks.  By rendering paragraph-by-paragraph and adding a page before
+         starting a new paragraph when space is tight, each paragraph begins
+         with enough room to fit its first sentence without orphaning it.
+
+    NOTE: A single very long paragraph (>page height) will still auto-paginate
+          mid-sentence — that is unavoidable without full height pre-measurement
+          of every line.  This fix handles the common case (3×100-word
+          paragraphs) that fills Routes 1+2 expert commentary.
+    """
     from fpdf.enums import XPos, YPos
     f.set_font("Helvetica", "", 10)
     f.set_text_color(*_C_TEXT)
-    f.set_x(f.l_margin)
-    f.multi_cell(_ew(f), 6, _s(text), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    min_space = 25   # mm: start a new page if less than this remains
+    paras = [p.strip() for p in text.split("\n\n") if p.strip()]
+    if not paras:
+        paras = [text]
+    for i, para in enumerate(paras):
+        # Available space = distance to footer band (14 mm) from current Y
+        available = f.h - f.b_margin - 14 - f.get_y()
+        if available < min_space:
+            f.add_page()
+        f.set_x(f.l_margin)
+        f.multi_cell(_ew(f), 6, _s(para), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        if i < len(paras) - 1:
+            f.ln(3)   # small gap between paragraphs
 
 
 def _source_line(f, url: str) -> None:
