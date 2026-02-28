@@ -245,7 +245,10 @@ def _enrich_label(type_id, include_date: bool = False) -> str:
         _BAD_DENOMS = {"material", "type", "region", "date", "mint",
                        "period", "denomination", "weight", "diameter",
                        "obverse", "reverse", "legend", "authority"}
-        if denom.lower() in _BAD_DENOMS:
+        # Also catch compound denominations whose first word is a bad key
+        # e.g. "Material Bronze" → split()[0] == "material" → filter out
+        _denom_words = denom.lower().split()
+        if denom.lower() in _BAD_DENOMS or (_denom_words and _denom_words[0] in _BAD_DENOMS):
             denom = ""
         parts = " ".join(p for p in (mat, denom) if p)
         base  = f"{parts} - {mint}" if (parts and mint) else (parts or mint or f"CN {type_id}")
@@ -720,6 +723,10 @@ def _kv_table(f, rows: list) -> None:
 
         n_lines  = max(len(key_lines), len(val_lines), 1)
         total_h  = n_lines * row_h
+        # PREVENT mid-row page breaks: add a page NOW if the row won't fit.
+        # 14 mm is reserved for the branded footer band at the bottom.
+        if f.get_y() + total_h > f.h - f.b_margin - 14:
+            f.add_page()
         start_y  = f.get_y()
 
         # ── Step 2: key column — full-height rectangle then text ──────────────
@@ -785,10 +792,13 @@ def _confidence_table(f, top5: list) -> None:
         f.set_text_color(*(_C_BRAND_DARK if i == 0 else _C_TEXT))
         f.set_x(f.l_margin)
         raw_lbl = str(t.get("label", ""))
+        _desc = _s(_enrich_label(raw_lbl, include_date=True))
+        if len(_desc) > 48:
+            _desc = _desc[:45] + "..."
         for val, w in [
             (str(i + 1),                                  c1),
             (_s(raw_lbl),                                  c2),
-            (_s(_enrich_label(raw_lbl, include_date=True)), c3),
+            (_desc,                                        c3),
             (f"{t.get('confidence', 0):.1%}",             c4),
         ]:
             f.cell(w, row_h, f"  {val}", border="LBR", fill=True,
