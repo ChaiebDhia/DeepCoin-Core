@@ -7,13 +7,19 @@ Triggered when CNN confidence >= 0.40.
 Pipeline:
   1. search_by_id(class_id) → pull structured record from ChromaDB
   2. Build a rich prompt with that context
-  3. Send to LLM (priority: GitHub Models → Google AI Studio → Ollama → fallback)
+  3. Send to LLM (priority: Ollama → GitHub Models → Google AI Studio → fallback)
   4. Return a structured narrative dict
+
+LLM Priority — LOCAL FIRST:
+  1. Ollama (gemma3:4b) — always available, no rate limits, fully offline
+  2. GitHub Models      — cloud fallback (Gemini 2.5 Flash, free with Copilot Pro)
+  3. Google AI Studio   — secondary cloud fallback (Gemini 2.5 Flash, 1,500/day)
+  4. Structured fallback — KB fields concatenated, no LLM, never crashes
 
 Engineering notes:
   - KB is a singleton — loaded once per process
   - LLM provider resolved via _get_llm() priority chain (see that function)
-  - If no key set → returns the raw KB data without LLM narrative
+  - If no provider available → returns the raw KB data without LLM narrative
   - .env is loaded at import time via python-dotenv
 """
 
@@ -49,31 +55,37 @@ def _get_llm(capability: str = "text"):
     Parameters
     ----------
     capability : "text" | "vision"
-        "text"   — for Historian narrative generation (gemma3:4b locally)
-        "vision" — for Investigator image analysis  (qwen3-vl:4b locally)
+        "text"   — Historian narrative generation  (gemma3:4b locally)
+        "vision" — Investigator image analysis     (qwen3-vl:4b locally)
 
-    Priority chain (same for both capabilities):
-      1. GITHUB_TOKEN   → GitHub Models API  (Gemini 2.5 Flash — handles both)
-      2. GOOGLE_API_KEY → Google AI Studio   (Gemini 2.5 Flash — handles both)
-      3. OLLAMA_HOST    → Local Ollama       (model selected by capability)
+    Priority chain — LOCAL FIRST, cloud as fallback:
+      1. OLLAMA_HOST    → Local Ollama       (PREFERRED — always available,
+                            no rate limits, no API key, fully offline)
                             text   → OLLAMA_MODEL        (default: gemma3:4b)
                             vision → OLLAMA_VISION_MODEL (default: qwen3-vl:4b)
-      4. None           → structured fallback (no LLM, never crashes)
+      2. GITHUB_TOKEN   → GitHub Models API  (Gemini 2.5 Flash)
+                            Fallback when Ollama is not running.
+                            Free with GitHub Copilot Pro student.
+      3. GOOGLE_API_KEY → Google AI Studio   (Gemini 2.5 Flash)
+                            Secondary cloud fallback (1,500 req/day free tier).
+      4. None           → structured fallback — returns KB fields as prose,
+                            never crashes, no LLM required.
 
-    WHY qwen3-vl:4b for vision:
-        qwen3-vl is a Vision-Language model: it accepts images as input.
-        At 4b parameters (Q4 quantized ~2.5 GB VRAM), it fits in the
-        RTX 3050 Ti's 4.3 GB budget alongside the OS overhead.
-        It understands numismatic vocabulary and can describe coin obverse,
-        reverse, legends, and metal type from a raw photograph — offline.
+    WHY Ollama first:
+        Local inference is always available regardless of network, API quotas,
+        or token expiry.  gemma3:4b (3.3 GB VRAM) and qwen3-vl:4b (~2.5 GB)
+        both fit on the RTX 3050 Ti (4.3 GB VRAM) with OS overhead.
+        Production systems should not depend on a cloud API as the primary path.
 
-    WHY gemma3:4b for text:
-        Fast, 3.3 GB VRAM, strong instruction following for structured prompts.
-        Text-only — lighter than a VL model for pure narrative generation.
+    WHY cloud LLMs as fallback, not primary:
+        Cloud APIs introduce latency variance, rate limits, and key management
+        overhead.  They are useful as a higher-quality fallback when Ollama
+        is unreachable (e.g., a CI environment or a machine without a GPU).
 
-    WHY OpenAI client for Ollama:
-        Ollama exposes an OpenAI-compatible REST API at /v1.
-        Same client object, different base_url — zero extra dependencies.
+    WHY OpenAI client for all three providers:
+        GitHub Models, Google AI Studio, and Ollama all expose an
+        OpenAI-compatible /v1/chat/completions endpoint.
+        Same client class, different base_url — zero extra dependencies.
     """
     global _text_client, _text_model, _vision_client, _vision_model
 
@@ -83,41 +95,47 @@ def _get_llm(capability: str = "text"):
     if capability == "text" and _text_client is not None:
         return _text_client, _text_model
 
+    ollama_host  = os.getenv("OLLAMA_HOST")    # e.g. http://localhost:11434
     github_token = os.getenv("GITHUB_TOKEN")
     google_key   = os.getenv("GOOGLE_API_KEY")
-    ollama_host  = os.getenv("OLLAMA_HOST")   # e.g. http://localhost:11434
 
     client: Any = None
     model:  str = ""
 
-    if github_token:
-        from openai import OpenAI
-        client = OpenAI(
-            base_url="https://models.inference.ai.azure.com",
-            api_key=github_token,
-        )
-        model = "gemini-2.5-flash"   # Gemini handles both text and vision
-
-    elif google_key:
-        from openai import OpenAI
-        client = OpenAI(
-            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-            api_key=google_key,
-        )
-        model = "gemini-2.5-flash"   # Gemini handles both text and vision
-
-    elif ollama_host:
+    if ollama_host:
+        # ── Priority 1: Local Ollama (preferred) ─────────────────────────────
         # Ollama exposes an OpenAI-compatible API at /v1.
         # api_key="ollama" is a required dummy value — Ollama ignores it.
         from openai import OpenAI
         base = ollama_host.rstrip("/")
         client = OpenAI(base_url=f"{base}/v1", api_key="ollama")
         if capability == "vision":
-            # qwen3-vl:4b — Vision-Language model, understands images
+            # qwen3-vl:4b — Vision-Language model, processes images + text
             model = os.getenv("OLLAMA_VISION_MODEL", "qwen3-vl:4b")
         else:
-            # gemma3:4b — text-only, faster and lighter for narrative generation
+            # gemma3:4b — text-only, fast, strong instruction following
             model = os.getenv("OLLAMA_MODEL", "gemma3:4b")
+
+    elif github_token:
+        # ── Priority 2: GitHub Models (cloud fallback) ────────────────────────
+        from openai import OpenAI
+        client = OpenAI(
+            base_url="https://models.inference.ai.azure.com",
+            api_key=github_token,
+        )
+        model = "gemini-2.5-flash"   # handles both text and vision
+
+    elif google_key:
+        # ── Priority 3: Google AI Studio (secondary cloud fallback) ──────────
+        from openai import OpenAI
+        client = OpenAI(
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            api_key=google_key,
+        )
+        model = "gemini-2.5-flash"   # handles both text and vision
+
+    # ── Priority 4: no provider configured → structured fallback ─────────────
+    # _generate_narrative() detects client=None and calls _fallback_narrative()
 
     # Store in the correct cache slot
     if capability == "vision":
