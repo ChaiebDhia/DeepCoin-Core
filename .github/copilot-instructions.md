@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: February 28, 2026 — Layer 4 FastAPI backend COMPLETE. All smoke tests pass. Layer 5 (Next.js) is next.
+# Last updated: February 28, 2026 — PDF quality bugs fixed (enterprise grade). All 3 routes pass. Layer 5 (Next.js) is next.
 
 ---
 
@@ -1119,7 +1119,14 @@ ollama (0.17.4)     # for local LLM inference (gemma3:4b downloaded)
 | `0cfe540` | STEP 4: investigator.py — RAG search 9,541 types + OpenCV fallback |
 | `3a82ba2` | STEP 5: validator.py — multi-scale HSV, detection_confidence, uncertainty |
 | `3bc9d05` | STEP 6: gatekeeper.py — logging, per-node timing, retry, graceful degradation |
-| `9622f66` | STEP 7+8: test_pipeline.py 3/3 routes PASS + git push ← LATEST |
+| `9622f66` | STEP 7+8: test_pipeline.py 3/3 routes PASS + git push |
+| `e1b3756` | Ollama-first LLM priority (historian + investigator) |
+| `083937f` | _TYPO_MAP curly quote normalisation in synthesis |
+| `ce417c7` | historian prompt + _clean_narrative() helper |
+| `509834f` | 4 synthesis PDF fixes (CONTEXT markers, Markdown, table layout, staircase) |
+| `29162b3` | 5 PDF data fixes (NLP artifact, legend prefix, UUID header, VLM Markdown, inscription scope) |
+| `08b2622` | Enterprise PDF upgrade: _safe, _conf_color, _PDF class, colored pill, rrf score normalised |
+| `9fd433a` | fix: metal detection priority + KB rrf_score key in investigator ← LATEST |
 
 ---
 
@@ -1299,9 +1306,41 @@ records = [r for r in metadata if "error" not in r]
 
 ---
 
-### KNOWN ISSUES (all resolved in enterprise upgrade)
+#### Bug 14 — Metal detection priority: "silver" matched before "bronze"
+- **File:** `src/agents/investigator.py` — `_parse_features()`
+- **When:** Route 3 (investigator) with a bronze coin; discovered during post-enterprise-upgrade PDF review
+- **Symptom:** PDF showed "Metal Color: silver" when VLM description clearly stated "The coin is bronze... rather than silver or gold"
+- **Root cause:** `_parse_features()` scanned with this loop order: `("silver", "bronze", "gold", ...)`. The word "silver" appeared in the VLM text as a negation ("rather than **silver**"), but the loop matched it first and broke. Bronze was never reached.
+- **Fix:** Reordered loop to `("bronze", "gold", "electrum", "billon", "copper", "silver")` — specific, less-ambiguous metals first; "silver" last as a fallback.
+  ```python
+  # Old (wrong order):
+  for m in ("silver", "bronze", "gold", "copper", "billon", "electrum"):
+  # New (specific metals first):
+  for m in ("bronze", "gold", "electrum", "billon", "copper", "silver"):
+  ```
 
-All Layer 3 enterprise upgrade items are COMPLETE. No remaining scheduled issues.
+---
+
+#### Bug 15 — KB Similarity always 0% (`rrf_score` key mismatch)
+- **File:** `src/agents/investigator.py` — `investigate()`, line ~116
+- **When:** All Route 3 (investigator) PDF runs; discovered during post-enterprise-upgrade PDF review
+- **Symptom:** Every KB match showed "0%" similarity in the PDF KNOWLEDGE BASE MATCHES table, even after the normalisation fix in `08b2622`
+- **Root cause:** `rag_engine.search()` returns records with key `rrf_score` (the RRF merged score). The investigator called `hit.get("score", 0.0)` — wrong key name, always returned `0.0`. The normalisation code (`max_score = scores[0]; result / max_score`) then computed `0/0` → all zeros.
+- **Fix:**
+  ```python
+  # Old (wrong key):
+  "score": hit.get("score", 0.0),
+  # New (correct key with legacy fallback):
+  "score": hit.get("rrf_score", hit.get("score", 0.0)),
+  ```
+
+---
+
+### KNOWN ISSUES (all resolved)
+
+All Layer 3 enterprise upgrade items are COMPLETE.
+All PDF quality issues resolved through commits 509834f → 9fd433a.
+No remaining scheduled issues.
 See Section 7 Build Order for what was fixed and in which commit.
   → Structured fields scraped from corpus-nummorum.eu
   → Validated by Berlin-Brandenburg Academy of Sciences (DFG-funded)
@@ -1384,6 +1423,24 @@ Write-Host "EXIT: $LASTEXITCODE"
 ✅ src/api/_store.py       thread-safe JSON history store           7055768
 ✅ src/api/routes/         classify.py + history.py                 7055768
 ✅ ENGINEERING_JOURNAL.md  Section 23                               4bb9878
+```
+
+**PDF quality fixes: ALL COMPLETE ✅**
+```
+✅ [CONTEXT N] markers stripped from PDFs                509834f
+✅ Markdown symbols removed from PDF text               509834f
+✅ Table staircase layout fixed                         509834f
+✅ Accented/special chars (?) fixed                     083937f
+✅ Ollama-first LLM priority                            e1b3756
+✅ NLP artifact ("go to the NLP result") removed         29162b3
+✅ "Legend Legend" double prefix fixed                   29162b3
+✅ UUID removed from PDF header                         29162b3
+✅ VLM description Markdown cleaned                     29162b3
+✅ Inscription field scoped to INSCRIPTIONS section      29162b3
+✅ Enterprise PDF: color pill, route label, page numbers 08b2622
+✅ KB Similarity normalised 0-100%                      08b2622
+✅ Metal detection priority fixed (bronze before silver) 9fd433a
+✅ KB Similarity 0% bug fixed (rrf_score key)           9fd433a
 ```
 
 **NEXT: Layer 5 — Next.js frontend.**
