@@ -20,6 +20,8 @@ PDF design:
 from __future__ import annotations
 
 import os
+import re
+import unicodedata
 from datetime import datetime
 
 
@@ -36,6 +38,25 @@ _C_ORANGE      = (200, 100,  20)
 _C_RULE        = (200, 210, 225)   # light border lines
 
 
+# ── Text-cleaning patterns ───────────────────────────────────────────────────
+# Matches [CONTEXT 1], [CONTEXT 2], [CONTEXT CNN], [CONTEXT N], etc.
+# These are internal RAG citation markers injected into the LLM prompt so that
+# Gemini can produce grounded answers.  They must NEVER appear in the final PDF.
+_RE_CONTEXT = re.compile(r"\[CONTEXT\s*(?:\d+|CNN|N)?\s*(?:—[^\]]*)?\]", re.I)
+
+# Markdown patterns produced by some LLM responses when the model ignores the
+# "plain prose only" instruction.  Order matters — bold before italic.
+_MD_PATTERNS = [
+    (re.compile(r"\*{3}(.+?)\*{3}"),    r"\1"),   # ***bold-italic*** → text
+    (re.compile(r"\*{2}(.+?)\*{2}"),    r"\1"),   # **bold** → text
+    (re.compile(r"\*(.+?)\*"),          r"\1"),   # *italic* → text
+    (re.compile(r"_{2}(.+?)_{2}"),      r"\1"),   # __bold__ → text
+    (re.compile(r"_(.+?)_"),            r"\1"),   # _italic_ → text
+    (re.compile(r"`{1,3}(.+?)`{1,3}"), r"\1"),   # `code` / ```code``` → text
+    (re.compile(r"(?m)^\s*#{1,6}\s+"),  ""),     # ## Heading at line-start → stripped
+    (re.compile(r"#{2,}\s*"),           ""),     # inline ## / #### (LLM artefact)
+]
+
 # Greek → Latin transliteration (dict-based)
 _GREEK_MAP: dict = {
     "Α":"A",  "Β":"B",  "Γ":"G",  "Δ":"D",  "Ε":"E",  "Ζ":"Z",
@@ -51,9 +72,47 @@ _GREEK_MAP: dict = {
 
 
 def _s(text: str) -> str:
-    """Transliterate Greek to Latin, then encode to latin-1 safely."""
-    out = "".join(_GREEK_MAP.get(c, c) for c in str(text))
-    return out.encode("latin-1", "replace").decode("latin-1")
+    """
+    Sanitise a string for PDF output through five ordered steps.
+
+    Step 1 — Strip RAG citation markers  ([CONTEXT 1], [CONTEXT CNN], …)
+             These are internal prompt tokens that must never appear in print.
+    Step 2 — Strip Markdown syntax  (**, *, ##, `code`, …)
+             Some LLM responses contain inline Markdown even when instructed
+             not to.  We extract just the visible text between the markers.
+    Step 3 — Collapse excess whitespace left by stripping.
+    Step 4 — Greek → Latin transliteration  (Σ→S, Α→A, …)
+             fpdf2's built-in fonts use latin-1 encoding, which excludes the
+             Greek Unicode block (U+0370–U+03FF).
+    Step 5 — Unicode NFD decomposition + combining-mark removal
+             Converts accented characters (ō, é, ñ, …) to their ASCII base
+             letter by decomposing to NFD form and stripping combining marks
+             (Unicode category 'Mn').  This preserves readability instead of
+             emitting the latin-1 replacement character '?'.
+    Step 6 — latin-1 encode/decode  (final safety net for any remaining
+             characters outside the font's supported range).
+    """
+    t = str(text)
+
+    # Step 1 — remove [CONTEXT N] / [CONTEXT CNN] citation markers
+    t = _RE_CONTEXT.sub("", t)
+
+    # Step 2 — strip Markdown formatting, keep visible text
+    for pattern, repl in _MD_PATTERNS:
+        t = pattern.sub(repl, t)
+
+    # Step 3 — collapse runs of spaces / clean up leftover punctuation gaps
+    t = re.sub(r"  +", " ", t).strip()
+
+    # Step 4 — Greek transliteration
+    t = "".join(_GREEK_MAP.get(c, c) for c in t)
+
+    # Step 5 — decompose accented chars, strip combining diacritics
+    t = unicodedata.normalize("NFD", t)
+    t = "".join(c for c in t if unicodedata.category(c) != "Mn")
+
+    # Step 6 — final latin-1 safety net
+    return t.encode("latin-1", "replace").decode("latin-1")
 
 
 def _basename(path: str) -> str:
@@ -340,40 +399,91 @@ def _subsection_title(f, title: str) -> None:
 
 
 def _kv_table(f, rows: list) -> None:
-    """Two-column key/value table with borders and alternating shading."""
+    """
+    Two-column key/value table with borders and alternating row shading.
+
+    WHY the previous approach caused a staircase:
+        The key column used `cell()` (fixed height = row_h), while the value
+        column used `multi_cell()` (variable height for long descriptions).
+        When a value wrapped to 3 lines the value column was 21 mm tall but
+        the key column border was only 7 mm — leaving 14 mm unbordered.
+
+    Fix strategy:
+        1. Measure the value height *before* drawing using `dry_run=True`
+           with `output="LINES"` — this gives the exact wrapped line count
+           without touching the page.
+        2. Compute total_h = max(key_lines, val_lines) × row_h.
+        3. Draw the key column as a solid rectangle (background + border)
+           spanning the full total_h, then draw the text on top.
+        4. Do the same for the value column.
+        5. Advance the cursor to start_y + total_h.
+
+    Column widths:
+        col_k = 38 mm  (~22 % of 170 mm effective width)
+        col_v = 132 mm (~78 %)  — generous space for long descriptions.
+    """
     from fpdf.enums import XPos, YPos
     if not rows:
         return
-    col_k = 52
-    col_v = _ew(f) - col_k
-    row_h = 7
 
-    # Column header
+    col_k = 38                     # key column — was 52, narrowed to give value more room
+    col_v = _ew(f) - col_k         # value column — typically ~132 mm on A4
+    row_h = 6                      # line-height per text line inside a cell
+    hdr_h = 7                      # header row is slightly taller
+
+    # ── Column header ─────────────────────────────────────────────────────────
     f.set_fill_color(*_C_BRAND_LIGHT)
     f.set_draw_color(*_C_RULE)
     f.set_font("Helvetica", "B", 9)
     f.set_text_color(*_C_BRAND_DARK)
     f.set_x(f.l_margin)
-    f.cell(col_k, row_h, "  Field",  border=1, fill=True,
+    f.cell(col_k, hdr_h, "  Field",  border=1, fill=True,
            new_x=XPos.RIGHT, new_y=YPos.TOP)
-    f.cell(col_v, row_h, "  Value",  border=1, fill=True,
+    f.cell(col_v, hdr_h, "  Value",  border=1, fill=True,
            new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
+    # ── Data rows ─────────────────────────────────────────────────────────────
     for i, (key, val) in enumerate(rows):
-        f.set_fill_color(*(_C_ROW_ALT if i % 2 == 0 else _C_WHITE))
-        f.set_x(f.l_margin)
+        fill_color = _C_ROW_ALT if i % 2 == 0 else _C_WHITE
+        key_text = f"  {_s(key)}"
+        val_text = f"  {_s(val)}"
 
-        # Key
+        # ── Step 1: measure wrapped line counts (dry run — no page output) ───
+        f.set_font("Helvetica", "B", 9)
+        key_lines = f.multi_cell(col_k, row_h, key_text,
+                                 dry_run=True, output="LINES")
+        f.set_font("Helvetica", "", 9)
+        val_lines = f.multi_cell(col_v, row_h, val_text,
+                                 dry_run=True, output="LINES")
+
+        n_lines  = max(len(key_lines), len(val_lines), 1)
+        total_h  = n_lines * row_h
+        start_y  = f.get_y()
+
+        # ── Step 2: key column — full-height rectangle then text ──────────────
+        f.set_fill_color(*fill_color)
+        f.set_draw_color(*_C_RULE)
+        # Draw filled, bordered rectangle spanning the full row height
+        f.rect(f.l_margin, start_y, col_k, total_h, style="FD")
+        # Overlay text (no border / fill — rect already covers it)
         f.set_font("Helvetica", "B", 9)
         f.set_text_color(*_C_MUTED)
-        f.cell(col_k, row_h, f"  {_s(key)}", border="LBR", fill=True,
-               new_x=XPos.RIGHT, new_y=YPos.TOP)
+        f.set_xy(f.l_margin, start_y)
+        f.multi_cell(col_k, row_h, key_text, border=0, fill=False,
+                     new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
-        # Value — multi_cell for long text, anchored to left margin after
+        # ── Step 3: value column — same approach ──────────────────────────────
+        f.set_fill_color(*fill_color)
+        f.set_draw_color(*_C_RULE)
+        f.rect(f.l_margin + col_k, start_y, col_v, total_h, style="FD")
         f.set_font("Helvetica", "", 9)
         f.set_text_color(*_C_TEXT)
-        f.multi_cell(col_v, row_h, f"  {_s(val)}", border="LBR", fill=True,
+        f.set_xy(f.l_margin + col_k, start_y)
+        f.multi_cell(col_v, row_h, val_text, border=0, fill=False,
                      new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+        # ── Step 4: advance cursor to end of row ──────────────────────────────
+        f.set_xy(f.l_margin, start_y + total_h)
 
     f.set_text_color(*_C_TEXT)
     f.set_draw_color(*_C_RULE)
