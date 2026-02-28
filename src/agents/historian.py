@@ -20,6 +20,8 @@ Engineering notes:
 from __future__ import annotations
 
 import os
+import re
+import unicodedata
 from typing import Any
 
 from dotenv import load_dotenv
@@ -288,12 +290,16 @@ class Historian:
             f"{context_blocks}\n\n"
             f"CNN image classification confidence: {confidence:.1%}\n\n"
             "TASK: Write a concise expert commentary of 2-3 paragraphs about this ancient coin.\n"
-            "RULES:\n"
+            "STRICT OUTPUT FORMAT RULES — violating any rule makes the output unusable:\n"
             "  1. Use ONLY facts present in the context blocks above.\n"
-            "  2. Cite the source inline using [CONTEXT N] when you state a specific fact.\n"
-            "  3. Do NOT invent dates, weights, mint names, or historical events not in the context.\n"
-            "  4. Synthesise the facts into flowing professional prose — do not just list fields.\n"
-            "  5. If confidence is below 85%, note that the classification should be verified.\n\n"
+            "  2. Do NOT invent dates, weights, mint names, or historical events not in the context.\n"
+            "  3. Synthesise the facts into flowing professional prose — do not list fields.\n"
+            "  4. If confidence is below 85%, note that the classification should be verified.\n"
+            "  5. OUTPUT PLAIN TEXT ONLY. No Markdown. No asterisks, no bold, no italics,\n"
+            "     no headers, no bullet points, no backticks, no underscores for emphasis.\n"
+            "  6. Do NOT include any citation markers such as [CONTEXT N] or [CONTEXT CNN]\n"
+            "     in your response. The context blocks are for your internal reference only.\n"
+            "  7. Write in complete sentences. No special characters except standard punctuation.\n\n"
             "Write the commentary now:"
         )
 
@@ -310,12 +316,51 @@ class Historian:
                 narrative = getattr(resp.choices[0].message, "reasoning", "") or ""
             if not narrative:
                 return _fallback_narrative(record), False
-            return narrative, True
+            return _clean_narrative(narrative), True
         except Exception as e:
             return f"{_fallback_narrative(record)} [LLM unavailable: {e}]", False
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────
+
+# Compiled once at module level — same logic as synthesis._s() but returns a
+# clean Python str (no latin-1 encode) so the state dict holds clean text.
+_RE_CTX   = re.compile(r"\[CONTEXT\s*(?:\d+|CNN|N)?[^\]]*\]", re.I)
+_MD_PATS  = [
+    (re.compile(r"\*{3}(.+?)\*{3}"),    r"\1"),
+    (re.compile(r"\*{2}(.+?)\*{2}"),    r"\1"),
+    (re.compile(r"\*(.+?)\*"),          r"\1"),
+    (re.compile(r"_{2}(.+?)_{2}"),      r"\1"),
+    (re.compile(r"_(.+?)_"),            r"\1"),
+    (re.compile(r"`{1,3}(.+?)`{1,3}"), r"\1"),
+    (re.compile(r"(?m)^\s*#{1,6}\s+"),  ""),
+    (re.compile(r"#{2,}\s*"),           ""),
+]
+
+
+def _clean_narrative(text: str) -> str:
+    """
+    Sanitise the raw LLM narrative before it enters the state dict.
+
+    WHY at source (here) AND in synthesis._s():
+        Cleaning here means the plain-text report (synthesize()) and any
+        downstream consumers (API response JSON, history store) also get
+        clean text.  synthesis._s() stays as a final safety net for the PDF.
+
+    Steps applied:
+      1. Strip [CONTEXT N] / [CONTEXT CNN] citation markers.
+      2. Strip Markdown formatting (**, *, ##, backticks).
+      3. Collapse excess whitespace.
+      4. NFD decompose + strip combining marks (o-with-macron → o, etc.)
+    """
+    t = _RE_CTX.sub("", text)
+    for pat, repl in _MD_PATS:
+        t = pat.sub(repl, t)
+    t = re.sub(r"  +", " ", t).strip()
+    t = unicodedata.normalize("NFD", t)
+    t = "".join(c for c in t if unicodedata.category(c) != "Mn")
+    return t
+
 
 def _fallback_narrative(record: dict) -> str:
     """Plain-English summary when LLM is unavailable."""
