@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: February 28, 2026 — PDF quality bugs fixed (enterprise grade). All 3 routes pass. Layer 5 (Next.js) is next.
+# Last updated: February 28, 2026 — README enterprise overhaul complete (16e7835). Layer 5 (Next.js) is next.
 
 ---
 
@@ -1129,7 +1129,12 @@ ollama (0.17.4)     # for local LLM inference (gemma3:4b downloaded)
 | `9fd433a` | fix: metal detection priority + KB rrf_score key in investigator |
 | `7e04b94` | feat: _enrich_label() — user-friendly coin names in all PDF tables |
 | `a731bcd` | fix: 8 PDF quality fixes (em-dash, bad denominations, v.Chr.→BC, pipe legend, CN Reference label, Unclassified Specimen, section title) |
-| `68a3c21` | fix: strip Wait-loop reasoning artifact + date differentiation in top-5 ← LATEST |
+| `68a3c21` | fix: strip Wait-loop reasoning artifact + date differentiation in top-5 |
+| `d7a0459` | fix: 3 PDF layout bugs (detected table page split, compound denom, top-5 overflow) |
+| `55e1946` | fix: 3 KB data quality bugs (metal rescue, denom parens, date period suffix) |
+| `0f31fbd` | fix: paragraph page-break + author attribution (header + footer) |
+| `c03158b` | fix: trim header attribution to 'Prepared by: Dhia Chaieb' only |
+| `16e7835` | docs: enterprise README overhaul — RAG/DL explainers, scraping story, remove Wikipedia/Nomisma, Layer 4 ✅ ← LATEST |
 
 ---
 
@@ -1456,6 +1461,16 @@ Write-Host "EXIT: $LASTEXITCODE"
 ✅ Wait-loop reasoning stripped (_strip_wait_loops)      68a3c21
 ✅ Section body capped at 350 chars (_cap_sections)      68a3c21
 ✅ Top-5 dates shown to differentiate same-name variants 68a3c21
+✅ Detected Attributes table page-overflow guard         d7a0459
+✅ Compound denom first-word filter                      d7a0459
+✅ Top-5 description truncation at 48 chars              d7a0459
+✅ Metal rescue from empty material via denom scan       55e1946
+✅ Denom parenthetical strip (e.g. "Large (Bronze)")     55e1946
+✅ Date period suffix stripped (_clean_kb_date)          55e1946
+✅ Paragraph page-break on \n\n boundary                 0f31fbd
+✅ Author attribution in PDF header                      0f31fbd
+✅ Header trimmed to "Prepared by: Dhia Chaieb"          c03158b
+✅ README enterprise overhaul (RAG/DL, no Wikipedia)     16e7835
 ```
 
 **NEXT: Layer 5 — Next.js frontend.**
