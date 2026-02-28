@@ -28,6 +28,7 @@ Engineering notes:
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from pathlib import Path
 from typing import Literal, Optional
@@ -406,17 +407,36 @@ class Gatekeeper:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  MODULE-LEVEL SINGLETON  (lazy)
+#  MODULE-LEVEL SINGLETON  (lazy, thread-safe)
 # ══════════════════════════════════════════════════════════════════════════════
 
 _gk_instance: Gatekeeper | None = None
+_gk_lock     = threading.Lock()
 
 def get_gatekeeper(**kwargs) -> Gatekeeper:
     """
     Return the shared Gatekeeper instance (created on first call).
-    Pass kwargs only on first call to override defaults.
+
+    Thread-safe via double-checked locking pattern:
+        - First check (outside lock) avoids acquiring the lock on every call
+          once the instance is initialised — the common case.
+        - Second check (inside lock) prevents two threads that both passed the
+          first check from both calling Gatekeeper() simultaneously.
+
+    WHY this matters:
+        If two threads both see _gk_instance is None and both call Gatekeeper(),
+        both load 79 MB EfficientNet weights into VRAM simultaneously.
+        On a 4.3 GB card this risks OOM. The second instance is then silently
+        discarded — wasted work and potential crash.
+
+    NOTE: FastAPI uses app.state.gk (set in lifespan, inherently single-init).
+          This function is used by scripts and tests that create a Gatekeeper
+          outside the FastAPI context.
     """
     global _gk_instance
     if _gk_instance is None:
-        _gk_instance = Gatekeeper(**kwargs)
+        with _gk_lock:
+            if _gk_instance is None:   # second check inside the lock
+                _gk_instance = Gatekeeper(**kwargs)
     return _gk_instance
+

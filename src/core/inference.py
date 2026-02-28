@@ -23,6 +23,7 @@ Output contract (what every agent receives from this class):
   }
 """
 
+import logging
 import time
 import cv2
 import torch
@@ -31,6 +32,12 @@ from pathlib import Path
 
 from src.core.model_factory import get_deepcoin_model
 from src.core.dataset import get_val_transforms
+
+logger = logging.getLogger(__name__)
+# WHY __name__:
+#   Resolves to 'src.core.inference' at runtime — you see exactly which module
+#   emitted each log line. FastAPI/uvicorn configure the root logger; child
+#   loggers inherit the level automatically.
 
 
 # ── Path constants ─────────────────────────────────────────────────────────────
@@ -94,7 +101,7 @@ class CoinInference:
         self.device = torch.device(
             device if device else ("cuda" if torch.cuda.is_available() else "cpu")
         )
-        print(f"[CoinInference] device = {self.device}")
+        logger.info("CoinInference: device=%s", self.device)
 
         # ── Load class mapping ─────────────────────────────────────────────────
         # class_mapping.pth contains {class_to_idx, idx_to_class, n_classes}
@@ -102,7 +109,7 @@ class CoinInference:
         self.class_to_idx: dict[str, int] = mapping["class_to_idx"]
         self.idx_to_class: dict[int, str] = mapping["idx_to_class"]
         self.num_classes: int = mapping.get("n_classes", len(self.class_to_idx))
-        print(f"[CoinInference] classes loaded: {self.num_classes}")
+        logger.info("CoinInference: %d classes loaded", self.num_classes)
 
         # ── Load model weights ─────────────────────────────────────────────────
         checkpoint = torch.load(model_path, map_location=self.device, weights_only=False)
@@ -120,7 +127,7 @@ class CoinInference:
 
         val_acc = checkpoint.get("val_acc", "unknown")
         epoch   = checkpoint.get("epoch", "unknown")
-        print(f"[CoinInference] model loaded — epoch {epoch}, val_acc {val_acc:.2f}%")
+        logger.info("CoinInference: model loaded — epoch=%s  val_acc=%s", epoch, val_acc)
 
     # ── Private helpers ────────────────────────────────────────────────────────
 
