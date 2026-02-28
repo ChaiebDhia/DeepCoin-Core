@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: February 28, 2026 — Audit fixes complete (1b210ef): auth, rate-limit, SQLite store, metrics, 34 unit tests. Layer 5 (Next.js) is next.
+# Last updated: February 28, 2026 — Layer 0-3 audit complete (8354450): 6 security & hardening fixes. 36/36 tests pass. Layer 5 (Next.js) is next.
 
 ---
 
@@ -820,6 +820,8 @@ Status: EfficientNet-B3 trained, 80.03% TTA accuracy achieved.
 - Augmentation pipeline: Rotate ±15°, BrightnessContrast ±20%, GaussNoise, ElasticTransform, HorizontalFlip + ImageNet normalisation
 - Class imbalance (40:1) handled via `WeightedRandomSampler(weight_i = 1/count_i)`
 - AMP (`GradScaler` + `autocast`) halves VRAM, ~2× faster/epoch on RTX 3050 Ti
+- **Audit fix (Layer 0-3 audit, commit 8354450):** `weights_only=True` added to both `torch.load()` calls in `train.py` (`--resume` checkpoint path + final best-model test eval) — prevents arbitrary code execution via malicious pickle; matches the same fix already applied to `inference.py` in Layer 4 audit
+- **Audit fix (Layer 0-3 audit, commit 8354450):** `None` guard added after `cv2.imread()` in `dataset.py` `__getitem__` — raises `ValueError` with the full file path on corrupt/empty/unsupported JPEG instead of propagating a cryptic `TypeError` mid-batch that kills the training job
 
 ### Layer 1 — Inference Engine ✅ COMPLETE (security patch applied)
 Files: `src/core/inference.py`, `scripts/predict.py`
@@ -840,6 +842,7 @@ Files: `src/core/knowledge_base.py` (legacy fallback), `src/core/rag_engine.py` 
 - `get_context_blocks(type_id)` → returns 5 labeled `[CONTEXT N]` strings ready to inject into LLM prompt
 - `in_training_set: bool` tag on every chunk record
 - Rebuild script: `scripts/rebuild_chroma.py` (wipe-safe, 9.0 min, 11.3 ms/chunk)
+- **Audit fix (Layer 0-3 audit, commit 8354450):** `get_rag_engine()` singleton now thread-safe via double-checked locking (`threading.Lock()`) — without the lock, two simultaneous FastAPI requests on a cold server could both enter `if _engine_instance is None` and build two BM25 indexes in parallel, causing OOM; pattern mirrors `get_gatekeeper()` in `gatekeeper.py`
 
 ### Layer 3 — Agent System ✅ ENTERPRISE UPGRADE COMPLETE
 All 5 agents fully upgraded. All 3 routes tested and passing.
@@ -862,6 +865,7 @@ All 5 agents fully upgraded. All 3 routes tested and passing.
 - `research(cnn_prediction)→dict`: `label_str` lookup (NOT raw class_id), `get_by_id()` → hybrid RAG search, `get_context_blocks()` for [CONTEXT 1-5] injection
 - `_generate_narrative()`: grounded prompt — Gemini cites [CONTEXT N], `max_tokens=800`
 - `_fallback_narrative()`: field concatenation when no LLM key
+- **Audit fix (8354450):** `_llm_lock = threading.Lock()` added as module global; `_get_llm()` uses double-checked locking so concurrent FastAPI requests cannot race on `_text_client` / `_vision_client` assignment
 
 **`src/agents/investigator.py`** — VLM visual agent ✅ UPGRADED
 - KB cross-reference via `self._rag.search()` — all 9,541 types (not just 438)
@@ -873,8 +877,9 @@ All 5 agents fully upgraded. All 3 routes tested and passing.
 - `detection_confidence` (float 0-1): mean pixel coverage of winning metal across agreeing scales
 - `uncertainty` flag: low (3/3 agree) / medium (2/3) / high (1/3)
 - `label_str` lookup fix (same as historian — NOT raw class_id)
+- **Audit fix (8354450):** `from collections import Counter` moved from inside `_detect_material()` hot-path to module top-level imports — avoids Python re-importing the stdlib module on every validator call
 
-**`src/agents/synthesis.py`** — Professional PDF generator ✅ COMPLETE, NO CHANGES NEEDED
+**`src/agents/synthesis.py`** — Professional PDF generator ✅ COMPLETE
 - `synthesize(state)→str`: clean plain-text summary
 - `to_pdf(state, output_path)`: ALL direct fpdf2 draw — NO Markdown parsing
 - Navy header band, bordered tables with alternating shading, blue section rule lines
@@ -882,6 +887,7 @@ All 5 agents fully upgraded. All 3 routes tested and passing.
 - Bug fixed: Greek `???` chars replaced via transliteration map
 - Bug fixed: duplicate footer band removed (header already carries branding)
 - Signature change from `to_pdf(markdown_str, path)` → `to_pdf(state_dict, path)`
+- **Audit fix (8354450):** `import re as _re` removed from inside `_enrich_label()` and `_basename()` — both now use module-level `re`; eliminates a redundant stdlib import executed on every PDF render call
 
 ### Layer 4 — FastAPI Backend ✅ ENTERPRISE-HARDENED (latest: 1b210ef)
 - `src/api/main.py`: lifespan, real CORS (`ALLOWED_ORIGINS` env), real health endpoint (5 component checks → 503 if degraded), `_cleanup_old_files(max_age_hours=24)` at startup, `/api/metrics` Prometheus text
@@ -1159,7 +1165,9 @@ pytest (9.0.2)      # unit testing (34 tests across 3 files)
 | `0f31fbd` | fix: paragraph page-break + author attribution (header + footer) |
 | `c03158b` | fix: trim header attribution to 'Prepared by: Dhia Chaieb' only |
 | `16e7835` | docs: enterprise README overhaul — RAG/DL explainers, scraping story, remove Wikipedia/Nomisma, Layer 4 ✅ |
-| `1b210ef` | feat: auth (X-API-Key), rate-limiting (slowapi), SQLite store (WAL), /api/metrics, 34 unit tests, pyproject.toml, Makefile, .env.example ← LATEST |
+| `1b210ef` | feat: auth (X-API-Key), rate-limiting (slowapi), SQLite store (WAL), /api/metrics, 34 unit tests, pyproject.toml, Makefile, .env.example |
+| `4be8e56` | docs: Engineering Journal sections 27-30 + copilot-instructions Layer 0-1 updates |
+| `8354450` | fix: Layer 0-3 enterprise audit — 6 security & hardening fixes (weights_only×2, None guard, thread-safe RAG singleton, historian lock, Counter import, re import) ← LATEST |
 
 ---
 
@@ -1511,6 +1519,18 @@ Write-Host "EXIT: $LASTEXITCODE"
 ✅ Makefile                   developer shortcuts
 ✅ .env.example               self-documenting template
 ✅ Unit tests                 34/34 pass in 1.31s at commit 1b210ef
+```
+
+**Layer 0-3 audit fixes complete (8354450). All layers 0-4 are now enterprise-grade.**
+
+```
+✅ weights_only=True (train.py ×2)       torch.load() security in training — matches inference.py fix
+✅ None guard (dataset.py)               cv2.imread() failure → ValueError with path, not TypeError
+✅ Thread-safe RAGEngine singleton       get_rag_engine() double-checked locking — prevents OOM race
+✅ Thread-safe LLM clients (historian)   _llm_lock guards _text_client/_vision_client assignment
+✅ Counter import moved (validator)      from collections import Counter at module top, not per-call
+✅ re import removed (synthesis)         module-level re reused, no per-render local import
+✅ Unit tests                           36/36 pass at commit 8354450
 ```
 
 **NEXT: Layer 5 — Next.js frontend.**
