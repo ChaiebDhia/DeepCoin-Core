@@ -3075,7 +3075,463 @@ fix: strip qwen3-vl think tags from investigator description
 
 ---
 
+## 23. Layer 4 — FastAPI Backend (Production API)
+
+**Date**: February 28, 2026  
+**Commit**: `7055768`  
+**Status**: ✅ COMPLETE — all smoke tests pass
+
+---
+
+### What This Layer Does
+
+Layer 4 wraps the entire AI pipeline (CNN + 5 agents) inside a production HTTP API.  
+It is the bridge between the Python AI code and the Next.js frontend that will come in Layer 5.
+
+```
+Browser / curl / Frontend
+    → POST /api/classify   (upload a coin photo)
+    → GET  /api/health     (check all subsystems)
+    → GET  /api/history    (paginated list of past analyses)
+    → GET  /api/history/{id}  (full result by UUID)
+    → GET  /api/reports/{filename}  (download the PDF)
+```
+
+---
+
+### Full Audit Performed Before Building
+
+Before writing a single line of Layer 4, we audited every completed file for enterprise quality.  
+Five problems were found and fixed:
+
+#### Problem 1 — `print()` in `inference.py` (Observability Gap)
+
+**What we found:**
+```python
+# Old code:
+print(f"[CoinInference] device = {self.device}")
+print(f"[CoinInference] classes loaded: {self.num_classes}")
+print(f"[CoinInference] model loaded — epoch {epoch}, val_acc {val_acc:.2f}%")
+```
+
+**Why this is wrong in production:**  
+When you deploy to Docker or a server, `print()` output goes to stdout.  
+Depending on logging configuration, stdout can be:
+- Buffered (messages delayed, appear out of order with other logs)
+- Suppressed entirely (container logging collects stderr only)
+- Lost forever if no log driver is configured
+
+`logger.info()` uses Python's structured logging system:
+- Every message tagged with timestamp, severity level, and module name
+- Filtered by `LOG_LEVEL` environment variable
+- Sent to the right handler (file, stdout, Sentry, etc.)
+- Zero overhead when level is filtered (`logger.debug()` → skipped entirely if LOG_LEVEL=INFO)
+
+**Fix applied:**
+```python
+import logging
+logger = logging.getLogger(__name__)   # name = "src.core.inference"
+
+logger.info("CoinInference: device=%s", self.device)           # NOT f-string
+logger.info("CoinInference: %d classes loaded", self.num_classes)
+logger.info("CoinInference: model loaded — epoch=%s  val_acc=%s", epoch, val_acc)
+```
+
+**Why `%s` format, not f-string?**  
+If `LOG_LEVEL=WARNING`, the logger checks the level BEFORE constructing the message.  
+With `logger.info("loaded: %s", value)`, the string `"loaded: X"` is NEVER built if INFO is filtered.  
+With `logger.info(f"loaded: {value}")`, the f-string is ALWAYS evaluated — wasted CPU for filtered messages.  
+On a server running thousands of requests, these savings matter.
+
+---
+
+#### Problem 2 — `allow_origins=["*"]` in `main.py` (Security: CORS vulnerability)
+
+**What CORS is and why `"*"` is dangerous:**  
+Cross-Origin Resource Sharing is the browser's mechanism that controls which websites can make API calls to your server.
+
+Without CORS, a malicious website at `evil.com` cannot call your API at `deepcoin.com` on behalf of a logged-in user.  
+With `allow_origins=["*"]`, you remove that protection entirely — ANY website can read your API responses.
+
+The combination `allow_origins=["*"]` + `allow_credentials=True` is particularly bad:
+- Credentials means cookies and Authorization headers
+- Any website can call your API with the user's auth cookie
+- This enables Cross-Site Request Forgery (CSRF) attacks
+
+**Production fix:**
+```python
+# Read from environment at startup
+import os
+_raw = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000")
+origins = [o.strip() for o in _raw.split(",") if o.strip()]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,           # ["http://localhost:3000"] — specific, not wildcard
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+
+In `.env`:
+```
+ALLOWED_ORIGINS=http://localhost:3000,https://deepcoin.yebni.com
+```
+
+**Senior rule:** Never hardcode security config. It must be injectable from the environment so you can change it without modifying code.
+
+---
+
+#### Problem 3 — Missing `import threading` in `gatekeeper.py` (Race Condition)
+
+**What was wrong:**  
+The `get_gatekeeper()` singleton used a `threading.Lock()` that was never imported.  
+The server crashed immediately on startup with:
+```
+NameError: name 'threading' is not defined
+  File "src/agents/gatekeeper.py", line 413, in <module>
+    _gk_lock = threading.Lock()
+```
+
+**Why the singleton matters:**  
+Loading the CNN model takes ~1 second and allocates ~1 GB of VRAM.  
+If two requests arrive simultaneously during a cold start:
+- Thread A sees `_gk_instance is None`, starts creating a Gatekeeper
+- Thread B also sees `_gk_instance is None` (A hasn't finished yet), ALSO starts creating a Gatekeeper
+- Two full Gatekeeper instances load → 2 GB VRAM instead of 1 GB → possible OOM on 4.3 GB GPU
+
+**The Double-Checked Locking Pattern:**
+```python
+_gk_instance: Gatekeeper | None = None
+_gk_lock = threading.Lock()
+
+def get_gatekeeper(**kwargs) -> Gatekeeper:
+    global _gk_instance
+    if _gk_instance is None:           # Fast path: no lock needed if already loaded
+        with _gk_lock:
+            if _gk_instance is None:   # Slow path: re-check INSIDE lock
+                _gk_instance = Gatekeeper(**kwargs)
+    return _gk_instance
+```
+
+Why two `if _gk_instance is None` checks?  
+- The first check runs without a lock (fast, no contention) — 99.99% of calls take this path
+- If the first check passes (None), we acquire the lock
+- We check AGAIN inside the lock because Thread B might have also passed the first check and now finished creating the instance while Thread A was waiting to acquire the lock
+- Without the second check, Thread A would create a SECOND instance after Thread B already did
+
+---
+
+#### Problem 4 — Hardcoded health endpoint returning `"not_loaded"`
+
+**Old code:**
+```python
+@app.get("/api/health")
+async def health():
+    return {"status": "ok", "model": "not_loaded"}
+```
+
+This is dead code — a load balancer checking `/api/health` would always see `200 OK` even if:
+- The model file is missing
+- ChromaDB failed to load
+- The GPU is out of memory
+
+**New health endpoint (real checks):**
+```python
+@app.get("/api/health")
+async def health(request: Request):
+    gk       = getattr(request.app.state, "gk", None)
+    model_ok = Path("models/best_model.pth").exists()
+    map_ok   = Path("models/class_mapping.pth").exists()
+    chroma   = Path("data/metadata/chroma_db_rag").exists() and \
+               any(Path("data/metadata/chroma_db_rag").iterdir())
+    llm_ok   = any(os.getenv(k) for k in ("GITHUB_TOKEN", "GOOGLE_API_KEY", "OLLAMA_HOST"))
+
+    components = {
+        "model_file":    "ok" if model_ok else "missing",
+        "mapping_file":  "ok" if map_ok   else "missing",
+        "chroma_db":     "ok" if chroma   else "empty",
+        "gatekeeper":    "ok" if gk       else "not_loaded",
+        "llm_provider":  "ok" if llm_ok   else "no_key_set",
+    }
+    overall = "healthy" if all(v == "ok" for v in components.values()) else "degraded"
+    status_code = 200 if overall == "healthy" else 503
+    return JSONResponse({"status": overall, "version": APP_VERSION, "components": components}, status_code=status_code)
+```
+
+**Why 503 on degraded?** Load balancers use HTTP status codes — a 503 tells them "remove this instance from rotation." A 200 with `"status": "degraded"` in the body would be invisible to a load balancer.
+
+---
+
+### The 5 New Files Built
+
+#### `src/api/schemas.py` — Pydantic Response Models
+
+**What it is:**  
+The contract between the API and any client. Every response field has a name, type, and optional description.
+
+**Why Pydantic?**  
+- Automatic JSON validation at the input/output boundary
+- OpenAPI docs generated automatically from the models
+- Type safety — if you return `{"confidence": "high"}` when the schema says `float`, Pydantic raises a `ValidationError` at runtime rather than silently sending wrong data
+
+**Key models:**
+```python
+class Top5Item(BaseModel):
+    rank: int              # 1-5
+    class_id: int          # softmax index (0-437)
+    label: str             # CN type ID ("1015")
+    confidence: float      # 0.0-1.0
+
+class ClassifyResponse(BaseModel):
+    id: str                # UUID — unique identifier for this analysis
+    timestamp: str         # ISO 8601 — client can parse to any timezone
+    route_taken: str       # "historian" | "validator" | "investigator"
+    cnn: CnnResult         # full CNN output
+    narrative: str | None  # LLM-generated text
+    pdf_url: str | None    # relative URL to download PDF
+    processing_time_s: float
+    # ... all other fields
+```
+
+---
+
+#### `src/api/_store.py` — Thread-Safe History Store (Repository Pattern)
+
+**What it is:**  
+A file-based JSON store that saves every analysis to `data/history.json`.
+
+**Why a separate file?**  
+This is the **Repository Pattern** — a software engineering pattern that hides storage details behind a clean interface.
+
+```python
+# The public interface:
+def append(record: dict) -> None: ...    # save one result
+def load_all() -> list[dict]: ...        # get all results
+def get_by_id(record_id: str) -> dict | None: ...  # get one result
+```
+
+The word "repository" means: callers don't know if data is in a file, PostgreSQL, or Redis.  
+Right now it's a file. In Layer 6, we'll replace the implementation with SQLAlchemy + PostgreSQL — the callers (`classify.py`, `history.py`) will change **zero lines**.
+
+**Thread safety — why it matters:**  
+The server uses multiple async tasks running on one OS thread.  
+If two classification requests finish at the same millisecond:
+- Task A reads `history.json` (200 records)
+- Task B reads `history.json` (200 records)
+- Task A appends its record, writes 201 records
+- Task B also appends its record (to what it read — 200 records), writes 201 records
+- Task A's record is gone — **last writer wins, data corrupted**
+
+Fix: `threading.Lock()` ensures only one thread reads-modifies-writes at a time:
+```python
+_store_lock = threading.Lock()
+
+def append(record: dict) -> None:
+    with _store_lock:          # ONLY ONE THREAD AT A TIME
+        data = _load_raw()
+        data.append(record)
+        _STORE_FILE.write_text(json.dumps(data, indent=2))
+```
+
+---
+
+#### `src/api/routes/classify.py` — POST /api/classify (5-Layer Security)
+
+This is the most security-sensitive endpoint. It accepts file uploads from untrusted clients.
+
+**Security Layer 1 — Content-Type header:**
+```python
+if upload.content_type not in ("image/jpeg", "image/png"):
+    raise HTTPException(status_code=415, detail="image/jpeg or image/png only")
+```
+Rejects non-image MIME types immediately, before reading the file body.
+
+**Security Layer 2 — File size limit (10 MB):**
+```python
+raw = await upload.read(MAX_SIZE + 1)
+if len(raw) > MAX_SIZE:
+    raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
+```
+Prevents an attacker sending a 5 GB file to exhaust server memory.
+
+**Security Layer 3 — Magic bytes check:**
+```python
+MAGIC = {
+    "image/jpeg": b"\xff\xd8\xff",
+    "image/png":  b"\x89PNG",
+}
+if not raw.startswith(MAGIC[upload.content_type]):
+    raise HTTPException(status_code=415, detail="File header does not match declared type")
+```
+
+**Why check magic bytes?**  
+A Content-Type header can be faked. Any HTTP client can set `Content-Type: image/jpeg` on a file that is actually a shell script. Magic bytes are the first few bytes hardcoded into the file format itself — a real JPEG always starts with `\xff\xd8\xff`. A PHP script or shell script will never have those exact bytes.
+
+**Security Layer 4 — Filename sanitization:**
+```python
+safe_name = re.sub(r"[^\w.\-]", "_", upload.filename or "upload")
+```
+Prevents path traversal attacks like `../../etc/passwd` as the filename.
+
+**Security Layer 5 — UUID prefix on saved files:**
+```python
+save_path = UPLOAD_DIR / f"{uuid.uuid4().hex}_{safe_name}"
+```
+Prevents filename collision — two clients uploading `coin.jpg` at the same time each get a unique file.
+
+**Non-blocking execution:**
+```python
+state = await asyncio.to_thread(gk.analyze, str(save_path), tta)
+```
+
+`Gatekeeper.analyze()` is synchronous — it blocks its thread for 15-120 seconds.  
+FastAPI runs on an async event loop.  
+If you call a blocking function directly in an async endpoint, the ENTIRE server freezes — no other requests can be handled while this one runs.
+
+`asyncio.to_thread()` runs the blocking function in a separate thread pool thread.  
+The event loop continues serving other requests. When `analyze()` finishes, the result is returned.
+
+---
+
+#### `src/api/routes/history.py` — GET /api/history (Pagination)
+
+**Why pagination?**  
+Over time, `data/history.json` could contain thousands of records.  
+Returning all of them in one response would:
+- Take seconds to read from disk
+- Produce a response measured in megabytes
+- Crash the browser trying to render thousands of table rows
+
+Pagination returns a window (skip + limit):
+```python
+# GET /api/history?skip=0&limit=20  → records 0-19 (newest first)
+# GET /api/history?skip=20&limit=20 → records 20-39
+# GET /api/history?skip=100&limit=5 → records 100-104
+```
+
+```python
+@router.get("/history")
+async def list_history(skip: int = 0, limit: int = Query(default=20, le=100)):
+    all_records = await asyncio.to_thread(history_load_all)
+    newest_first = list(reversed(all_records))         # most recent first
+    page = newest_first[skip : skip + limit]
+    return HistoryListResponse(items=[...], total=len(all_records), skip=skip, limit=limit)
+```
+
+`le=100` means maximum limit is 100 — a client cannot request all records in one call.
+
+---
+
+### The `lifespan` Pattern — Why Not `@app.on_event("startup")`
+
+```python
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # STARTUP — everything before yield
+    app.state.gk = get_gatekeeper()
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    ensure_store()
+    logger.info("Gatekeeper ready. API is now accepting requests.")
+    yield
+    # SHUTDOWN — everything after yield (cleanup when server stops)
+    logger.info("API shutting down.")
+```
+
+**Why `lifespan` over `@app.on_event("startup")`?**  
+`@app.on_event` is deprecated in modern FastAPI versions.  
+`lifespan` is the new standard — it uses Python's `asynccontextmanager` which means startup AND shutdown happen in the same function, making the symmetry explicit.  
+It also allows `async with` dependency injection in tests — you can start the lifespan in a test context and the real Gatekeeper loads.
+
+---
+
+### Smoke Test Results
+
+```
+Health check:
+  GET /api/health → 200
+  {
+    "status": "healthy",
+    "version": "0.4.0",
+    "components": {
+      "model_file": "ok",
+      "mapping_file": "ok",
+      "chroma_db": "ok",
+      "gatekeeper": "ok",
+      "llm_provider": "ok"
+    }
+  }
+
+Classify (Route 1 — historian):
+  POST /api/classify (coin type 1015, 91.1% confidence)
+  → 200 OK in 21.5s
+  → route_taken: "historian"
+  → narrative contains [CONTEXT 1] through [CONTEXT 5] citations
+  → pdf_url: "/api/reports/report_81f3150d-..."
+
+History:
+  GET /api/history → 200
+  → total: 1 item
+  → label: "1015", confidence: 0.9107, route: "historian"
+```
+
+---
+
+### Layer 4 Architecture Summary
+
+```
+POST /classify
+    ↓ content-type check (415)
+    ↓ size limit check  (413)
+    ↓ magic bytes check (415)
+    ↓ filename sanitize → uuid prefix → save to data/uploads/
+    ↓ asyncio.to_thread(gk.analyze)   ← non-blocking
+    ↓ build ClassifyResponse (Pydantic)
+    ↓ asyncio.to_thread(history_append)
+    → 200 ClassifyResponse
+
+GET /health
+    → real checks: model file + mapping + chroma + gatekeeper + llm
+    → 200 healthy / 503 degraded
+
+GET /history?skip=0&limit=20
+    → asyncio.to_thread(history_load_all)
+    → newest-first slice
+    → HistoryListResponse (paginated)
+
+GET /history/{id}
+    → asyncio.to_thread(get_by_id)
+    → 404 if not found
+    → ClassifyResponse (full record)
+
+GET /reports/{filename}
+    → path traversal check (403 if ".." in filename)
+    → FileResponse → browser downloads PDF
+```
+
+---
+
+### Commit 7055768 — February 28, 2026
+```
+feat: Layer 4 FastAPI backend -- classify + history routes
+
+- src/api/main.py: lifespan, real CORS (ALLOWED_ORIGINS env), real health endpoint
+- src/api/schemas.py: Pydantic v2 models (ClassifyResponse, HistoryListResponse...)
+- src/api/_store.py: thread-safe JSON history store (Repository Pattern)
+- src/api/routes/classify.py: POST /api/classify with 5-layer security validation
+- src/api/routes/history.py: GET /api/history (paginated) + GET /api/history/{id}
+- src/core/inference.py: print() -> logger.info() (3 occurrences)
+- src/core/model_factory.py: full docstring, type hints, import logging
+- src/agents/gatekeeper.py: add missing import threading + thread-safe singleton
+
+Smoke tests: health 200 all-ok, classify type-1015 91.1% historian 21.5s, history 1 item
+```
+
+---
+
 *End of Engineering Journal*
 
 *This file is version-controlled in GitHub. Update it with every commit.*  
-*Last updated: February 28, 2026 — qwen3-vl:4b activated, all 3 routes verified. Layer 4 (FastAPI) is next.*
+*Last updated: February 28, 2026 — Layer 4 FastAPI complete. All smoke tests pass. Layer 5 (Next.js) is next.*
