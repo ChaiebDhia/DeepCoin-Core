@@ -569,7 +569,7 @@ def _draw_header_band(f, ts: str, img: str) -> None:
     f.set_xy(20, 23)
     f.set_font("Helvetica", "I", 7)
     f.set_text_color(150, 175, 215)
-    f.cell(120, 5, "Prepared by: Dhia Chaieb  \u00b7  dhia.chaieb@esprit.tn  \u00b7  PFE 2025-2026  \u00b7  ESPRIT x YEBNI")
+    f.cell(80, 5, "Prepared by: Dhia Chaieb")
 
     # Right: timestamp + filename
     # WHY _safe() not _s() here:
