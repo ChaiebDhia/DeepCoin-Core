@@ -241,13 +241,28 @@ def _enrich_label(type_id, include_date: bool = False) -> str:
         denom = (rec.get("denomination", "") or "").strip().title()
         mint  = (rec.get("mint",         "") or "").strip()
         date  = (rec.get("date",         "") or "").strip()
+        # Strip parenthetical qualifiers from denom: "Large Denomination (Bronze)" -> "Large Denomination"
+        import re as _re
+        denom = _re.sub(r'\s*\([^)]*\)', '', denom).strip()
+        # Strip archaeological period appended to date: "c. 500-450 BC Archaic Period" -> "c. 500-450 BC"
+        date = _re.sub(
+            r'\s+(Archaic|Classical|Hellenistic|Roman|Byzantine|Early|Late|Middle)\b.*',
+            '', date, flags=_re.IGNORECASE).strip()
         # Filter denominations that are scraped field names, not real values
         _BAD_DENOMS = {"material", "type", "region", "date", "mint",
                        "period", "denomination", "weight", "diameter",
                        "obverse", "reverse", "legend", "authority"}
-        # Also catch compound denominations whose first word is a bad key
-        # e.g. "Material Bronze" → split()[0] == "material" → filter out
+        # Before filtering, rescue metal name hidden in compound bad-denom
+        # e.g. denom="Material bronze" -> mat empty -> extract "Bronze" from denom
+        _METAL_WORDS = {"bronze", "silver", "gold", "electrum", "billon", "copper", "lead"}
         _denom_words = denom.lower().split()
+        if not mat and _denom_words:
+            for _w in _denom_words:
+                if _w in _METAL_WORDS:
+                    mat = _w.title()
+                    break
+        # Also catch compound denominations whose first word is a bad key
+        # e.g. "Material Bronze" -> split()[0] == "material" -> filter out
         if denom.lower() in _BAD_DENOMS or (_denom_words and _denom_words[0] in _BAD_DENOMS):
             denom = ""
         parts = " ".join(p for p in (mat, denom) if p)
@@ -808,6 +823,26 @@ def _confidence_table(f, top5: list) -> None:
     f.set_text_color(*_C_TEXT)
 
 
+def _clean_kb_date(raw: str) -> str:
+    """
+    Normalise a KB date string for PDF display.
+
+    Some KB records store the period name directly appended to the date field:
+        'c. 500-450 BC Archaic Period'  -->  'c. 500-450 BC'
+    This happens because the scraper concatenated the period sub-label into the
+    date cell rather than the separate period field.
+
+    WHY strip here rather than at scrape time:
+        Fixing the scraper would require a full re-scrape of 9,541 records.
+        A local display fix is faster and has zero risk of data corruption.
+    """
+    import re as _re
+    cleaned = _re.sub(
+        r'\s+(Archaic|Classical|Hellenistic|Roman|Byzantine|Early|Late|Middle)\b.*',
+        '', raw, flags=_re.IGNORECASE).strip()
+    return _s(cleaned)
+
+
 def _kb_table(f, matches: list) -> None:
     """
     Match% / Coin Identity / Date three-column table for KB closest matches.
@@ -857,7 +892,7 @@ def _kb_table(f, matches: list) -> None:
         for val, w in [
             (f"{sim:.0f}%",              c1),
             (_s(identity_cell),          c2),
-            (_s(hit.get("date", "")),   c3),
+            (_clean_kb_date(hit.get("date", "")),   c3),
         ]:
             f.cell(w, row_h, f"  {val}", border="LBR", fill=True,
                    new_x=XPos.RIGHT, new_y=YPos.TOP)
