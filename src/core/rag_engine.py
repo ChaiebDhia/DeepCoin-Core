@@ -641,10 +641,13 @@ class RAGEngine:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  MODULE-LEVEL SINGLETON
+#  MODULE-LEVEL SINGLETON  (lazy, thread-safe)
 # ══════════════════════════════════════════════════════════════════════════════
 
+import threading as _threading
+
 _engine_instance: RAGEngine | None = None
+_engine_lock     = _threading.Lock()
 
 
 def get_rag_engine(
@@ -660,14 +663,24 @@ def get_rag_engine(
         serious performance regression.  The singleton ensures zero overhead
         on every call after the first one in the process lifetime.
 
-    Thread safety:
-        Safe for concurrent read-only search() calls.
-        NOT safe for concurrent populate_chroma() — run that offline only.
+    Thread safety (double-checked locking):
+        FastAPI uses a thread pool.  Two requests arriving simultaneously
+        during cold start both see _engine_instance is None and would both
+        call RAGEngine() without a lock — double-building the BM25 index
+        uses peak RAM and risks OOM on the 4.3 GB GPU card.
+        Pattern mirrors get_gatekeeper() in gatekeeper.py:
+          - First check  (outside lock) — fast path once initialised.
+          - Second check (inside lock)  — prevents double-init race.
+
+    NOTE: Safe for concurrent read-only search() calls.
+          NOT safe for concurrent populate_chroma() — run that offline only.
     """
     global _engine_instance
     if _engine_instance is None:
-        _engine_instance = RAGEngine(
-            metadata_path=metadata_path,
-            chroma_dir=chroma_dir,
-        )
+        with _engine_lock:
+            if _engine_instance is None:   # second check inside the lock
+                _engine_instance = RAGEngine(
+                    metadata_path=metadata_path,
+                    chroma_dir=chroma_dir,
+                )
     return _engine_instance

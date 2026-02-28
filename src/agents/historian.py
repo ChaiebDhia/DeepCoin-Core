@@ -36,16 +36,26 @@ load_dotenv()   # reads .env from project root — sets OLLAMA_HOST, GITHUB_TOKE
 from src.core.knowledge_base import get_knowledge_base
 from src.core.rag_engine     import get_rag_engine
 
+import threading as _threading
+
 # ── LLM clients (lazy singletons, one per capability) ─────────────────────────
 # WHY two caches instead of one:
 #   Text tasks (Historian) and vision tasks (Investigator) need different models.
 #   gemma3:4b is a text-only model — it cannot process images.
 #   qwen3-vl:4b is a Vision-Language model — it can process both.
 #   We cache them separately so both can coexist in the same process.
-_text_client  = None
-_text_model   = None
+#
+# WHY _llm_lock:
+#   FastAPI uses a thread pool.  Two concurrent requests that both arrive
+#   before the first LLM client has been resolved would both enter _get_llm()
+#   and both assign to _text_client.  The race is benign (both produce the
+#   same object) but the double assignment is technically undefined behaviour
+#   on CPython with GIL-releasing code.  A single lock eliminates that.
+_text_client   = None
+_text_model    = None
 _vision_client = None
 _vision_model  = None
+_llm_lock      = _threading.Lock()
 
 
 def _get_llm(capability: str = "text"):
@@ -89,11 +99,19 @@ def _get_llm(capability: str = "text"):
     """
     global _text_client, _text_model, _vision_client, _vision_model
 
-    # Return cached client if already resolved for this capability
+    # Return cached client if already resolved for this capability (fast path)
     if capability == "vision" and _vision_client is not None:
         return _vision_client, _vision_model
     if capability == "text" and _text_client is not None:
         return _text_client, _text_model
+
+    with _llm_lock:
+        # Second check inside lock — another thread may have initialised while
+        # we waited for the lock.
+        if capability == "vision" and _vision_client is not None:
+            return _vision_client, _vision_model
+        if capability == "text" and _text_client is not None:
+            return _text_client, _text_model
 
     ollama_host  = os.getenv("OLLAMA_HOST")    # e.g. http://localhost:11434
     github_token = os.getenv("GITHUB_TOKEN")
@@ -137,11 +155,13 @@ def _get_llm(capability: str = "text"):
     # ── Priority 4: no provider configured → structured fallback ─────────────
     # _generate_narrative() detects client=None and calls _fallback_narrative()
 
-    # Store in the correct cache slot
-    if capability == "vision":
-        _vision_client, _vision_model = client, model
-    else:
-        _text_client, _text_model = client, model
+    # Store in the correct cache slot (inside lock so the assignment is visible
+    # to all threads as an atomic update)
+    with _llm_lock:
+        if capability == "vision":
+            _vision_client, _vision_model = client, model
+        else:
+            _text_client, _text_model = client, model
 
     return client, model
 

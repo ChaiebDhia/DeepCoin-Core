@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import cv2
 import numpy as np
+from collections import Counter
 
 from src.core.knowledge_base import get_knowledge_base
 from src.core.rag_engine     import get_rag_engine
@@ -214,7 +215,6 @@ class Validator:
             return "unknown", 0.0, "low", all_stats
 
         # Majority vote
-        from collections import Counter
         vote    = Counter(non_unknown)
         winner, vote_count = vote.most_common(1)[0]
 

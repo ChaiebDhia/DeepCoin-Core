@@ -242,12 +242,11 @@ def _enrich_label(type_id, include_date: bool = False) -> str:
         mint  = (rec.get("mint",         "") or "").strip()
         date  = (rec.get("date",         "") or "").strip()
         # Strip parenthetical qualifiers from denom: "Large Denomination (Bronze)" -> "Large Denomination"
-        import re as _re
-        denom = _re.sub(r'\s*\([^)]*\)', '', denom).strip()
+        denom = re.sub(r'\s*\([^)]*\)', '', denom).strip()
         # Strip archaeological period appended to date: "c. 500-450 BC Archaic Period" -> "c. 500-450 BC"
-        date = _re.sub(
+        date = re.sub(
             r'\s+(Archaic|Classical|Hellenistic|Roman|Byzantine|Early|Late|Middle)\b.*',
-            '', date, flags=_re.IGNORECASE).strip()
+            '', date, flags=re.IGNORECASE).strip()
         # Filter denominations that are scraped field names, not real values
         _BAD_DENOMS = {"material", "type", "region", "date", "mint",
                        "period", "denomination", "weight", "diameter",
@@ -265,6 +264,7 @@ def _enrich_label(type_id, include_date: bool = False) -> str:
         # e.g. "Material Bronze" -> split()[0] == "material" -> filter out
         if denom.lower() in _BAD_DENOMS or (_denom_words and _denom_words[0] in _BAD_DENOMS):
             denom = ""
+        # NOTE: use module-level re — no local import needed
         parts = " ".join(p for p in (mat, denom) if p)
         base  = f"{parts} - {mint}" if (parts and mint) else (parts or mint or f"CN {type_id}")
         if include_date and date and len(date) <= 30:
@@ -287,10 +287,10 @@ def _basename(path: str) -> str:
     UUID format: 8-4-4-4-12 hex chars + underscore = 37 leading characters.
     Example: '2240d431-f93c-4fc1-b8b9-96fece4bab9d_coin.jpg' -> 'coin.jpg'
     """
-    import re as _re
     name = path.replace("\\", "/").split("/")[-1] if path else "N/A"
     # Strip UUID prefix: exactly 36 hex+dash chars followed by underscore
-    name = _re.sub(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_", "", name)
+    # Uses module-level re — no local import needed.
+    name = re.sub(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_", "", name)
     return name
 
 

@@ -613,7 +613,13 @@ def main():
     if args.resume:
         if os.path.exists(checkpoint_path):
             print(f"\n♻️  Resuming from checkpoint: {checkpoint_path}")
-            ckpt = torch.load(checkpoint_path, map_location=device)
+            # WHY weights_only=True:
+            #   torch.load with weights_only=False can execute arbitrary Python
+            #   code embedded in the pickle stream (same CVE class fixed in
+            #   inference.py at commit 1b210ef).  weights_only=True restricts
+            #   deserialisation to tensors and primitives — safe for .pth files
+            #   produced by torch.save(state_dict).
+            ckpt = torch.load(checkpoint_path, map_location=device, weights_only=True)
             model.load_state_dict(ckpt['model_state_dict'])
             optimizer.load_state_dict(ckpt['optimizer_state_dict'])
             scheduler.load_state_dict(ckpt['scheduler_state_dict'])
@@ -713,7 +719,7 @@ def main():
     # Load the BEST model (not the last epoch!) and evaluate on test set
     # This is the honest number you report to YEBNI/ESPRIT
     print(f"\n🧪 Loading best model for final test evaluation...")
-    checkpoint = torch.load('models/best_model.pth', map_location=device)
+    checkpoint = torch.load('models/best_model.pth', map_location=device, weights_only=True)
     model.load_state_dict(checkpoint['model_state_dict'])
 
     test_loss, test_acc = validate(model, test_loader, criterion, device)

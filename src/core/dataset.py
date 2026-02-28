@@ -132,7 +132,22 @@ class DeepCoinDataset(Dataset):
         # Load the image from disk
         # Using OpenCV (faster) instead of PIL
         image = cv2.imread(img_path)
-        
+
+        # Guard against corrupted / unreadable image files.
+        # cv2.imread returns None for files it cannot decode (bad JPEG header,
+        # zero-byte file, unsupported format).  Calling cvtColor on None raises
+        # TypeError and crashes the ENTIRE training job mid-epoch.
+        # WHY raise here and not silently skip:
+        #   Silently returning a blank tensor would pollute the training batch
+        #   with a false label.  Raising lets PyTorch's DataLoader (with
+        #   persistent_workers=False) catch the error and report the bad path,
+        #   so the developer can remove the corrupted file and restart.
+        if image is None:
+            raise ValueError(
+                f"cv2.imread returned None for '{img_path}'. "
+                "File may be corrupted, empty, or in an unsupported format."
+            )
+
         # Convert BGR (OpenCV default) to RGB (PyTorch/ImageNet standard)
         # WHY? EfficientNet was trained on ImageNet which uses RGB color order
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
