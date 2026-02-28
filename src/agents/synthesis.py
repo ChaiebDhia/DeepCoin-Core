@@ -133,7 +133,16 @@ def _s(text: str) -> str:
     for pattern, repl in _MD_PATTERNS:
         t = pattern.sub(repl, t)
 
-    # Step 3 — collapse runs of spaces / clean up leftover punctuation gaps
+    # Step 3a — strip Corpus Nummorum HTML navigation artefacts
+    #   corpus-nummorum.eu embeds "go to the NLP result of this description"
+    #   links and "| legend Design" / "| legend Legend" section labels as
+    #   inline text in the scraped HTML.  These are never numismatic content.
+    t = re.sub(r"go to the NLP result of this description", "", t, flags=re.I)
+    t = re.sub(r"\|\s*legend\s+(Design|Legend)\s*", " | ", t, flags=re.I)
+    t = re.sub(r"^legend\s+(Design|Legend)\s+", "", t, flags=re.I)  # at field start
+    t = re.sub(r"\s*\|\s*$", "", t)  # trailing " | " left after stripping
+
+    # Step 3b — collapse runs of spaces / clean up leftover punctuation gaps
     t = re.sub(r"  +", " ", t).strip()
 
     # Step 4 — typographic character normalisation
@@ -151,7 +160,23 @@ def _s(text: str) -> str:
 
 
 def _basename(path: str) -> str:
-    return path.replace("\\", "/").split("/")[-1] if path else "N/A"
+    """
+    Return just the original filename from a path, stripping the UUID prefix.
+
+    WHY strip UUID:
+        classify.py saves uploads as '{uuid}_{original_filename}' to prevent
+        name collisions.  The UUID is internal bookkeeping — the header of the
+        PDF should show the human-readable original filename, not a 36-char
+        identifier that means nothing to a reader.
+
+    UUID format: 8-4-4-4-12 hex chars + underscore = 37 leading characters.
+    Example: '2240d431-f93c-4fc1-b8b9-96fece4bab9d_coin.jpg' -> 'coin.jpg'
+    """
+    import re as _re
+    name = path.replace("\\", "/").split("/")[-1] if path else "N/A"
+    # Strip UUID prefix: exactly 36 hex+dash chars followed by underscore
+    name = _re.sub(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_", "", name)
+    return name
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

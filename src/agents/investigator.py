@@ -180,16 +180,21 @@ class Investigator:
 
         prompt = (
             "You are an expert numismatist and archaeologist specialising in ancient Greek and Roman coins.\n"
-            f"{cnn_hint}\n"
-            "Carefully examine this coin image and provide a structured analysis:\n\n"
-            "1. METAL/MATERIAL: What metal does the coin appear to be? (silver / bronze / gold / unknown)\n"
-            "2. OBVERSE: Describe everything visible on the front face (portrait, symbols, legend text).\n"
-            "3. REVERSE: Describe everything visible on the reverse (symbols, legend text).\n"
-            "4. INSCRIPTIONS: List any readable text fragments.\n"
-            "5. CONDITION: Brief condition assessment (well-preserved / worn / corroded).\n"
-            "6. IDENTIFICATION: Based on what you see, what type of ancient coin is this likely to be? "
-            "   Include period, issuing authority, and region if you can determine them.\n\n"
-            "Be specific and use numismatic terminology. If something is not visible, say so."
+            f"{cnn_hint}\n\n"
+            "Carefully examine this coin image and provide a structured analysis.\n"
+            "Use ONLY plain prose sentences. No Markdown. No asterisks, no bullet points, "
+            "no dashes used as bullets, no numbered items, no bold, no headers.\n\n"
+            "Structure your answer as exactly six labeled paragraphs, each starting with the "
+            "label followed by a colon:\n\n"
+            "METAL: State whether the coin is silver, bronze, gold, or unknown, with brief reasoning.\n"
+            "OBVERSE: Describe the front face — portrait, deity, animal, symbols, and any visible legend text.\n"
+            "REVERSE: Describe the reverse face — symbols, design, and any visible legend text.\n"
+            "INSCRIPTIONS: Quote any readable letter sequences visible on either side. "
+            "If none are readable, write None.\n"
+            "CONDITION: One sentence assessment — well-preserved, worn, or corroded.\n"
+            "IDENTIFICATION: Period, issuing authority, and region if determinable. "
+            "If uncertain, state the most likely candidate with brief reasoning.\n\n"
+            "Use numismatic terminology. If something is not visible, say so plainly."
         )
 
         try:
@@ -220,6 +225,11 @@ class Investigator:
             # WHY: The thinking text contains speculative reasoning, not numismatic
             # facts. Passing it to RAG search would dilute the query signal.
             description = _strip_think_tags(description)
+            # Apply the same Markdown / citation cleanup used by the historian
+            # WHY: qwen3-vl sometimes emits Markdown even with plain-text instructions.
+            # _clean_narrative() strips **, *, ##, [CONTEXT N], curly quotes, etc.
+            from src.agents.historian import _clean_narrative
+            description = _clean_narrative(description)
             features = _parse_features(description)
             return description, features, True
         except Exception as e:
@@ -366,39 +376,66 @@ def _opencv_fallback(image_path: str) -> tuple[str, dict]:
 
 def _parse_features(description: str) -> dict:
     """
-    Light parsing of Gemini's free-text response into structured fields.
-    Best-effort — if a field can’t be extracted, returns 'unknown'.
+    Extract structured attributes from the VLM plain-prose response.
+
+    WHY this approach (versus JSON from the LLM):
+        Plain prose paragraphs labelled METAL:/INSCRIPTIONS: are more
+        robust because the structure is in the label, not JSON syntax.
+
+    WHY scope inscription extraction to the INSCRIPTIONS section:
+        The old regex r"[A-ZA-O]{3,}" searched the ENTIRE description,
+        so section labels like METAL, OBVERSE, BCE appeared as inscriptions.
+        Restricting the search to after the INSCRIPTIONS: label eliminates
+        false positives from the prose structure itself.
     """
     import re
 
-    def _extract(pattern: str) -> str:
-        m = re.search(pattern, description, re.IGNORECASE | re.DOTALL)
-        if m:
-            return m.group(1).strip().split("\n")[0].strip()
-        return "unknown"
+    def _section(label: str) -> str:
+        """Extract text of a labeled section up to the next label or end."""
+        m = re.search(
+            rf"^{label}:\s*(.+?)(?=^[A-Z]{{3,}}:|\Z)",
+            description,
+            re.IGNORECASE | re.DOTALL | re.MULTILINE,
+        )
+        return m.group(1).strip() if m else ""
 
-    # Metal
+    # Metal -- prefer section-scoped match, fall back to full-text keyword scan
     metal = "unknown"
-    for m in ("silver", "bronze", "gold", "copper", "billon"):
-        if m in description.lower():
+    metal_text = _section("METAL") or description
+    for m in ("silver", "bronze", "gold", "copper", "billon", "electrum"):
+        if m in metal_text.lower():
             metal = m
             break
 
-    # Inscriptions — look for capital letter runs that look like legends
-    inscriptions = re.findall(r"[A-ZΑ-Ω]{3,}", description)
-    inscriptions = list(dict.fromkeys(inscriptions))[:5]   # deduplicate, keep 5
+    # Inscriptions -- only parse within the INSCRIPTIONS section so that
+    # section headers (METAL, OBVERSE) are never mis-classified as legends.
+    inscriptions: list = []
+    ins_section = _section("INSCRIPTIONS")
+    if ins_section and ins_section.lower() not in ("none", "none visible", "n/a", "unknown"):
+        raw = re.findall(r"[A-ZΑ-Ω]{2,}", ins_section)
+        _STOP = {"THE", "AND", "FOR", "NOT", "BUT", "WITH", "FROM", "NONE",
+                 "ANY", "ALL", "ARE", "HAS", "ITS", "CAN", "WAY", "MAY"}
+        inscriptions = [w for w in dict.fromkeys(raw) if w not in _STOP][:6]
 
     # Condition
     condition = "unknown"
-    for cond in ("well-preserved", "well preserved", "worn", "corroded", "good", "poor", "fair"):
-        if cond in description.lower():
+    cond_text = _section("CONDITION") or description
+    for cond in ("well-preserved", "well preserved", "worn", "corroded", "good", "fair", "poor"):
+        if cond in cond_text.lower():
             condition = cond
             break
 
+    # Profile direction -- look in OBVERSE section
+    profile = "unknown"
+    obv_text = _section("OBVERSE")
+    m_dir = re.search(r"(?:facing|portrait|head|turned)\s+(left|right)", obv_text, re.I)
+    if m_dir:
+        profile = m_dir.group(1).lower()
+
     return {
         "metal_color":       metal,
-        "profile_direction": _extract(r"(?:facing|portrait|head)\s+(left|right)"),
+        "profile_direction": profile,
         "inscriptions":      inscriptions,
-        "symbols":           [],   # too complex to parse reliably from free text
+        "symbols":           [],
         "condition":         condition,
     }

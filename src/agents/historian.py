@@ -228,13 +228,21 @@ class Historian:
 
         # 4. Extract obverse/reverse from structured fields (clean, no blob parsing)
         obverse_parts = []
-        if record.get("obverse_design"): obverse_parts.append(record["obverse_design"])
-        if record.get("obverse_legend"): obverse_parts.append(f"legend {record['obverse_legend']}")
+        if record.get("obverse_design"):
+            obverse_parts.append(_clean_field(record["obverse_design"]))
+        if record.get("obverse_legend"):
+            leg = _strip_legend_prefix(record["obverse_legend"])
+            if leg:
+                obverse_parts.append(f"Legend: {leg}")
         obverse = " | ".join(obverse_parts) or record.get("obverse", "")
 
         reverse_parts = []
-        if record.get("reverse_design"): reverse_parts.append(record["reverse_design"])
-        if record.get("reverse_legend"): reverse_parts.append(f"legend {record['reverse_legend']}")
+        if record.get("reverse_design"):
+            reverse_parts.append(_clean_field(record["reverse_design"]))
+        if record.get("reverse_legend"):
+            leg = _strip_legend_prefix(record["reverse_legend"])
+            if leg:
+                reverse_parts.append(f"Legend: {leg}")
         reverse = " | ".join(reverse_parts) or record.get("reverse", "")
 
         return {
@@ -340,6 +348,49 @@ class Historian:
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────
+
+_RE_NLP_LINK = re.compile(
+    r"go to the NLP result of this description", re.I
+)
+_RE_LEGEND_PREFIX = re.compile(r"^(?:Legend|Design)\s+", re.I)
+
+
+def _clean_field(text: str) -> str:
+    """
+    Strip HTML navigation artefacts from a scraped corpus-nummorum.eu field.
+
+    WHY these artefacts appear:
+        The CN website renders design descriptions as:
+            "[Design text]  [NLP link]  | Legend  [legend text]"
+        BeautifulSoup extracts ALL inner text including the NLP hyperlink label
+        and the "Legend" section sub-heading.  The scraper collected these
+        verbatim — they are not numismatic content.
+
+    Strips:
+        - "go to the NLP result of this description" (NLP link anchor text)
+        - Leading/trailing whitespace collapsing
+    """
+    t = _RE_NLP_LINK.sub("", text)
+    return re.sub(r"  +", " ", t).strip()
+
+
+def _strip_legend_prefix(text: str) -> str:
+    """
+    Remove the scraper-injected "Legend " or "Design " prefix from legend
+    field values.
+
+    WHY:
+        On the CN website the legend sub-heading reads "Legend: MA(RO)".
+        The scraper sometimes captures this as the field value including
+        the "Legend" label, e.g. obverse_legend = "Legend MA(RO)".
+        The historian code then adds its own " | Legend: " separator,
+        producing "legend Legend MA(RO)" — a double-word artefact.
+        Stripping the prefix here prevents the duplication.
+    """
+    t = _clean_field(text)
+    t = _RE_LEGEND_PREFIX.sub("", t).strip()
+    return t
+
 
 # Compiled once at module level — same logic as synthesis._s() but returns a
 # clean Python str (no latin-1 encode) so the state dict holds clean text.
