@@ -147,9 +147,15 @@ def _s(text: str) -> str:
     #   links and "| legend Design" / "| legend Legend" section labels as
     #   inline text in the scraped HTML.  These are never numismatic content.
     t = re.sub(r"go to the NLP result of this description", "", t, flags=re.I)
-    t = re.sub(r"\|\s*legend\s+(Design|Legend)\s*", " | ", t, flags=re.I)
+    t = re.sub(r"\|\s*legend\s+(Design|Legend)\s*", " / ", t, flags=re.I)
     t = re.sub(r"^legend\s+(Design|Legend)\s+", "", t, flags=re.I)  # at field start
+    t = re.sub(r"\s*\|\s*Legend:\s*", " / Legend: ", t)  # | Legend: x -> / Legend: x
     t = re.sub(r"\s*\|\s*$", "", t)  # trailing " | " left after stripping
+
+    # Step 3b — normalise German date notation from corpus-nummorum.eu
+    #   The KB stores dates in German: "500-400 v.Chr." = "500-400 BC"
+    t = re.sub(r"\bv\.\s*Chr\.", "BC",  t)
+    t = re.sub(r"\bn\.\s*Chr\.", "AD",  t)
 
     # Step 3b — collapse runs of spaces / clean up leftover punctuation gaps
     t = re.sub(r"  +", " ", t).strip()
@@ -227,9 +233,15 @@ def _enrich_label(type_id) -> str:
         mat   = (rec.get("material",     "") or "").strip().title()
         denom = (rec.get("denomination", "") or "").strip().title()
         mint  = (rec.get("mint",         "") or "").strip()
+        # Filter denominations that are scraped field names, not real values
+        _BAD_DENOMS = {"material", "type", "region", "date", "mint",
+                       "period", "denomination", "weight", "diameter",
+                       "obverse", "reverse", "legend", "authority"}
+        if denom.lower() in _BAD_DENOMS:
+            denom = ""
         parts = " ".join(p for p in (mat, denom) if p)
         if parts and mint:
-            return f"{parts} \u2014 {mint}"
+            return f"{parts} - {mint}"
         return parts or mint or f"CN {type_id}"
     except Exception:
         return f"CN {type_id}"
@@ -379,7 +391,6 @@ class Synthesis:
             rows = [
                 ("Mint",          h.get("mint",           "")),
                 ("Region",        h.get("region",         "")),
-                ("CN Type ID",    str(h.get("type_id",    ""))),  # reference field
                 ("Date",          h.get("date",           "")),
                 ("Period",        h.get("period",         "")),
                 ("Material",      h.get("material",       "")),
@@ -387,6 +398,7 @@ class Synthesis:
                 ("Obverse",       h.get("obverse",        "")),
                 ("Reverse",       h.get("reverse",        "")),
                 ("Persons",       h.get("persons",        "")),
+                ("CN Reference",  str(h.get("type_id",    ""))),
             ]
             _kv_table(f, [(k, _s(val)) for k, val in rows if val])
 
@@ -416,7 +428,7 @@ class Synthesis:
 
         # ── visual investigation ──────────────────────────────────────────────
         if inv:
-            _section_title(f, "Visual Investigation  (Low-Confidence Route)")
+            _section_title(f, "Visual Investigation")
             if inv.get("visual_description"):
                 # Trim verbose pre-analysis preamble: show only the structured
                 # section text (METAL: / OBVERSE: / etc.) without the LLM's
@@ -572,24 +584,24 @@ def _draw_result_stripe(f, cnn: dict, route: str) -> None:
     f.set_draw_color(*_C_BRAND_LIGHT)
     f.rect(f.l_margin, y, ew, 22, style="FD")
 
-    # Line 1 — coin name (or "Unidentified Coin" for low-confidence route)
+    # Line 1 — coin name (or "Unclassified Specimen" for low-confidence route)
     f.set_xy(f.l_margin + 5, y + 3)
     f.set_font("Helvetica", "B", 11)
     f.set_text_color(*_C_BRAND_DARK)
     if conf < 0.40:
-        f.cell(86, 8, "Unidentified Coin")
+        f.cell(86, 8, "Unclassified Specimen")
     else:
         name = human_name[:50] + ("..." if len(human_name) > 50 else "")
         f.cell(86, 8, name)
 
-    # Line 2 — CN type sub-label
+    # Line 2 — scholarly reference sub-label
     f.set_xy(f.l_margin + 5, y + 12)
     f.set_font("Helvetica", "", 8)
     f.set_text_color(*_C_MUTED)
     if conf < 0.40:
         f.cell(86, 6, f"Best candidate: CN {label}")
     else:
-        f.cell(86, 6, f"CN {label}")
+        f.cell(86, 6, f"Corpus Nummorum \xb7 CN {label}")
 
     # Confidence pill — coloured filled rectangle + white text
     pill_w, pill_h = 46, 8
