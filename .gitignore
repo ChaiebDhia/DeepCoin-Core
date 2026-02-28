@@ -57,16 +57,21 @@ CLAUDE.md
 NOTES.md
 data/raw/
 data/processed/
+data/uploads/
 data/metadata/chroma_db/
+data/metadata/chroma_db_rag/
+data/metadata/cn_types_metadata_full.json
+data/history.json
 models/*.pth
 models/*.pt
 *.log
 temp/
 cache/
 
-# Generated report outputs (run audit.py to regenerate)
+# Generated report outputs
 reports/*.png
 reports/*.csv
+reports/*.pdf
 augmentation_test.png
 
 # Environment variables

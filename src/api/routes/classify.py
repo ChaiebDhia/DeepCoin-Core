@@ -38,9 +38,11 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 
 from src.api._store   import append as history_append
+from src.api.auth     import require_api_key
+from src.api.limiter  import limiter
 from src.api.schemas  import ClassifyResponse, CnnResult, Top5Item
 
 logger = logging.getLogger(__name__)
@@ -104,7 +106,9 @@ def _sanitise_filename(name: str) -> str:
         "4. PDF report generation\n\n"
         "Returns a full JSON analysis + a PDF download URL."
     ),
+    dependencies=[Depends(require_api_key)],
 )
+@limiter.limit("10/minute")
 async def classify(
     request:  Request,
     file:     UploadFile = File(..., description="Coin photograph (JPEG or PNG, max 10 MB)"),

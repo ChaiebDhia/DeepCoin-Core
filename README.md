@@ -255,7 +255,7 @@ Raw photo  CLAHE (LAB L-channel, clipLimit=2.0, tile=88)
 | Macro F1 (438 classes) | 0.7763 |
 | Training time | ~103 min on RTX 3050 Ti |
 
-**TTA (Test-Time Augmentation):** 8 forward passes per coin (original + 7 flips/crops), averaged softmax probabilities  +0.78% accuracy gain.
+**TTA (Test-Time Augmentation):** 5 forward passes per coin (original + horizontal flip + 2 rotations ±10° + brightness shift), averaged softmax probabilities → +0.78% accuracy gain (measured on the CN test set).
 
 ---
 

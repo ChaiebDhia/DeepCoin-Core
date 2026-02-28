@@ -105,14 +105,18 @@ class CoinInference:
 
         # ── Load class mapping ─────────────────────────────────────────────────
         # class_mapping.pth contains {class_to_idx, idx_to_class, n_classes}
-        mapping = torch.load(mapping_path, map_location="cpu", weights_only=False)
+        # WHY weights_only=True:
+        #   torch.load with weights_only=False can execute arbitrary Python code
+        #   embedded in the pickle stream (CVE-class vulnerability).  True mode
+        #   only deserialises tensors and primitives — safe for untrusted checkpoints.
+        mapping = torch.load(mapping_path, map_location="cpu", weights_only=True)
         self.class_to_idx: dict[str, int] = mapping["class_to_idx"]
         self.idx_to_class: dict[int, str] = mapping["idx_to_class"]
         self.num_classes: int = mapping.get("n_classes", len(self.class_to_idx))
         logger.info("CoinInference: %d classes loaded", self.num_classes)
 
         # ── Load model weights ─────────────────────────────────────────────────
-        checkpoint = torch.load(model_path, map_location=self.device, weights_only=False)
+        checkpoint = torch.load(model_path, map_location=self.device, weights_only=True)
         self.model = get_deepcoin_model(num_classes=self.num_classes)
         self.model.load_state_dict(checkpoint["model_state_dict"])
         self.model.to(self.device)
@@ -227,8 +231,8 @@ class CoinInference:
 
         Args:
             image_path: Path to the coin image (jpg/png)
-            tta:        If True, run 5-pass Test-Time Augmentation (+~1% accuracy)
-                        at the cost of 5× inference time.
+            tta:        If True, run 5-pass Test-Time Augmentation (+0.78% accuracy,
+                        measured on the CN test set).  ~5× inference time overhead.
 
         Returns:
             dict following the output contract (see module docstring)

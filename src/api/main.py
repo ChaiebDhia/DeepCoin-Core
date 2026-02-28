@@ -46,16 +46,22 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from src.api._store          import ensure_store
+from src.api.limiter         import limiter
 from src.api.routes.classify import router as classify_router
 from src.api.routes.history  import router as history_router
+
+from src import __version__
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +73,44 @@ _CHROMA_DIR   = _ROOT / "data" / "metadata" / "chroma_db_rag"
 _REPORTS_DIR  = _ROOT / "reports"
 _UPLOADS_DIR  = _ROOT / "data" / "uploads"
 
+# Process start time — used by /api/metrics uptime counter
+_START_TIME = time.time()
+
+
+# ── file cleanup helper ────────────────────────────────────────────────────────
+
+def _cleanup_old_files(max_age_hours: int = 24) -> None:
+    """
+    Delete uploaded images and generated PDFs older than max_age_hours.
+
+    WHAT: Iterates uploads/ and reports/ directories, removes files whose
+    last-modified time is older than the cutoff.
+
+    WHY: Without cleanup, a long-running server accumulates gigabytes of
+    coin images and PDFs. At 500 KB average per upload pair, 10,000 analyses
+    = 5 GB disk usage. 24-hour TTL keeps disk usage bounded.
+
+    WHY called at startup (not scheduled):
+        A cron job or APScheduler adds a dependency and complexity.
+        Cleaning at startup is simple, deterministic, and runs exactly when
+        the admin is watching the logs. Sufficient for current scale.
+    """
+    import datetime
+    cutoff = datetime.datetime.now() - datetime.timedelta(hours=max_age_hours)
+    deleted = 0
+    for directory in (_UPLOADS_DIR, _REPORTS_DIR):
+        if not directory.exists():
+            continue
+        for f in directory.iterdir():
+            if not f.is_file():
+                continue
+            mtime = datetime.datetime.fromtimestamp(f.stat().st_mtime)
+            if mtime < cutoff:
+                f.unlink(missing_ok=True)
+                deleted += 1
+    if deleted:
+        logger.info("Startup cleanup: removed %d stale file(s) older than %dh", deleted, max_age_hours)
+
 
 # ── lifespan ──────────────────────────────────────────────────────────────────
 
@@ -76,7 +120,8 @@ async def lifespan(app: FastAPI):
     Startup / shutdown lifecycle manager.
 
     STARTUP (before yield):
-      - Create required directories (reports/, data/uploads/, data/history.json)
+      - Create required directories (reports/, data/uploads/, data/history.db)
+      - Clean up uploads and reports older than 24 hours
       - Load the Gatekeeper (EfficientNet-B3 + ChromaDB + LangGraph graph)
         stored in app.state.gk — loaded ONCE, reused for every request
 
@@ -84,12 +129,15 @@ async def lifespan(app: FastAPI):
       - Python GC handles VRAM / RAM release
       - Log the shutdown so ops engineers see a clean stop in the logs
     """
-    logger.info("DeepCoin API starting up...")
+    logger.info("DeepCoin API v%s starting up...", __version__)
 
-    # Ensure directories and history file exist before any request arrives
+    # Ensure directories and history store exist before any request arrives
     _REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     _UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     ensure_store()
+
+    # Clean up stale files from previous runs (uploads + reports > 24h old)
+    _cleanup_old_files(max_age_hours=24)
 
     # Load the full pipeline once
     from src.agents.gatekeeper import Gatekeeper
@@ -112,11 +160,15 @@ app = FastAPI(
         "**Coverage**: Corpus Nummorum (9,716 coin types in KB, 438 in CNN)\n\n"
         "**Institution**: ESPRIT School of Engineering × YEBNI, Tunisia"
     ),
-    version     = "0.4.0",    # 0.LAYER.patch — Layer 4 = first API release
+    version     = __version__,
     lifespan    = lifespan,
-    docs_url    = "/docs",    # Swagger UI
-    redoc_url   = "/redoc",   # ReDoc (cleaner, good for sharing with clients)
+    docs_url    = "/docs",
+    redoc_url   = "/redoc",
 )
+
+# \u2500\u2500 SlowAPI rate-limit exception handler \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 # ── CORS middleware ────────────────────────────────────────────────────────────
@@ -133,8 +185,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins     = _allowed_origins,
     allow_credentials = True,
-    allow_methods     = ["GET", "POST"],                      # explicit — never ["*"]
-    allow_headers     = ["Content-Type", "Authorization"],    # explicit
+    allow_methods     = ["GET", "POST"],
+    allow_headers     = ["Content-Type", "Authorization", "X-API-Key"],
 )
 
 
@@ -234,9 +286,59 @@ async def health():
     all_critical = model_ok and mapping_ok and chroma_ok and gk_ok
     return {
         "status":     "healthy" if all_critical else "degraded",
-        "version":    "0.4.0",
+        "version":    __version__,
         "components": components,
     }
+
+
+# ── metrics endpoint ───────────────────────────────────────────────────────────
+
+@app.get(
+    "/api/metrics",
+    tags=["System"],
+    summary="Prometheus-compatible runtime metrics",
+    response_class=PlainTextResponse,
+)
+async def metrics():
+    """
+    GET /api/metrics
+
+    Prometheus text exposition format.
+    Scrape with: curl http://localhost:8000/api/metrics
+
+    WHY Prometheus format:
+        Standard format understood by Grafana, Datadog, Victoria Metrics,
+        and any observability stack.  Even without a Prometheus server, ops
+        engineers can curl this endpoint to understand system state instantly.
+    """
+    import asyncio
+    import datetime
+    from src.api._store import load_all as _load_all
+
+    uptime_s      = round(time.time() - _START_TIME, 1)
+    reports_total = sum(1 for f in _REPORTS_DIR.iterdir() if f.suffix == ".pdf") if _REPORTS_DIR.exists() else 0
+    uploads_total = sum(1 for _ in _UPLOADS_DIR.iterdir()) if _UPLOADS_DIR.exists() else 0
+    history_total = len(await asyncio.to_thread(_load_all))
+    model_loaded  = 1 if (hasattr(app.state, "gk") and app.state.gk is not None) else 0
+
+    lines = [
+        "# HELP deepcoin_uptime_seconds Seconds since API process started",
+        "# TYPE deepcoin_uptime_seconds gauge",
+        f"deepcoin_uptime_seconds {uptime_s}",
+        "# HELP deepcoin_reports_total PDF reports currently on disk",
+        "# TYPE deepcoin_reports_total gauge",
+        f"deepcoin_reports_total {reports_total}",
+        "# HELP deepcoin_history_total Total analyses in history store",
+        "# TYPE deepcoin_history_total counter",
+        f"deepcoin_history_total {history_total}",
+        "# HELP deepcoin_model_loaded 1 if EfficientNet-B3 is loaded in VRAM",
+        "# TYPE deepcoin_model_loaded gauge",
+        f"deepcoin_model_loaded {model_loaded}",
+        "# HELP deepcoin_uploads_total Files in uploads directory",
+        "# TYPE deepcoin_uploads_total gauge",
+        f"deepcoin_uploads_total {uploads_total}",
+    ]
+    return "\n".join(lines) + "\n"
 
 
 # ── root ───────────────────────────────────────────────────────────────────────
@@ -245,8 +347,9 @@ async def health():
 async def root():
     return {
         "service": "DeepCoin API",
-        "version": "0.4.0",
+        "version": __version__,
         "docs":    "/docs",
         "health":  "/api/health",
+        "metrics": "/api/metrics",
     }
 
