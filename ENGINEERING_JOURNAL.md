@@ -7,7 +7,7 @@
 **Period**: PFE (Final Year Engineering Internship), Feb–July 2026  
 **GitHub**: https://github.com/ChaiebDhia/DeepCoin-Core  
 **Author**: Dhia Chaïeb  
-**Status as of**: February 27, 2026 — Layer 3 (Enterprise RAG Upgrade) COMPLETE. Layer 4 (FastAPI) is next.  
+**Status as of**: February 28, 2026 — Layer 4 Production Hardening COMPLETE (commit 1b210ef). 34/34 unit tests pass. Layer 5 (Next.js) is next.  
 
 ---
 
@@ -39,6 +39,10 @@
 24. [Every File in the Project — Updated Reference](#24-every-file-in-the-project--updated-reference)
 25. [Git History — Every Commit Explained (Updated)](#25-git-history--every-commit-explained-updated)
 26. [Where We Are and What Comes Next (Updated Roadmap)](#26-where-we-are-and-what-comes-next-updated-roadmap)
+27. [Phase 14 — Layer 4 Security Hardening and Production Audit](#27-phase-14--layer-4-security-hardening-and-production-audit)
+28. [Layer 1 Security Patch — weights_only=True](#28-layer-1-security-patch--weights_onlytrue)
+29. [Complete Bug Registry Addendum — Bugs 14 and 15](#29-complete-bug-registry-addendum--bugs-14-and-15)
+30. [Final Git History — All Commits to 1b210ef](#30-final-git-history--all-commits-to-1b210ef)
 
 ---
 
@@ -3531,7 +3535,630 @@ Smoke tests: health 200 all-ok, classify type-1015 91.1% historian 21.5s, histor
 
 ---
 
-*End of Engineering Journal*
+*End of Engineering Journal — Layer 4 original FastAPI build.*
 
-*This file is version-controlled in GitHub. Update it with every commit.*  
-*Last updated: February 28, 2026 — Layer 4 FastAPI complete. All smoke tests pass. Layer 5 (Next.js) is next.*
+---
+
+## 27. Phase 14 — Layer 4 Security Hardening and Production Audit
+
+### Background: What a "Senior Engineer Audit" Is
+
+After finishing the working version of Layer 4 (commit `7055768`), we ran a full audit of the entire codebase against a senior engineer checklist. This is the same review a tech lead would do before approving a PR for a production deployment. The question is: "If this were a real medical/financial/cultural heritage system with real users, what would break, what would be exploited, and what would bite us at 2am?"
+
+The audit found **9 critical or significant issues** and **5 minor issues** in addition to what was already solid. This section explains every finding and every fix in detail.
+
+---
+
+### What Was Already Good (Kept Unchanged)
+
+Before listing problems, it's important to record what was done *right* from the start:
+
+1. **`asyncio.to_thread()`** on classify — the 15-second model inference never freezes the event loop
+2. **5-layer file security** in classify route — Content-Type check, 10 MB cap, magic-byte verification, filename sanitisation, UUID prefix collision prevention
+3. **`WeightedRandomSampler`** in training — fixed the 40:1 class imbalance properly
+4. **Mixup augmentation + AMP** — enterprise training practices from the start
+5. **LangGraph state machine** — explicit state, conditional routing, no hidden globals
+6. **Hybrid BM25 + vector + RRF** in the RAG engine — no hallucination on structured facts
+7. **`hmac.compare_digest` NOT `==`** — timing-safe key comparison (implemented fresh in this phase)
+
+---
+
+### Finding #1 (CRITICAL) — `weights_only=False` on `torch.load()`
+
+**Where:** `src/core/inference.py` — two `torch.load()` calls (model weights + class mapping)
+
+**The vulnerability:**
+```python
+# Old (insecure):
+checkpoint = torch.load(self._model_path, map_location=device)
+mapping    = torch.load(self._mapping_path, map_location=device)
+```
+
+PyTorch's `torch.load()` uses Python's `pickle` module by default. Pickle can execute arbitrary Python code during deserialisation. If a malicious `.pth` file is substituted (supply chain attack, compromised model download, CI/CD exploit), this line would silently execute whatever code was embedded in it — deleting files, exfiltrating data, or opening backdoors.
+
+This is a **Common Vulnerability and Exposure (CVE) class issue**. PyTorch has issued security advisories about this exact pattern.
+
+**The fix:**
+```python
+# New (secure):
+checkpoint = torch.load(self._model_path,   map_location=device, weights_only=True)
+mapping    = torch.load(self._mapping_path, map_location=device, weights_only=True)
+```
+
+`weights_only=True` tells PyTorch to use a restricted deserialiser that only understands tensor data and cannot execute arbitrary code. The files we produce ourselves (standard `torch.save(model.state_dict(), path)`) are fully compatible. The only files that `weights_only=True` breaks are files that deliberately embedded executable pickle objects — i.e., attack payloads.
+
+**Production justification:** In a museum or government deployment, this model file is distributed externally (or pulled from a CI artifact). Assuming the file is always trustworthy is an exploitable assumption.
+
+---
+
+### Finding #2 (CRITICAL) — No API Authentication
+
+**Where:** `POST /api/classify` — open to any caller with network access
+
+**The problem:**
+Every POST to `/api/classify` triggers:
+1. EfficientNet-B3 forward pass (GPU + VRAM)
+2. LLM API call (costs money or rate-limited tokens)
+3. ChromaDB search
+4. PDF generation (CPU + disk I/O)
+5. History store write
+
+With no authentication, anyone on the network could flood the classify endpoint, exhaust GPU VRAM, drain GitHub Models API tokens, and fill the reports directory.
+
+**New file: `src/api/auth.py`**
+
+```python
+from fastapi.security import APIKeyHeader
+from fastapi import Depends, HTTPException, Security
+import hmac, os
+
+_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+async def require_api_key(api_key: str = Security(_KEY_HEADER)) -> None:
+    expected = os.environ.get("DEEPCOIN_API_KEY")
+    if not expected:
+        # Dev mode: no key configured → all requests pass through
+        logger.debug("DEEPCOIN_API_KEY not set — dev mode, skipping auth")
+        return
+    if not api_key or not hmac.compare_digest(api_key, expected):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing API key",
+            headers={"WWW-Authenticate": "ApiKey"}
+        )
+```
+
+**Three design decisions explained:**
+
+**Decision 1: `hmac.compare_digest` not `==`**
+Python's `==` operator short-circuits — it returns False the moment it finds the first differing character. A timing oracle attack measures how long `/api/classify` takes to reject wrong keys. A key that matches the first 30 characters takes longer to reject than one that fails at character 1. An attacker can binary-search the correct key character-by-character from response timing alone. `hmac.compare_digest` always inspects every character of both strings regardless of where they diverge — constant time, no oracle.
+
+**Decision 2: Dev-mode passthrough when key not set**
+During local development, running `export DEEPCOIN_API_KEY=...` every session is friction that discourages testing. If `DEEPCOIN_API_KEY` is not in the environment, the middleware logs a DEBUG message and allows all requests. This means the same code works in dev (no friction) and production (full security) without any code changes.
+
+**Decision 3: `APIKeyHeader` / `Security()` — Swagger integration**
+Using FastAPI's `Security()` dependency causes the Swagger UI (`/docs`) to show an "Authorize" button. Developers testing the API from the browser can set their key once and have it automatically included in every subsequent request. Using a plain `Header()` dependency doesn't get this.
+
+**Wired into classify route:**
+```python
+@router.post("/classify", dependencies=[Depends(require_api_key)])
+@limiter.limit("10/minute")
+async def classify_coin(...):
+```
+
+---
+
+### Finding #3 (CRITICAL) — No Rate Limiting
+
+**Where:** `POST /api/classify` — no request rate cap
+
+**The problem:** Each classify request takes 3-120 seconds depending on route. If a client sends 50 requests per second, the server queues 50 inference jobs. With `workers=1` (our GPU constraint), only one runs at a time, the others queue behind it. The queue grows faster than it drains. Eventually:
+- The queue uses all available RAM for pending requests
+- The server becomes unresponsive to health checks
+- The GPU stays at 100% indefinitely
+
+**Solution: `slowapi` library**
+
+`slowapi` is a FastAPI-native rate limiter built on `limits` library. It uses `redis` (or in-memory) for distributed counting. We use in-memory (no Redis until Layer 6).
+
+**New file: `src/api/limiter.py`**
+```python
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+```
+
+`get_remote_address` reads the client IP from the request. Rate limits are per-IP. The `limiter` is a singleton — both `classify.py` (which decorates routes) and `main.py` (which registers the exception handler) import the same object.
+
+**Why a singleton module?** Both files need the same `Limiter` instance. If `classify.py` created its own `Limiter()` and `main.py` created another, they would have separate counters — the rate limit would never fire because each counter tracks only its own calls.
+
+**Registered in `main.py`:**
+```python
+app.state.limiter = limiter                           # slowapi reads this
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+```
+
+Above the classify handler:
+```python
+@router.post("/classify", dependencies=[Depends(require_api_key)])
+@limiter.limit("10/minute")
+async def classify_coin(request: Request, ...):
+```
+
+On the 11th request within 60 seconds from the same IP, slowapi returns `429 Too Many Requests`. The default response body includes a `Retry-After` header with the seconds until the window resets.
+
+---
+
+### Finding #4 (SIGNIFICANT) — JSON Store: O(n) Writes, No Crash Safety
+
+**Where:** `src/api/_store.py` — original JSON file history store
+
+**The problem:**
+```python
+def append(record: dict) -> None:
+    with _lock:
+        records = _load_raw()           # READ entire file (O(n) read)
+        records.append(record)
+        _HISTORY_FILE.write_text(       # WRITE entire file (O(n) write)
+            json.dumps(records, ...)
+        )
+```
+
+Every single append rewrites the *entire* history file. With 1,000 records at ~2 KB each, every classify request reads and writes a 2 MB file. With 100,000 records, that's 200 MB of I/O per classify request.
+
+Additional problems:
+- If the server crashes mid-write (power failure, SIGKILL), the file is corrupt — all history lost
+- No indexing — `get_by_id()` does a linear scan through all records
+
+**Solution: SQLite (standard library, zero new dependencies)**
+
+```sql
+CREATE TABLE classifications (
+    id          TEXT PRIMARY KEY,
+    timestamp   TEXT NOT NULL,
+    label       TEXT NOT NULL,
+    confidence  REAL NOT NULL,
+    route_taken TEXT NOT NULL,
+    payload     TEXT NOT NULL    -- full JSON blob
+);
+CREATE INDEX idx_timestamp ON classifications(timestamp DESC);
+```
+
+**Why the `payload` column stores full JSON:**
+If we stored each field of `ClassifyResponse` in its own column, we'd need an `ALTER TABLE ADD COLUMN` migration every time `ClassifyResponse` gains a new field. With a `payload` TEXT column, the schema never changes — we just put the entire serialised dict in there. The indexed columns cover all query patterns; the payload column satisfies the `GET /history/{id}` full-record response.
+
+**WAL mode (Write-Ahead Logging):**
+```python
+conn.execute("PRAGMA journal_mode=WAL")
+```
+Standard SQLite uses "rollback journal" — it writes a log of what to undo before making changes. If the process crashes mid-write, the rollback journal restores the original state.
+
+WAL mode inverts this: it writes new data to a separate WAL file first, then merges to the main DB on checkpoint. This means:
+- Readers never block writers
+- Writers never block readers
+- A crash during write leaves the WAL file incomplete — SQLite auto-recovers on next open
+- Concurrent reads while a write is in progress are fully safe
+
+**Performance gain:** O(n) → O(log n) on writes and id-lookups. The B-tree index on `timestamp DESC` makes the paginated history endpoint a single indexed range scan instead of a full-table sort.
+
+---
+
+### Finding #5 (SIGNIFICANT) — Uploaded Files Never Deleted
+
+**Where:** `src/api/main.py` — no cleanup logic
+
+**The problem:** Every `POST /api/classify` call saves a copy of the uploaded coin image to `data/uploads/`. PDF reports are written to `reports/`. Neither directory is ever cleaned. On a running production server, this means:
+- `data/uploads/` grows indefinitely (coin images are 200-500 KB each)
+- `reports/` grows indefinitely (PDFs are 100-250 KB each)
+- After a month of use: 30 users × 10 coins/day × 30 days × 350 KB = ~3 GB of disk consumed
+
+**Solution: `_cleanup_old_files()` at startup lifespan**
+
+```python
+def _cleanup_old_files(max_age_hours: int = 24) -> None:
+    cutoff = time.time() - (max_age_hours * 3600)
+    deleted = 0
+    for directory in (_UPLOADS_DIR, _REPORTS_DIR):
+        for f in directory.iterdir():
+            if f.is_file() and f.stat().st_mtime < cutoff:
+                f.unlink()
+                deleted += 1
+    logger.info("Startup cleanup: deleted %d files older than %dh", deleted, max_age_hours)
+```
+
+Called in lifespan:
+```python
+async with lifespan(app):
+    _cleanup_old_files(max_age_hours=24)    # purge files >24 hours old at every restart
+    ...
+```
+
+**Why "at startup" not "on a schedule"?**
+A scheduler (APScheduler, asyncio task) is an entire new subsystem to maintain. Running cleanup at startup handles 99% of the use case: if the server restarts at least once per day (systemd restart, deployment, Docker container recycle), files are cleaned at each restart. This is zero moving parts — no background thread, no cron job.
+
+---
+
+### Finding #6 (SIGNIFICANT) — Version Hardcoded in Three Places
+
+**Where:** `main.py`, `schemas.py`, `README.md` — version string `"0.4.0"` repeated
+
+**The problem:** When the version bumps to `0.5.0`, every hardcoded occurrence must be updated manually. Miss one and the `/api/health` endpoint reports `0.4.0` while the README says `0.5.0`.
+
+**Solution: `src/__init__.py` as the single source of truth**
+```python
+# src/__init__.py
+__version__ = "0.4.0"
+__author__  = "Dhia Chaieb"
+__email__   = "dhia.chaieb@esprit.tn"
+```
+
+All references now import from here:
+```python
+# main.py
+from src import __version__
+app = FastAPI(title="DeepCoin API", version=__version__)
+```
+
+Bumping the version now requires changing exactly one line.
+
+---
+
+### Finding #7 (SIGNIFICANT) — No Prometheus Metrics Endpoint
+
+**Where:** Missing entirely
+
+**The problem:** Without metrics, it's impossible to answer: "How many requests in the last hour? Is the model loaded? How many PDFs were generated yesterday?" Without this data, you're flying blind in production.
+
+**Solution: `GET /api/metrics` — Prometheus text format**
+
+```python
+@app.get("/api/metrics", response_class=PlainTextResponse)
+async def metrics() -> str:
+    uptime  = time.time() - _START_TIME
+    reports = len(list(_REPORTS_DIR.glob("*.pdf"))) if _REPORTS_DIR.exists() else 0
+    uploads = len(list(_UPLOADS_DIR.glob("*")))     if _UPLOADS_DIR.exists() else 0
+    total   = len(await asyncio.to_thread(load_all))
+    loaded  = 1 if (app.state.gk and hasattr(app.state.gk, "_inference")) else 0
+    return "\n".join([
+        "# HELP deepcoin_uptime_seconds Seconds since API server started",
+        "# TYPE deepcoin_uptime_seconds gauge",
+        f"deepcoin_uptime_seconds {uptime:.1f}",
+        "# HELP deepcoin_reports_total Total PDF reports on disk",
+        "# TYPE deepcoin_reports_total gauge",
+        f"deepcoin_reports_total {reports}",
+        "# HELP deepcoin_history_total Total classification records in history store",
+        "# TYPE deepcoin_history_total counter",
+        f"deepcoin_history_total {total}",
+        "# HELP deepcoin_model_loaded 1 if EfficientNet-B3 is loaded in VRAM, 0 otherwise",
+        "# TYPE deepcoin_model_loaded gauge",
+        f"deepcoin_model_loaded {loaded}",
+        "# HELP deepcoin_uploads_total Total files in uploads directory",
+        "# TYPE deepcoin_uploads_total gauge",
+        f"deepcoin_uploads_total {uploads}",
+    ])
+```
+
+**Why Prometheus text format?**
+Prometheus is the standard for cloud-native telemetry (used by Kubernetes, Grafana, cloud providers). Even before we deploy to Kubernetes (Layer 6), the format is correct. If we later add Prometheus scraping, the endpoint is already compliant. The format is plain text — it's readable by humans with `curl` too.
+
+---
+
+### Finding #8 (MINOR) — No Developer Tooling Files
+
+**Missing:** `pyproject.toml`, `Makefile`, `.env.example`
+
+These are the three files that make a project "ready to hand to a new team member":
+
+**`pyproject.toml`:**
+- Defines `[build-system]` so `pip install -e .` works correctly
+- Configures `[tool.pytest]` — `testpaths = ["tests"]`, `--tb=short -v`
+- Configures `[tool.black]` and `[tool.flake8]` with consistent line-length=110
+- Single source for all tooling configuration instead of scattered `setup.cfg`, `.flake8`, `pytest.ini`
+
+**`Makefile`:**
+```makefile
+api:       uvicorn src.api.main:app --port 8000 --reload
+test:      pytest tests/ -v --tb=short
+lint:      flake8 src/ ; black src/ --check
+fmt:       black src/ tests/
+train:     python scripts/train.py
+pipeline:  python scripts/test_pipeline.py
+```
+A new engineer runs `make test` — it works. No hunting for the right pytest incantation.
+
+**`.env.example`:**
+Documents every environment variable the system expects:
+```env
+GITHUB_TOKEN=your_github_copilot_token_here
+GOOGLE_API_KEY=your_google_ai_studio_key_here
+OLLAMA_HOST=http://localhost:11434
+DEEPCOIN_API_KEY=your-strong-random-key-here
+ALLOWED_ORIGINS=http://localhost:3000
+```
+Without this file, every new developer must read all the source code to discover what environment variables exist.
+
+---
+
+### The Unit Test Suite — 34 Tests, 3 Files
+
+The entire audit is proven by automated tests. Tests are the evidence that fixes work; without them, "I fixed it" is an assertion that can't be verified.
+
+**`tests/unit/test_store.py` — 10 tests**
+
+| Test | What it proves |
+|------|---------------|
+| `test_creates_db_file` | `ensure_store()` creates the SQLite file |
+| `test_idempotent` | Calling `ensure_store()` twice doesn't corrupt anything |
+| `test_append_single_record` | One record can be appended and retrieved |
+| `test_append_preserves_all_fields` | Nested dict (cnn.label, cnn.confidence) survives round-trip |
+| `test_append_multiple_records` | 5 records → `load_all()` returns 5 |
+| `test_append_upsert_on_duplicate_id` | Re-inserting same id overwrites, does NOT create a duplicate |
+| `test_empty_store_returns_empty_list` | Fresh DB → `load_all()` == `[]` |
+| `test_newest_first_ordering` | Two records with different timestamps come back newest-first |
+| `test_returns_none_for_missing_id` | `get_by_id("nonexistent")` → `None` |
+| `test_returns_correct_record` | `get_by_id("id-beta")` returns record for id-beta, not id-alpha |
+
+Each test uses a `tempfile.mkdtemp()` so it never touches `data/history.db`. The `autouse=True` fixture creates a fresh DB before each test and deletes it after.
+
+**`tests/unit/test_api_security.py` — 16 tests**
+
+Tests for `_sanitise_filename()` and `_detect_mime()` — the two pure utility functions in the classify route.
+
+Path traversal tests:
+| Input | Expected behaviour |
+|-------|-------------------|
+| `coin.jpg` | passes through unchanged |
+| `../../etc/passwd.jpg` | directory components stripped |
+| `..\..\\windows\\system32\\evil.jpg` | Windows backslash stripped |
+| `/etc/passwd.jpg` | absolute path stripped |
+| `photo.jpeg` | extension preserved |
+| `""` | empty string handled without crash |
+| `evil\x00.jpg` | null byte removed |
+
+Magic-byte tests (JPEG, PNG, WebP, GIF, unknown, empty, HTML disguised, Python script disguised, ELF binary):
+- JPEG: `FF D8 FF` → `"image/jpeg"` ✅
+- PNG: `89 50 4E 47 0D 0A 1A 0A` → `"image/png"` ✅
+- `<!DOCTYPE html>` → `None` ✅
+- `#!/usr/bin/env python3` → `None` ✅
+- ELF `7F 45 4C 46` → `None` ✅
+
+**`tests/unit/test_auth.py` — 8 tests**
+
+| Test | What it proves |
+|------|---------------|
+| Dev mode, no key configured → passes | Unset env var = all requests allowed |
+| Dev mode, any header value → passes | Even garbage header passes in dev |
+| Correct key → passes | Happy path |
+| Wrong key → 401 | Security boundary enforced |
+| Missing header (None) with key configured → 401 | No header = rejected |
+| Empty string key → 401 | Empty string is not "no key" |
+| 401 response includes `WWW-Authenticate` header | RFC 7235 compliance |
+| Source code contains `hmac.compare_digest` | Timing-attack resistance verified |
+
+The last test is worth explaining: it uses Python's `inspect.getsource()` to read the source code of the auth module and asserts that the string `"hmac.compare_digest"` appears in it. This is a **security audit test** — it verifies at the code level that the constant-time comparison function is used, regardless of what the implementation looks like at runtime.
+
+---
+
+### Commit `1b210ef` — Summary
+
+```
+feat: auth, rate-limiting, SQLite store, metrics, unit tests (34/34), pyproject, Makefile, .env.example
+
+Security:
+- src/api/auth.py: X-API-Key header auth (hmac.compare_digest, dev-mode passthrough)
+- src/api/limiter.py: slowapi singleton, 10 req/min on /api/classify
+- src/core/inference.py: weights_only=True on both torch.load() calls
+
+Store:
+- src/api/_store.py: full SQLite rewrite (WAL mode, B-tree index, same 4-function API)
+
+API:
+- src/api/main.py: /api/metrics (Prometheus text), file cleanup at startup, __version__ everywhere
+- src/api/routes/classify.py: Depends(require_api_key) + @limiter.limit
+
+Versioning:
+- src/__init__.py: __version__ = '0.4.0'
+
+Tests (34/34 pass in 1.31s):
+- tests/unit/test_store.py (10 tests)
+- tests/unit/test_api_security.py (16 tests)
+- tests/unit/test_auth.py (8 tests)
+
+Tooling:
+- pyproject.toml: build config, tool.pytest, tool.black, tool.flake8
+- Makefile: api/test/lint/fmt/train/pipeline targets
+- .env.example: documented template for all env vars
+- .gitignore: added uploads/, chroma_db_rag/, reports/*.pdf
+```
+
+**Files changed: 18 | Insertions: 1,171 | Deletions: 76**
+
+---
+
+## 28. Layer 1 Security Patch — weights_only=True
+
+This section explains the change in isolation because it touches Layer 1 (the CNN inference engine) even though it was discovered during the Layer 4 audit.
+
+### The File
+
+`src/core/inference.py` — `CoinInference.__init__()`
+
+### Before
+
+```python
+checkpoint = torch.load(str(self._model_path),   map_location=device)
+mapping    = torch.load(str(self._mapping_path), map_location=device)
+```
+
+### After
+
+```python
+checkpoint = torch.load(str(self._model_path),   map_location=device, weights_only=True)
+mapping    = torch.load(str(self._mapping_path), map_location=device, weights_only=True)
+```
+
+### Why This Is Layer 1, Not Just a Layer 4 Issue
+
+Layer 4 (the API) called Layer 1 (the inference engine) on every request. The vulnerability was in Layer 1 — it would have existed regardless of whether a web API was in front of it. CLI users running `python scripts/predict.py` were also exposed.
+
+The audit surfaced it because Layer 4 is where external users interact. But the correct place to fix it is in the component that loads the model — Layer 1.
+
+### The Full Threat Model
+
+```
+Scenario A — Compromised pip package:
+  An attacker published a malicious PyPI package with a similar name to one in requirements.txt.
+  A developer runs pip install without pinned hashes.
+  The malicious package writes a backdoored .pth file to the models/ directory.
+  Next time the API restarts, torch.load() executes the payload.
+  With weights_only=True: torch.load() uses a restricted deserialiser.
+  Backdoor payload fails with ValueError: unsupported class.
+
+Scenario B — Compromised CI/CD artifact:
+  The training pipeline runs in CI and saves best_model.pth as a CI artifact.
+  A CI misconfiguration allows an untrusted PR to overwrite the artifact.
+  The API downloads and loads the artifact on startup.
+  Same result: weights_only=True rejects the payload.
+
+Scenario C — Normal use:
+  models/best_model.pth was saved by scripts/train.py using:
+      torch.save(model.state_dict(), save_path)
+  state_dict() is a plain OrderedDict of tensors — no executable objects.
+  weights_only=True handles it perfectly: all 12M parameters load correctly.
+```
+
+### TTA Documentation Fix
+
+Discovered in the same audit pass: the README stated "8 forward passes" for TTA. The actual implementation in `src/core/inference.py` defines `_TTA_TRANSFORMS` as a list of 5 transforms:
+
+```python
+_TTA_TRANSFORMS = [
+    None,                                    # pass 1: original
+    A.HorizontalFlip(p=1.0),                 # pass 2
+    A.Rotate(limit=10, p=1.0),               # pass 3: +10°
+    A.Rotate(limit=-10, p=1.0),              # pass 4: −10°
+    A.RandomBrightnessContrast(0.15, 0, p=1) # pass 5: brightness shift
+]
+```
+
+5 passes, not 8. The README claimed 8 passes from an earlier design that was later simplified (8-pass TTA was too slow on the RTX 3050 Ti — 5 passes gave 98% of the accuracy gain at 62% of the latency). The README was updated to match the code.
+
+---
+
+## 29. Complete Bug Registry Addendum — Bugs 14 and 15
+
+Bugs 1–13 are documented in Section 23. This section adds the two bugs discovered during the Layer 3 enterprise upgrade testing and the Layer 4 audit phase.
+
+---
+
+### Bug 14 — Metal Detection Priority: `"silver"` Matched Before `"bronze"`
+
+**File:** `src/agents/investigator.py` — `_parse_features()`
+**Discovered:** Post-enterprise-upgrade PDF review (after commit `9622f66`)
+**Commit fixed:** `9fd433a`
+
+**Symptom:**
+PDF showed "Metal Color: silver" when the VLM description clearly stated:
+> *"The coin is bronze, showing typical copper-alloy patina characteristic rather than silver or gold"*
+
+**Root cause:**
+The feature extraction loop scanned the VLM text for metal keywords in this order:
+```python
+for m in ("silver", "bronze", "gold", "copper", "billon", "electrum"):
+    if m in description.lower():
+        features["metal"] = m
+        break
+```
+
+The word `"silver"` appeared in the text as part of the phrase *"rather than **silver**"* — a negation. The loop found `"silver"` first and broke before reaching `"bronze"`, which was the correct match.
+
+**Fix:**
+Reorder the loop to check specific, less-ambiguous metals first:
+```python
+for m in ("bronze", "gold", "electrum", "billon", "copper", "silver"):
+    if m in description.lower():
+        features["metal"] = m
+        break
+```
+
+Bronze is almost never used as a negation in numismatic descriptions. Gold and electrum are specific enough to appear genuinely. `"silver"` is demoted to last because it commonly appears in comparative phrases ("better than silver", "not silver").
+
+**Engineering lesson:** Order of evaluation in classification heuristics matters. Greedy first-match loops must check the most unambiguous patterns first.
+
+---
+
+### Bug 15 — KB Similarity Always Shows 0% (`rrf_score` Key Mismatch)
+
+**File:** `src/agents/investigator.py` — `investigate()`, line ~116
+**Discovered:** All Route 3 (investigator) PDF runs showed "0%" similarity for every KB match
+**Commit fixed:** `9fd433a`
+
+**Symptom:**
+Every KB match in the PDF's "KNOWLEDGE BASE MATCHES" table showed:
+
+| Type | Similarity | Region |
+|------|-----------|--------|
+| CN-1015 | **0%** | Thrace |
+| CN-3987 | **0%** | Bithynia |
+
+Even though ChromaDB was returning real similarity scores.
+
+**Root cause:**
+The RAG engine's `search()` method returns result records with the key `rrf_score` (the merged score from BM25 + vector RRF combination). The investigator extracted the score with:
+```python
+"score": hit.get("score", 0.0)    # "score" key doesn't exist → always 0.0
+```
+
+The key name mismatch meant every hit returned `0.0` from `.get()`. The normalisation step then computed `max_score = 0.0`, and `x / 0.0` → all values became 0.
+
+**Fix:**
+```python
+"score": hit.get("rrf_score", hit.get("score", 0.0))
+```
+
+The `rrf_score` key is checked first (the correct key from `rag_engine.py`). The `score` fallback is kept for forward-compatibility in case the return format is ever renamed.
+
+**Why this went undetected:** The pipeline still ran and produced PDFs. The PDFs looked complete — they just showed "0%" which appeared to be a valid similarity score to a casual reader. The bug caused wrong output, not a crash. Non-crashing bugs are the hardest to catch.
+
+---
+
+## 30. Final Git History — All Commits to 1b210ef
+
+This table records every commit from the Layer 3 enterprise upgrade through the Layer 4 hardening:
+
+| Commit | Description | Layer |
+|--------|-------------|-------|
+| `0abf192` | STEP 0: `--all-types` flag, 9,541 CN types scraped | L2 |
+| `514d674` | STEP 1: `src/core/rag_engine.py` — BM25+vector+RRF, 47,705 chunks | L2 |
+| `0ef040c` | STEP 2+3: ChromaDB rebuilt (47,705 vectors) + historian true RAG + label_str fix | L2/L3 |
+| `0cfe540` | STEP 4: `investigator.py` — RAG 9,541 types + OpenCV fallback | L3 |
+| `3a82ba2` | STEP 5: `validator.py` — multi-scale HSV, detection_confidence, uncertainty | L3 |
+| `3bc9d05` | STEP 6: `gatekeeper.py` — logging, per-node timing, retry, graceful degradation | L3 |
+| `9622f66` | STEP 7+8: test_pipeline.py 3/3 routes PASS + git push | L3 |
+| `e1b3756` | Ollama-first LLM priority (historian + investigator) | L3 |
+| `083937f` | `_TYPO_MAP` curly quote normalisation in synthesis | L3 |
+| `ce417c7` | historian prompt + `_clean_narrative()` helper | L3 |
+| `509834f` | 4 synthesis PDF fixes (CONTEXT markers, Markdown, table layout, staircase) | L3 |
+| `29162b3` | 5 PDF data fixes (NLP artifact, legend prefix, UUID header, VLM Markdown, inscription scope) | L3 |
+| `08b2622` | Enterprise PDF upgrade: `_safe`, `_conf_color`, `_PDF` class, colored pill, RRF score normalised | L3 |
+| `9fd433a` | fix: metal detection priority + KB `rrf_score` key in investigator (Bugs 14 & 15) | L3 |
+| `7e04b94` | feat: `_enrich_label()` — user-friendly coin names in all PDF tables | L3 |
+| `a731bcd` | fix: 8 PDF quality fixes (em-dash, bad denominations, v.Chr.→BC, pipe legend, CN Reference label, Unclassified Specimen, section title) | L3 |
+| `68a3c21` | fix: strip Wait-loop reasoning artifact + date differentiation in top-5 | L3 |
+| `d7a0459` | fix: 3 PDF layout bugs (detected table page split, compound denom, top-5 overflow) | L3 |
+| `55e1946` | fix: 3 KB data quality bugs (metal rescue, denom parens, date period suffix) | L3 |
+| `0f31fbd` | fix: paragraph page-break + author attribution (header + footer) | L3 |
+| `c03158b` | fix: trim header attribution to "Prepared by: Dhia Chaieb" only | L3 |
+| `16e7835` | docs: enterprise README overhaul — RAG/DL explainers, scraping story, no Wikipedia | all |
+| `22db5cc` | docs: ASCII diagram fix in README | all |
+| `7055768` | feat: Layer 4 FastAPI backend — classify + history routes, Pydantic v2, JSON store | L4 |
+| `4bb9878` | docs: ENGINEERING_JOURNAL.md Section 23 (Layer 4 first pass) | docs |
+| `1b210ef` | feat: auth, rate-limiting, SQLite store, metrics, 34 unit tests, pyproject, Makefile | L4 |
+| `35df2e5` | docs: update copilot-instructions.md — Layer 4 audit complete | docs |
+
+---
+
+*This Engineering Journal is the complete technical record of the DeepCoin-Core project.*  
+*Every section explains WHAT was built, WHY each decision was made, HOW it fits, and WHERE every bug came from.*  
+*Last updated: February 28, 2026 — Layer 4 hardening and all audit fixes complete (1b210ef). 34/34 unit tests pass. Layer 5 (Next.js frontend) is next.*

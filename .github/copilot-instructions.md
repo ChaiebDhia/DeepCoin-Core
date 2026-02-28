@@ -815,12 +815,20 @@ models/class_mapping.pth        # {class_to_idx: {"1015": 0, ...}, idx_to_class:
 ### Layer 0 — CNN Training ✅ COMPLETE
 File: `scripts/train.py` (729 lines)
 Status: EfficientNet-B3 trained, 80.03% TTA accuracy achieved.
+- Best epoch: 52 / 100 | Val: 79.25% | Test: 79.08% | TTA (×5): **80.03%**
+- TTA count corrected: README previously stated "8 passes" — fixed to "5 passes" to match `_TTA_TRANSFORMS` list in `inference.py`
+- Augmentation pipeline: Rotate ±15°, BrightnessContrast ±20%, GaussNoise, ElasticTransform, HorizontalFlip + ImageNet normalisation
+- Class imbalance (40:1) handled via `WeightedRandomSampler(weight_i = 1/count_i)`
+- AMP (`GradScaler` + `autocast`) halves VRAM, ~2× faster/epoch on RTX 3050 Ti
 
-### Layer 1 — Inference Engine ✅ COMPLETE
+### Layer 1 — Inference Engine ✅ COMPLETE (security patch applied)
 Files: `src/core/inference.py`, `scripts/predict.py`
 - `CoinInference`: loads model once, runs TTA, returns structured prediction dict
-- Device resolution: `"auto"` resolved to `"cuda"` or `"cpu"` before PyTorch sees it
-- Bug fixed: original code passed `"auto"` directly to `.to(device)` → RuntimeError
+- Device resolution: `"auto"` resolved to `"cuda"` or `"cpu"` before PyTorch sees it (Bug #2 fix)
+- **Security patch (Layer 4 audit, commit 1b210ef):** both `torch.load()` calls now use `weights_only=True`
+  - Prevents arbitrary code execution via malicious pickle in `.pth` files
+  - Compatible with standard `torch.save(model.state_dict(), path)` outputs
+- TTA: 5 forward passes (original + HFlip + Rotate +10° + Rotate -10° + BrightnessShift), averaged softmax → +0.78% accuracy
 
 ### Layer 2 — Knowledge Base ✅ UPGRADED TO FULL CORPUS
 Files: `src/core/knowledge_base.py` (legacy fallback), `src/core/rag_engine.py` (production), `scripts/build_knowledge_base.py`, `scripts/rebuild_chroma.py`
