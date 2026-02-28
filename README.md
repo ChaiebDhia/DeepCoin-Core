@@ -104,61 +104,63 @@ The three-word summary: **RAG makes the LLM cite its sources.**
 ## System Architecture
 
 ```
-                          RAW COIN PHOTOGRAPH
-                                  
-                    
-                         CLAHE Enhancement      
-                       (LAB colour space,       
-                        L-channel only)         
-                    
-                                  
-                    
-                      Aspect-preserving resize  
-                       299299 + zero-padding   
-                    
-                                  
-                    
-                          EfficientNet-B3       
-                      (fine-tuned on 438 types) 
-                       confidence score        
-                    
-                                  
-               
-                                                   
-          conf > 85%         40%  conf  85%    conf < 40%
-                                                   
-           
-          Historian        Validator      Investigator
-         (RAG + LLM)      (OpenCV HSV)    (VLM + CV)  
-           
-                                                   
-               
-                                  
-                    
-                         Synthesis Agent        
-                      Plain-text + PDF Report   
-                    
-                                  
-                    
-                        FastAPI REST Backend    
-                      POST /api/classify        
-                      GET  /api/history         
-                      GET  /api/reports/{file}  
-                    
+  +---------------------------+
+  |   RAW COIN PHOTOGRAPH     |
+  +-------------+-------------+
+                |
+  +-------------v-------------+
+  |    CLAHE Enhancement      |
+  |   LAB colour space        |
+  |   L-channel, clip=2.0     |
+  +-------------+-------------+
+                |
+  +-------------v-------------+
+  |  Aspect-preserving resize |
+  |  299x299 + zero-padding   |
+  |  (no stretch, no distort) |
+  +-------------+-------------+
+                |
+  +-------------v-------------+
+  |      EfficientNet-B3      |
+  |  fine-tuned on 438 types  |
+  |  => class + confidence    |
+  +---+----------+------------+
+      |          |            |
+  conf > 85%  40-85%     conf < 40%
+      |          |            |
+  +---v-----+ +-v-------+ +---v---------+
+  |Historian| |Validator| | Investigator|
+  |RAG + LLM| |OpenCV   | | VLM + CV    |
+  |narrative| |HSV check| | fallback    |
+  +---+-----+ +-+-------+ +---+---------+
+      |          |             |
+      +----------+-------------+
+                 |
+  +--------------v------------+
+  |      Synthesis Agent      |
+  |  Plain-text + PDF Report  |
+  +--------------+------------+
+                 |
+  +--------------v------------+
+  |    FastAPI REST Backend   |
+  |  POST /api/classify       |
+  |  GET  /api/history        |
+  |  GET  /api/reports/{file} |
+  +---------------------------+
 
 
-  RAG ENGINE (used by Historian + Investigator)
-  
-    Query                                       
-       BM25 keyword search (rank-bm25)       
-       ChromaDB vector search (cosine)       
-                                               
-          RRF merge: Σ 1/(60 + rank_r(d))       
-                                               
-      Top-k results  [CONTEXT 1-5] blocks      
-      Facts sourced from Corpus Nummorum        
-      (9,541 types, 47,705 vectors)             
-  
+  RAG ENGINE  (Historian + Investigator)
+  +----------------------------------------------+
+  |  Query                                       |
+  |    +-- BM25 keyword index  (rank-bm25)       |
+  |    +-- ChromaDB vector search  (cosine sim.) |
+  |                   |                          |
+  |    RRF merge:  score = SUM 1 / (60 + rank_r) |
+  |                   |                          |
+  |    Top-k results => [CONTEXT 1-5] blocks     |
+  |    Source: Corpus Nummorum (DFG-funded)      |
+  |    Coverage: 9,541 types  /  47,705 vectors  |
+  +----------------------------------------------+
 ```
 
 ---
