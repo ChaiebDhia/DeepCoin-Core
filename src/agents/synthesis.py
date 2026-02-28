@@ -200,6 +200,41 @@ def _conf_color(conf: float) -> tuple:
     return _C_RED_DK
 
 
+def _enrich_label(type_id) -> str:
+    """
+    Return a user-friendly coin description for a CN type ID.
+
+    Format: "Material Denomination — Mint"
+    Example: "Silver Drachm — Maroneia"  /  "Bronze Obol — Parion"
+
+    WHAT: Combines the material, denomination, and mint fields from the RAG
+          knowledge base into a single readable string.
+
+    WHY: The raw CN type number (e.g. 532, 1015) is an opaque database key
+         that means nothing to a museum visitor or researcher reading the PDF.
+         An enriched string gives an immediate, self-explanatory description.
+
+    HOW: Calls get_rag_engine().get_by_id() which is an in-memory dict lookup
+         (zero I/O, sub-millisecond).  The engine is already loaded by
+         Gatekeeper so this helper adds no startup cost.
+         Falls back gracefully to "CN {type_id}" on any error.
+    """
+    try:
+        from src.core.rag_engine import get_rag_engine
+        rec = get_rag_engine().get_by_id(int(type_id))
+        if not rec:
+            return f"CN {type_id}"
+        mat   = (rec.get("material",     "") or "").strip().title()
+        denom = (rec.get("denomination", "") or "").strip().title()
+        mint  = (rec.get("mint",         "") or "").strip()
+        parts = " ".join(p for p in (mat, denom) if p)
+        if parts and mint:
+            return f"{parts} \u2014 {mint}"
+        return parts or mint or f"CN {type_id}"
+    except Exception:
+        return f"CN {type_id}"
+
+
 def _basename(path: str) -> str:
     """
     Return just the original filename from a path, stripping the UUID prefix.
@@ -324,10 +359,10 @@ class Synthesis:
         # ── CNN classification ────────────────────────────────────────────────
         _section_title(f, "CNN Classification")
         _kv_table(f, [
-            ("Predicted Type",  _s(str(cnn.get("label", "N/A")))),
+            ("Best Match",      _s(_enrich_label(str(cnn.get("label", "N/A"))))),
             ("Confidence",      f"{cnn.get('confidence', 0):.1%}"),
             ("Model",           "EfficientNet-B3  (438 classes)"),
-            ("Pipeline Route",  route.upper()),
+            ("Analysis Route",  _ROUTE_LABELS.get(route, route.upper())),
             ("TTA Applied",     "Yes" if cnn.get("tta_used") else "No"),
         ])
 
@@ -342,9 +377,9 @@ class Synthesis:
         if h:
             _section_title(f, "Historical Record")
             rows = [
-                ("CN Type ID",    str(h.get("type_id",    ""))),
                 ("Mint",          h.get("mint",           "")),
                 ("Region",        h.get("region",         "")),
+                ("CN Type ID",    str(h.get("type_id",    ""))),  # reference field
                 ("Date",          h.get("date",           "")),
                 ("Period",        h.get("period",         "")),
                 ("Material",      h.get("material",       "")),
@@ -407,8 +442,9 @@ class Synthesis:
 
             if inv.get("suggested_type_id"):
                 f.ln(3)
-                _info_box(f, f"Suggested CN type: {inv['suggested_type_id']}  "
-                             f"(visual description + semantic KB search)")
+                tid  = inv['suggested_type_id']
+                name = _s(_enrich_label(tid))
+                _info_box(f, f"Best visual match: {name}  (CN {tid})")
             f.ln(5)
 
         # ── save ──────────────────────────────────────────────────────────────
@@ -520,29 +556,45 @@ def _draw_result_stripe(f, cnn: dict, route: str) -> None:
         knows the system.
     """
     from fpdf.enums import XPos, YPos
-    label      = _safe(str(cnn.get("label", "N/A")))
+    label      = str(cnn.get("label", "N/A"))
     conf       = cnn.get("confidence", 0.0)
     conf_color = _conf_color(conf)
     route_lbl  = _safe(_ROUTE_LABELS.get(route, route.upper()))
 
+    # Human-readable coin identity from KB  (e.g. "Silver Drachm — Maroneia")
+    human_name = _safe(_enrich_label(label))
+
     y  = f.get_y()
     ew = _ew(f)
 
-    # Background stripe
+    # Background stripe — 22 mm tall to fit coin name + sub-label on two lines
     f.set_fill_color(*_C_BRAND_LIGHT)
     f.set_draw_color(*_C_BRAND_LIGHT)
-    f.rect(f.l_margin, y, ew, 18, style="FD")
+    f.rect(f.l_margin, y, ew, 22, style="FD")
 
-    # CN Type label
-    f.set_xy(f.l_margin + 5, y + 4)
-    f.set_font("Helvetica", "B", 14)
+    # Line 1 — coin name (or "Unidentified Coin" for low-confidence route)
+    f.set_xy(f.l_margin + 5, y + 3)
+    f.set_font("Helvetica", "B", 11)
     f.set_text_color(*_C_BRAND_DARK)
-    f.cell(60, 9, f"CN Type  {label}")
+    if conf < 0.40:
+        f.cell(86, 8, "Unidentified Coin")
+    else:
+        name = human_name[:50] + ("..." if len(human_name) > 50 else "")
+        f.cell(86, 8, name)
+
+    # Line 2 — CN type sub-label
+    f.set_xy(f.l_margin + 5, y + 12)
+    f.set_font("Helvetica", "", 8)
+    f.set_text_color(*_C_MUTED)
+    if conf < 0.40:
+        f.cell(86, 6, f"Best candidate: CN {label}")
+    else:
+        f.cell(86, 6, f"CN {label}")
 
     # Confidence pill — coloured filled rectangle + white text
     pill_w, pill_h = 46, 8
-    pill_x = f.l_margin + 70
-    pill_y = y + 5
+    pill_x = f.l_margin + 95
+    pill_y = y + 7
     f.set_fill_color(*conf_color)
     f.set_draw_color(*conf_color)
     f.rect(pill_x, pill_y, pill_w, pill_h, style="FD")
@@ -552,14 +604,14 @@ def _draw_result_stripe(f, cnn: dict, route: str) -> None:
     f.cell(pill_w, pill_h, f"  Confidence: {conf:.1%}", align="L")
 
     # Route label — right aligned
-    f.set_xy(f.l_margin + 122, y + 6)
+    f.set_xy(f.l_margin + 147, y + 8)
     f.set_font("Helvetica", "", 9)
     f.set_text_color(*_C_MUTED)
-    f.cell(ew - 122, 7, route_lbl, align="R")
+    f.cell(ew - 147, 7, route_lbl, align="R")
 
     f.set_text_color(*_C_TEXT)
     f.set_draw_color(*_C_RULE)
-    f.set_xy(f.l_margin, y + 18)
+    f.set_xy(f.l_margin, y + 22)
 
 
 def _section_title(f, title: str) -> None:
@@ -679,11 +731,21 @@ def _kv_table(f, rows: list) -> None:
 
 
 def _confidence_table(f, top5: list) -> None:
-    """Rank / CN Type / Confidence three-column table."""
+    """
+    Rank / CN Type / Coin Description / Confidence four-column table.
+
+    WHY four columns vs the original three:
+        The old "CN Type" column showed raw database numbers (532, 1015)
+        that mean nothing to a reader.  Adding "Coin Description" — built
+        from the KB material + denomination + mint — makes the table
+        immediately interpretable (e.g. "Silver Drachm — Maroneia").
+    """
     from fpdf.enums import XPos, YPos
-    ew = _ew(f)
-    c1, c3 = 24, 38
-    c2 = ew - c1 - c3
+    ew    = _ew(f)
+    c1    = 14   # Rank
+    c2    = 28   # CN Type (numeric ID)
+    c4    = 30   # Confidence
+    c3    = ew - c1 - c2 - c4  # Coin Description (fills remaining ~98 mm)
     row_h = 7
 
     f.set_fill_color(*_C_BRAND_LIGHT)
@@ -691,8 +753,8 @@ def _confidence_table(f, top5: list) -> None:
     f.set_font("Helvetica", "B", 9)
     f.set_text_color(*_C_BRAND_DARK)
     f.set_x(f.l_margin)
-    for label, w in [("Rank", c1), ("CN Type", c2), ("Confidence", c3)]:
-        f.cell(w, row_h, f"  {label}", border=1, fill=True,
+    for lbl, w in [("Rank", c1), ("CN Type", c2), ("Coin Description", c3), ("Confidence", c4)]:
+        f.cell(w, row_h, f"  {lbl}", border=1, fill=True,
                new_x=XPos.RIGHT, new_y=YPos.TOP)
     f.set_xy(f.l_margin, f.get_y() + row_h)
 
@@ -701,10 +763,12 @@ def _confidence_table(f, top5: list) -> None:
         f.set_font("Helvetica", "B" if i == 0 else "", 9)
         f.set_text_color(*(_C_BRAND_DARK if i == 0 else _C_TEXT))
         f.set_x(f.l_margin)
+        raw_lbl = str(t.get("label", ""))
         for val, w in [
-            (str(i + 1),                        c1),
-            (_s(str(t.get("label", ""))),         c2),
-            (f"{t.get('confidence', 0):.1%}",   c3),
+            (str(i + 1),                                  c1),
+            (_s(raw_lbl),                                  c2),
+            (_s(_enrich_label(raw_lbl)),                   c3),
+            (f"{t.get('confidence', 0):.1%}",             c4),
         ]:
             f.cell(w, row_h, f"  {val}", border="LBR", fill=True,
                    new_x=XPos.RIGHT, new_y=YPos.TOP)
@@ -715,20 +779,27 @@ def _confidence_table(f, top5: list) -> None:
 
 def _kb_table(f, matches: list) -> None:
     """
-    CN Type / Similarity / Mint / Date four-column table.
+    Match% / Coin Identity / Date three-column table for KB closest matches.
 
-    WHY "Similarity" instead of showing raw RRF score:
-        RRF scores are small fractions (e.g. 0.016) that are meaningless
-        to a numismatist reader.  Normalising to 0-100% gives an intuitive
-        sense of relative match quality without implying false precision.
+    WHY remove the raw CN Type column:
+        Raw database IDs (21229, 20674) are opaque to all readers.
+        The enriched "Coin Identity" column (Material + Denomination + Mint)
+        gives the same information in human-readable form.
+        The CN type number is appended in the identity cell as a reference.
+
+    WHY "Match%" instead of raw RRF score:
+        RRF scores are small fractions (0.016) meaningless to a numismatist.
+        Normalising to 0-100% relative to the top hit gives an intuitive
+        sense of relative similarity without implying false precision.
     """
     from fpdf.enums import XPos, YPos
-    ew = _ew(f)
-    c1, c2, c3 = 28, 28, 55
-    c4 = ew - c1 - c2 - c3
+    ew    = _ew(f)
+    c1    = 22   # Match %
+    c3    = 44   # Date
+    c2    = ew - c1 - c3  # Coin Identity (fills remaining ~104 mm)
     row_h = 7
 
-    # Normalise scores to 0-100 % for display
+    # Normalise scores to 0-100 % relative to top hit
     raw_scores = [hit.get("score", 0) for hit in matches]
     max_s = max(raw_scores) if raw_scores and max(raw_scores) > 0 else 1.0
 
@@ -737,7 +808,7 @@ def _kb_table(f, matches: list) -> None:
     f.set_font("Helvetica", "B", 9)
     f.set_text_color(*_C_BRAND_DARK)
     f.set_x(f.l_margin)
-    for label, w in [("CN Type", c1), ("Similarity", c2), ("Mint", c3), ("Date", c4)]:
+    for label, w in [("Match", c1), ("Coin Identity", c2), ("Date", c3)]:
         f.cell(w, row_h, f"  {label}", border=1, fill=True,
                new_x=XPos.RIGHT, new_y=YPos.TOP)
     f.set_xy(f.l_margin, f.get_y() + row_h)
@@ -747,12 +818,15 @@ def _kb_table(f, matches: list) -> None:
         f.set_font("Helvetica", "", 9)
         f.set_text_color(*_C_TEXT)
         f.set_x(f.l_margin)
-        sim = hit.get("score", 0) / max_s * 100
+        sim     = hit.get("score", 0) / max_s * 100
+        tid     = hit.get("type_id", "")
+        # Coin identity: enriched description + CN number as reference
+        identity = _s(_enrich_label(tid))
+        identity_cell = f"{identity}  (CN {tid})" if identity != f"CN {tid}" else f"CN {tid}"
         for val, w in [
-            (_s(str(hit.get("type_id", ""))),   c1),
-            (f"{sim:.0f}%",                     c2),
-            (_s(hit.get("mint", "")),            c3),
-            (_s(hit.get("date", "")),            c4),
+            (f"{sim:.0f}%",              c1),
+            (_s(identity_cell),          c2),
+            (_s(hit.get("date", "")),   c3),
         ]:
             f.cell(w, row_h, f"  {val}", border="LBR", fill=True,
                    new_x=XPos.RIGHT, new_y=YPos.TOP)
