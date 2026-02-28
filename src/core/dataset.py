@@ -5,13 +5,19 @@ Handles loading preprocessed images and applies data augmentation.
 This is the "librarian" that teaches the AI how to read your processed images.
 """
 
+import logging
 import os
+
 import cv2
 import torch
 from torch.utils.data import Dataset
-from PIL import Image
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+
+logger = logging.getLogger(__name__)
+# WHY __name__ (resolves to 'src.core.dataset'):
+#   Every log line shows the exact module. Inherited from the root logger
+#   configured by the caller (FastAPI, training script, etc.).
 
 
 class DeepCoinDataset(Dataset):
@@ -79,10 +85,15 @@ class DeepCoinDataset(Dataset):
                     img_path = os.path.join(cls_path, img_name)
                     self.samples.append((img_path, label))
         
-        print(f"✅ Dataset initialized:")
-        print(f"   📁 Root: {root_dir}")
-        print(f"   🏷️  Classes: {len(self.classes)}")
-        print(f"   🖼️  Total images: {len(self.samples)}")
+        logger.info(
+            "Dataset loaded: root=%s  classes=%d  images=%d",
+            root_dir, len(self.classes), len(self.samples),
+        )
+        # WHY logger not print:
+        #   In production (FastAPI, training job) stdout is not monitored.
+        #   Logging is captured by the structured log system with timestamps,
+        #   severity levels, and module names. The caller controls the level.
+        #   print() with emoji is never acceptable in production code.
     
     def __len__(self):
         """
