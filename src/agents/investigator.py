@@ -230,10 +230,13 @@ class Investigator:
             # _clean_narrative() strips **, *, ##, [CONTEXT N], curly quotes, etc.
             from src.agents.historian import _clean_narrative
             description = _clean_narrative(description)
-            # Strip verbose reasoning preamble (qwen3-vl in non-think-tag mode
-            # outputs its chain-of-thought as plain prose before the structured
-            # METAL: / OBVERSE: sections).  Keep only from the first section label.
+            # Strip verbose reasoning preamble BEFORE the first section label
             description = _trim_preamble(description)
+            # Strip 'Wait, ...' reasoning loops that appear INSIDE sections
+            # (llama/gemma reasoning models sometimes second-guess mid-section)
+            description = _strip_wait_loops(description)
+            # Cap each section to 350 chars so a looping section cannot fill pages
+            description = _cap_sections(description, max_chars=350)
             features = _parse_features(description)
             return description, features, True
         except Exception as e:
@@ -250,6 +253,67 @@ def _empty_features() -> dict:
         "symbols":           [],
         "condition":         "unknown",
     }
+
+
+def _strip_wait_loops(text: str) -> str:
+    """
+    Remove 'Wait, ...' sentences emitted by reasoning models when they
+    second-guess their previous answer mid-section.
+
+    WHAT: Strips every clause/sentence starting with 'Wait,' from the text,
+          then collapses the resulting excess whitespace.
+
+    WHY: gemma3:4b and qwen3-vl:4b sometimes freeze in a self-correction loop
+         inside the REVERSE section, repeating variants of 'Wait, the reverse has
+         a square with a cross' dozens of times before continuing.  These
+         repetitions carry zero numismatic content and bloat the PDF to 4 pages.
+    """
+    import re
+    # Each 'Wait, ' clause runs to end of the same line or next period
+    text = re.sub(r'[ \t]*\bWait,\s[^\n]*', '', text)
+    text = re.sub(r'  +', ' ', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
+def _cap_sections(text: str, max_chars: int = 350) -> str:
+    """
+    Truncate each structured section (METAL:, OBVERSE:, etc.) to max_chars.
+
+    WHAT: Splits the VLM output on section labels, caps each body at max_chars
+          (breaking at the last sentence boundary), and reassembles.
+
+    WHY: Even after stripping 'Wait,' loops a runaway section can still be too
+         long (e.g. a model that writes 10 sentences per section).  350 chars
+         is enough for 2-3 sentences of archaeological description without
+         truncating useful content.
+
+    Graceful: if the split finds nothing the original text is returned unchanged.
+    """
+    import re
+    _SEC = re.compile(
+        r'^(METAL|OBVERSE|REVERSE|INSCRIPTIONS|CONDITION|IDENTIFICATION):',
+        re.IGNORECASE | re.MULTILINE,
+    )
+    boundaries = [(m.start(), m.group(1).upper()) for m in _SEC.finditer(text)]
+    if not boundaries:
+        return text
+
+    parts   = []
+    for idx, (start, label) in enumerate(boundaries):
+        end  = boundaries[idx + 1][0] if idx + 1 < len(boundaries) else len(text)
+        # Body starts after 'LABEL:'
+        colon_pos = text.index(':', start) + 1
+        body = text[colon_pos:end].strip()
+        if len(body) > max_chars:
+            truncated = body[:max_chars]
+            # Break at last full sentence
+            m = re.search(r'[.!?](?=[^.!?]*$)', truncated)
+            if m:
+                truncated = truncated[:m.end()]
+            body = truncated.strip() + '...'
+        parts.append(f"{label}: {body}")
+    return '\n'.join(parts)
 
 
 def _trim_preamble(text: str) -> str:

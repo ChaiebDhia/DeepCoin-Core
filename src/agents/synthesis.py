@@ -206,24 +206,31 @@ def _conf_color(conf: float) -> tuple:
     return _C_RED_DK
 
 
-def _enrich_label(type_id) -> str:
+def _enrich_label(type_id, include_date: bool = False) -> str:
     """
     Return a user-friendly coin description for a CN type ID.
 
-    Format: "Material Denomination — Mint"
-    Example: "Silver Drachm — Maroneia"  /  "Bronze Obol — Parion"
+    Format (no date):   "Material Denomination - Mint"
+    Format (with date): "Material Denomination - Mint, Date"
+    Example: "Silver Drachm - Maroneia, c.365-330 BC"
 
-    WHAT: Combines the material, denomination, and mint fields from the RAG
-          knowledge base into a single readable string.
+    WHAT: Combines the material, denomination, mint (and optionally date) from
+          the RAG knowledge base into a single readable string.
+
+    WHY no date in the stripe label:
+        The result stripe uses a 50-char truncation limit for the coin name.
+        Adding the date would overflow it for most coins.  The date is only
+        appended when include_date=True, which is used by the top-5 table to
+        differentiate coins of the same denomination from the same mint
+        (e.g. CN 1015, 1017, 864 are all Silver Drachm - Maroneia but with
+        different date ranges).
 
     WHY: The raw CN type number (e.g. 532, 1015) is an opaque database key
          that means nothing to a museum visitor or researcher reading the PDF.
          An enriched string gives an immediate, self-explanatory description.
 
     HOW: Calls get_rag_engine().get_by_id() which is an in-memory dict lookup
-         (zero I/O, sub-millisecond).  The engine is already loaded by
-         Gatekeeper so this helper adds no startup cost.
-         Falls back gracefully to "CN {type_id}" on any error.
+         (zero I/O, sub-millisecond).  Falls back gracefully to "CN {type_id}".
     """
     try:
         from src.core.rag_engine import get_rag_engine
@@ -233,6 +240,7 @@ def _enrich_label(type_id) -> str:
         mat   = (rec.get("material",     "") or "").strip().title()
         denom = (rec.get("denomination", "") or "").strip().title()
         mint  = (rec.get("mint",         "") or "").strip()
+        date  = (rec.get("date",         "") or "").strip()
         # Filter denominations that are scraped field names, not real values
         _BAD_DENOMS = {"material", "type", "region", "date", "mint",
                        "period", "denomination", "weight", "diameter",
@@ -240,9 +248,10 @@ def _enrich_label(type_id) -> str:
         if denom.lower() in _BAD_DENOMS:
             denom = ""
         parts = " ".join(p for p in (mat, denom) if p)
-        if parts and mint:
-            return f"{parts} - {mint}"
-        return parts or mint or f"CN {type_id}"
+        base  = f"{parts} - {mint}" if (parts and mint) else (parts or mint or f"CN {type_id}")
+        if include_date and date and len(date) <= 30:
+            return f"{base}, {date}"
+        return base
     except Exception:
         return f"CN {type_id}"
 
@@ -779,7 +788,7 @@ def _confidence_table(f, top5: list) -> None:
         for val, w in [
             (str(i + 1),                                  c1),
             (_s(raw_lbl),                                  c2),
-            (_s(_enrich_label(raw_lbl)),                   c3),
+            (_s(_enrich_label(raw_lbl, include_date=True)), c3),
             (f"{t.get('confidence', 0):.1%}",             c4),
         ]:
             f.cell(w, row_h, f"  {val}", border="LBR", fill=True,
