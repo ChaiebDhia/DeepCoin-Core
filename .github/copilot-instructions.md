@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: February 28, 2026 — README enterprise overhaul complete (16e7835). Layer 5 (Next.js) is next.
+# Last updated: February 28, 2026 — Audit fixes complete (1b210ef): auth, rate-limit, SQLite store, metrics, 34 unit tests. Layer 5 (Next.js) is next.
 
 ---
 
@@ -875,15 +875,18 @@ All 5 agents fully upgraded. All 3 routes tested and passing.
 - Bug fixed: duplicate footer band removed (header already carries branding)
 - Signature change from `to_pdf(markdown_str, path)` → `to_pdf(state_dict, path)`
 
-### Layer 4 — FastAPI Backend ✅ COMPLETE (commits 7055768, 4bb9878)
-- `src/api/main.py`: lifespan, real CORS (`ALLOWED_ORIGINS` env), real health endpoint (5 component checks → 503 if degraded)
+### Layer 4 — FastAPI Backend ✅ ENTERPRISE-HARDENED (latest: 1b210ef)
+- `src/api/main.py`: lifespan, real CORS (`ALLOWED_ORIGINS` env), real health endpoint (5 component checks → 503 if degraded), `_cleanup_old_files(max_age_hours=24)` at startup, `/api/metrics` Prometheus text
 - `src/api/schemas.py`: Pydantic v2 — `ClassifyResponse`, `CnnResult`, `Top5Item`, `HistoryListResponse`, `HistorySummary`
-- `src/api/_store.py`: thread-safe JSON history store (Repository Pattern, `threading.Lock()`)
-- `src/api/routes/__init__.py`: package marker
-- `src/api/routes/classify.py`: `POST /api/classify` — 5-layer security (Content-Type, 10 MB limit, magic bytes, filename sanitize, UUID prefix); `asyncio.to_thread()` for non-blocking pipeline
+- `src/api/_store.py`: **SQLite** (WAL mode, B-tree indexed, O(log n) writes) — replaces old O(n) JSON store
+- `src/api/auth.py`: `require_api_key` dependency — `hmac.compare_digest`, dev-mode passthrough when `DEEPCOIN_API_KEY` unset
+- `src/api/limiter.py`: slowapi singleton, `10/minute` on `/api/classify`
+- `src/api/routes/classify.py`: `Depends(require_api_key)` + `@limiter.limit("10/minute")` — fully secured
 - `src/api/routes/history.py`: `GET /api/history` (paginated, newest-first) + `GET /api/history/{id}`
 - `GET /api/reports/{filename}`: PDF serving with path traversal protection
-- Smoke tests: health all-ok, classify type-1015 91.1% historiann 21.5s, history 1 item
+- `GET /api/metrics`: Prometheus text format — uptime, reports_total, history_total, model_loaded, uploads_total
+- `src/__init__.py`: `__version__ = "0.4.0"` — single version source of truth
+- Tests: **34/34 unit tests passing** in 1.31s
 - Server start: `uvicorn src.api.main:app --port 8000 --log-level info`
 
 ### Layer 5 — Next.js Frontend 🔲 PENDING
@@ -1022,11 +1025,14 @@ C:\Users\Administrator\deepcoin\
 │   │   ├── validator.py          ✅ multi-scale HSV, detection_confidence, uncertainty
 │   │   └── synthesis.py          ✅ PDF generator — COMPLETE, no changes needed
 │   └── api/
-│       ├── main.py               🔲 FastAPI entry point (Layer 4)
+│       ├── main.py               ✅ FastAPI — health, metrics, cleanup, version
+│       ├── auth.py               ✅ X-API-Key auth (hmac.compare_digest)
+│       ├── limiter.py            ✅ slowapi singleton (10/min on classify)
+│       ├── _store.py             ✅ SQLite store (WAL, B-tree, Repository Pattern)
 │       ├── routes/
-│       │   ├── classify.py       🔲 POST /api/classify (Layer 4)
-│       │   └── history.py        🔲 GET /api/history (Layer 4)
-│       └── schemas.py            🔲 Pydantic models (Layer 4)
+│       │   ├── classify.py       ✅ POST /api/classify — auth + rate-limit wired
+│       │   └── history.py        ✅ GET /api/history + GET /api/history/{id}
+│       └── schemas.py            ✅ Pydantic v2 — ClassifyResponse, HistoryListResponse
 │
 ├── scripts/
 │   ├── train.py                  ✅ CNN training V3 (729 lines, AMP+Mixup)
@@ -1050,7 +1056,12 @@ C:\Users\Administrator\deepcoin\
 │   └── raw/                      ⚠️  Original 115k images — gitignored, may be on disk
 │
 ├── tests/
-│   ├── unit/                     🔲 Layer 7
+│   ├── __init__.py               ✅
+│   ├── unit/
+│   │   ├── __init__.py           ✅
+│   │   ├── test_store.py         ✅ 10 tests — SQLite store (append, upsert, ordering)
+│   │   ├── test_api_security.py  ✅ 16 tests — _sanitise_filename, _detect_mime
+│   │   └── test_auth.py          ✅ 8 tests — require_api_key, hmac timing resistance
 │   └── integration/              🔲 Layer 7
 │
 ├── frontend/                     🔲 Next.js 15 (Layer 5)
@@ -1058,6 +1069,9 @@ C:\Users\Administrator\deepcoin\
 ├── reports/                      PDF output directory
 │
 ├── requirements.txt              ✅ All Python dependencies (50+ packages)
+├── pyproject.toml                ✅ Build system, tool.pytest, tool.black, tool.flake8
+├── Makefile                      ✅ api / test / lint / fmt / train / pipeline targets
+├── .env.example                  ✅ Documented template for all environment variables
 ├── docker-compose.yml            🔲 7-service skeleton (Layer 6)
 ├── .env                          ⚠️  Secrets file — gitignored, NEVER commit
 │                                    Contains: GITHUB_TOKEN, GOOGLE_API_KEY
@@ -1094,7 +1108,9 @@ fpdf2 (latest)
 scikit-learn (latest)
 tqdm
 rank-bm25           # installed (STEP 1 — RAG engine BM25 index)
-ollama (0.17.4)     # for local LLM inference (gemma3:4b downloaded)
+ollama (0.17.4)     # for local LLM inference (gemma3:4b downloaded, deepseek-r1:8b downloading)
+slowapi (0.1.9)     # rate limiting for FastAPI
+pytest (9.0.2)      # unit testing (34 tests across 3 files)
 # qwen3-vl:4b      # NOT yet downloaded; pull when needed: ollama pull qwen3-vl:4b
 ```
 
@@ -1134,7 +1150,8 @@ ollama (0.17.4)     # for local LLM inference (gemma3:4b downloaded)
 | `55e1946` | fix: 3 KB data quality bugs (metal rescue, denom parens, date period suffix) |
 | `0f31fbd` | fix: paragraph page-break + author attribution (header + footer) |
 | `c03158b` | fix: trim header attribution to 'Prepared by: Dhia Chaieb' only |
-| `16e7835` | docs: enterprise README overhaul — RAG/DL explainers, scraping story, remove Wikipedia/Nomisma, Layer 4 ✅ ← LATEST |
+| `16e7835` | docs: enterprise README overhaul — RAG/DL explainers, scraping story, remove Wikipedia/Nomisma, Layer 4 ✅ |
+| `1b210ef` | feat: auth (X-API-Key), rate-limiting (slowapi), SQLite store (WAL), /api/metrics, 34 unit tests, pyproject.toml, Makefile, .env.example ← LATEST |
 
 ---
 
@@ -1432,7 +1449,6 @@ Write-Host "EXIT: $LASTEXITCODE"
 ✅ src/api/routes/         classify.py + history.py                 7055768
 ✅ ENGINEERING_JOURNAL.md  Section 23                               4bb9878
 ```
-
 **PDF quality fixes: ALL COMPLETE ✅**
 ```
 ✅ [CONTEXT N] markers stripped from PDFs                509834f
@@ -1471,6 +1487,22 @@ Write-Host "EXIT: $LASTEXITCODE"
 ✅ Author attribution in PDF header                      0f31fbd
 ✅ Header trimmed to "Prepared by: Dhia Chaieb"          c03158b
 ✅ README enterprise overhaul (RAG/DL, no Wikipedia)     16e7835
+```
+
+**Layer 4 audit fixes complete (1b210ef). Layer 4 is now enterprise-grade.**
+
+```
+✅ weights_only=True          torch.load() security (no arbitrary pickle)
+✅ X-API-Key auth             hmac.compare_digest, dev-mode passthrough
+✅ Rate limiting              slowapi, 10 req/min on /api/classify
+✅ SQLite store               WAL mode, B-tree, O(log n) writes
+✅ File cleanup               _cleanup_old_files(24h) at startup
+✅ /api/metrics               Prometheus text — 5 metrics
+✅ __version__                single source in src/__init__.py
+✅ pyproject.toml             build config + lint/test tool config
+✅ Makefile                   developer shortcuts
+✅ .env.example               self-documenting template
+✅ Unit tests                 34/34 pass in 1.31s at commit 1b210ef
 ```
 
 **NEXT: Layer 5 — Next.js frontend.**
