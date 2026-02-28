@@ -1126,7 +1126,10 @@ ollama (0.17.4)     # for local LLM inference (gemma3:4b downloaded)
 | `509834f` | 4 synthesis PDF fixes (CONTEXT markers, Markdown, table layout, staircase) |
 | `29162b3` | 5 PDF data fixes (NLP artifact, legend prefix, UUID header, VLM Markdown, inscription scope) |
 | `08b2622` | Enterprise PDF upgrade: _safe, _conf_color, _PDF class, colored pill, rrf score normalised |
-| `9fd433a` | fix: metal detection priority + KB rrf_score key in investigator ← LATEST |
+| `9fd433a` | fix: metal detection priority + KB rrf_score key in investigator |
+| `7e04b94` | feat: _enrich_label() — user-friendly coin names in all PDF tables |
+| `a731bcd` | fix: 8 PDF quality fixes (em-dash, bad denominations, v.Chr.→BC, pipe legend, CN Reference label, Unclassified Specimen, section title) |
+| `68a3c21` | fix: strip Wait-loop reasoning artifact + date differentiation in top-5 ← LATEST |
 
 ---
 
@@ -1339,7 +1342,7 @@ records = [r for r in metadata if "error" not in r]
 ### KNOWN ISSUES (all resolved)
 
 All Layer 3 enterprise upgrade items are COMPLETE.
-All PDF quality issues resolved through commits 509834f → 9fd433a.
+All PDF quality issues resolved through commits 509834f → 68a3c21.
 No remaining scheduled issues.
 See Section 7 Build Order for what was fixed and in which commit.
   → Structured fields scraped from corpus-nummorum.eu
@@ -1441,6 +1444,18 @@ Write-Host "EXIT: $LASTEXITCODE"
 ✅ KB Similarity normalised 0-100%                      08b2622
 ✅ Metal detection priority fixed (bronze before silver) 9fd433a
 ✅ KB Similarity 0% bug fixed (rrf_score key)           9fd433a
+✅ Raw CN IDs replaced with human-readable coin names    7e04b94
+✅ em-dash latin-1 crash fixed                          a731bcd
+✅ Bad denomination artifacts filtered (_BAD_DENOMS)     a731bcd
+✅ v.Chr./n.Chr. → BC/AD German date fix                a731bcd
+✅ | Legend: → / Legend: format fix                     a731bcd
+✅ Stripe shows 'Corpus Nummorum · CN XXXX'             a731bcd
+✅ <40% conf shows 'Unclassified Specimen'              a731bcd
+✅ CN Reference moved to last row in record table       a731bcd
+✅ Section title stripped of route suffix               a731bcd
+✅ Wait-loop reasoning stripped (_strip_wait_loops)      68a3c21
+✅ Section body capped at 350 chars (_cap_sections)      68a3c21
+✅ Top-5 dates shown to differentiate same-name variants 68a3c21
 ```
 
 **NEXT: Layer 5 — Next.js frontend.**
