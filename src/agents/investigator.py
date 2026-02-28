@@ -113,7 +113,7 @@ class Investigator:
                     "region":       record.get("region", ""),
                     "date":         record.get("date", ""),
                     "material":     record.get("material", ""),
-                    "score":        hit.get("score", 0.0),
+                    "score":        hit.get("rrf_score", hit.get("score", 0.0)),
                     "in_training_set": record.get("in_training_set", False),
                 })
             if kb_matches:
@@ -437,7 +437,7 @@ def _parse_features(description: str) -> dict:
     # Metal -- prefer section-scoped match, fall back to full-text keyword scan
     metal = "unknown"
     metal_text = _section("METAL") or description
-    for m in ("silver", "bronze", "gold", "copper", "billon", "electrum"):
+    for m in ("bronze", "gold", "electrum", "billon", "copper", "silver"):
         if m in metal_text.lower():
             metal = m
             break
