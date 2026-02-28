@@ -230,6 +230,10 @@ class Investigator:
             # _clean_narrative() strips **, *, ##, [CONTEXT N], curly quotes, etc.
             from src.agents.historian import _clean_narrative
             description = _clean_narrative(description)
+            # Strip verbose reasoning preamble (qwen3-vl in non-think-tag mode
+            # outputs its chain-of-thought as plain prose before the structured
+            # METAL: / OBVERSE: sections).  Keep only from the first section label.
+            description = _trim_preamble(description)
             features = _parse_features(description)
             return description, features, True
         except Exception as e:
@@ -246,6 +250,37 @@ def _empty_features() -> dict:
         "symbols":           [],
         "condition":         "unknown",
     }
+
+
+def _trim_preamble(text: str) -> str:
+    """
+    Strip verbose reasoning text that precedes the structured answer sections.
+
+    WHY this is needed:
+        qwen3-vl:4b (and similar reasoning models run via Ollama) sometimes
+        output their chain-of-thought as plain prose BEFORE the structured
+        METAL: / OBVERSE: / etc. sections, without wrapping it in <think> tags.
+        Example of problematic output:
+            "Got it, let's tackle this step by step. First I need to look at...
+             Starting with METAL/MATERIAL. The coin looks light-colored...
+             [500+ words of stream-of-consciousness reasoning]
+             METAL: The coin appears to be silver...
+             OBVERSE: ..."
+        The PDF should show only the six structured sections, not the reasoning.
+
+    Strategy:
+        Find the first section label at the start of a line (METAL:, OBVERSE:,
+        etc.) and return everything from that point.  If no section label is
+        found the full text is returned unchanged (safe fallback).
+    """
+    import re
+    m = re.search(
+        r"^(METAL|OBVERSE|REVERSE|INSCRIPTIONS|CONDITION|IDENTIFICATION):",
+        text,
+        re.IGNORECASE | re.MULTILINE,
+    )
+    return text[m.start():].strip() if m else text
+
 
 def _strip_think_tags(text: str) -> str:
     """

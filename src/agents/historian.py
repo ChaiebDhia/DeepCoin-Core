@@ -234,7 +234,7 @@ class Historian:
             leg = _strip_legend_prefix(record["obverse_legend"])
             if leg:
                 obverse_parts.append(f"Legend: {leg}")
-        obverse = " | ".join(obverse_parts) or record.get("obverse", "")
+        obverse = " | ".join(obverse_parts) or _clean_field(record.get("obverse", ""))
 
         reverse_parts = []
         if record.get("reverse_design"):
@@ -243,7 +243,7 @@ class Historian:
             leg = _strip_legend_prefix(record["reverse_legend"])
             if leg:
                 reverse_parts.append(f"Legend: {leg}")
-        reverse = " | ".join(reverse_parts) or record.get("reverse", "")
+        reverse = " | ".join(reverse_parts) or _clean_field(record.get("reverse", ""))
 
         return {
             "type_id":      type_id,

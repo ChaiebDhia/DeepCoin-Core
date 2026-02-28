@@ -33,9 +33,18 @@ _C_ROW_ALT     = (245, 247, 250)   # near-white — alternating table rows
 _C_TEXT        = (30,  30,  30)    # near-black — body text
 _C_MUTED       = (110, 110, 110)   # grey       — secondary / label text
 _C_WHITE       = (255, 255, 255)
-_C_GREEN       = (30,  130,  80)
-_C_ORANGE      = (200, 100,  20)
+_C_GREEN       = (30,  130,  80)   # high confidence
+_C_AMBER       = (180, 120,   0)   # medium confidence
+_C_RED_DK      = (160,  30,  30)   # low confidence
+_C_ORANGE      = (200, 100,  20)   # forensic warning
 _C_RULE        = (200, 210, 225)   # light border lines
+
+# ── Route display labels ───────────────────────────────────────────────────────
+_ROUTE_LABELS = {
+    "historian":    "Historical Analysis",
+    "validator":    "Forensic Validation",
+    "investigator": "Visual Investigation",
+}
 
 
 # ── Text-cleaning patterns ───────────────────────────────────────────────────
@@ -159,6 +168,38 @@ def _s(text: str) -> str:
     return t.encode("latin-1", "replace").decode("latin-1")
 
 
+def _safe(text: str) -> str:
+    """
+    Minimal latin-1 safety encode for filenames, timestamps, and other
+    system-generated strings that contain NO Markdown and NO Greek.
+
+    WHY NOT use _s() here:
+        _s() applies Markdown-stripping patterns including _italic_ which
+        matches underscores in filenames like 'CN_type_1015_cn_coin.jpg',
+        silently eating the underscores and producing 'CNtype1015cncoin.jpg'.
+        _safe() skips all Markdown processing — it only ensures the string
+        is latin-1 encodeable so fpdf2 can render it without crashing.
+    """
+    return str(text).encode("latin-1", "replace").decode("latin-1")
+
+
+def _conf_color(conf: float) -> tuple:
+    """
+    Return an RGB colour tuple for a confidence value.
+
+    Thresholds mirror the Gatekeeper routing thresholds so the badge colour
+    matches the routing decision intuitively:
+        Green  (> 85%)  — high confidence, historian route
+        Amber  (40-85%) — medium confidence, validator route
+        Red    (< 40%)  — low confidence, investigator route
+    """
+    if conf > 0.85:
+        return _C_GREEN
+    if conf > 0.40:
+        return _C_AMBER
+    return _C_RED_DK
+
+
 def _basename(path: str) -> str:
     """
     Return just the original filename from a path, stripping the UUID prefix.
@@ -266,7 +307,9 @@ class Synthesis:
         ts    = datetime.now().strftime("%d %B %Y    %H:%M")
 
         # ── page setup ────────────────────────────────────────────────────────
-        f = FPDF()
+        # Use _PDF subclass so every page automatically gets the branded footer
+        # band with page number — no manual footer call needed.
+        f = _PDF()
         f.set_margins(20, 15, 20)
         f.set_auto_page_break(auto=True, margin=20)
         f.add_page()
@@ -275,7 +318,7 @@ class Synthesis:
         _draw_header_band(f, ts, img)
 
         # ── result summary stripe ─────────────────────────────────────────────
-        _draw_result_stripe(f, cnn)
+        _draw_result_stripe(f, cnn, route)
         f.ln(6)
 
         # ── CNN classification ────────────────────────────────────────────────
@@ -340,7 +383,11 @@ class Synthesis:
         if inv:
             _section_title(f, "Visual Investigation  (Low-Confidence Route)")
             if inv.get("visual_description"):
-                _body_paragraph(f, inv["visual_description"])
+                # Trim verbose pre-analysis preamble: show only the structured
+                # section text (METAL: / OBVERSE: / etc.) without the LLM's
+                # internal reasoning that precedes the actual answer.
+                vis = _trim_to_sections(inv["visual_description"])
+                _body_paragraph(f, vis)
 
             feats = inv.get("detected_features", {})
             if feats:
@@ -362,12 +409,59 @@ class Synthesis:
                 f.ln(3)
                 _info_box(f, f"Suggested CN type: {inv['suggested_type_id']}  "
                              f"(visual description + semantic KB search)")
-            f.ln(7)
+            f.ln(5)
 
         # ── save ──────────────────────────────────────────────────────────────
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
         with open(output_path, "wb") as fout:
             f.output(fout)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FPDF subclass — auto branded footer on every page
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class _PDF:
+    """
+    Thin wrapper that defers FPDF construction until first use so that the
+    fpdf import stays inside to_pdf() (avoids import-time cost).
+
+    WHY subclass rather than monkey-patch:
+        fpdf2's FPDF.footer() is called automatically after every add_page().
+        Overriding it in a subclass is the canonical fpdf2 pattern for
+        auto-repeating page elements (headers, footers, page numbers).
+
+    Footer design:
+        Navy band (14 mm) at the bottom of every page.
+        Left: DeepCoin branding
+        Right: Page N / Total  (requires two-pass: AliasNbPages)
+    """
+
+    def __new__(cls):
+        """Return a real FPDF subclass instance on construction."""
+        from fpdf import FPDF
+
+        class DeepCoinPDF(FPDF):
+            def footer(self_pdf):
+                from fpdf.enums import XPos, YPos
+                self_pdf.set_y(-(14))
+                self_pdf.set_fill_color(*_C_BRAND_DARK)
+                self_pdf.rect(0, self_pdf.h - 14, self_pdf.w, 14, style="F")
+                self_pdf.set_xy(20, self_pdf.h - 10)
+                self_pdf.set_text_color(180, 200, 230)
+                self_pdf.set_font("Helvetica", "", 8)
+                self_pdf.cell(110, 5,
+                    "DeepCoin-Core  |  ESPRIT School of Engineering  |  YEBNI")
+                self_pdf.set_xy(self_pdf.w - 65, self_pdf.h - 10)
+                # {nb} is replaced by fpdf2 with the total page count
+                self_pdf.cell(45, 5,
+                    f"Page {self_pdf.page_no()}/{{nb}}",
+                    align="R")
+                self_pdf.set_text_color(*_C_TEXT)
+
+        pdf = DeepCoinPDF()
+        pdf.alias_nb_pages("{nb}")   # two-pass total-page substitution
+        return pdf
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -397,40 +491,75 @@ def _draw_header_band(f, ts: str, img: str) -> None:
     f.cell(90, 6, "Numismatic Intelligence System  |  ESPRIT / YEBNI")
 
     # Right: timestamp + filename
+    # WHY _safe() not _s() here:
+    #   _s() applies _italic_ Markdown stripping which eats underscores in
+    #   filenames like 'CN_type_1015.jpg' → 'CNtype1015.jpg'.  _safe() only
+    #   ensures latin-1 compatibility without touching the content.
     f.set_font("Helvetica", "", 8)
     f.set_text_color(180, 200, 230)
     f.set_xy(f.w - 85, 8)
-    f.cell(65, 5, _s(ts), align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    f.cell(65, 5, _safe(ts), align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     f.set_xy(f.w - 85, 14)
-    f.cell(65, 5, _s(img), align="R")
+    f.cell(65, 5, _safe(img), align="R")
 
     f.set_text_color(*_C_TEXT)
     f.set_xy(f.l_margin, 36)
 
 
-def _draw_result_stripe(f, cnn: dict) -> None:
-    from fpdf.enums import XPos, YPos
-    label = _s(str(cnn.get("label", "N/A")))
-    conf  = cnn.get("confidence", 0.0)
+def _draw_result_stripe(f, cnn: dict, route: str) -> None:
+    """
+    Horizontal summary stripe beneath the header band.
 
-    y = f.get_y()
+    Layout (left → right):
+        CN Type NNN             [Confidence pill]    Route label
+
+    WHY a coloured pill for confidence:
+        The colour immediately communicates the reliability tier —
+        green (>85%), amber (40-85%), red (<40%) — matching the Gatekeeper
+        routing thresholds so the badge is self-explanatory to a reader who
+        knows the system.
+    """
+    from fpdf.enums import XPos, YPos
+    label      = _safe(str(cnn.get("label", "N/A")))
+    conf       = cnn.get("confidence", 0.0)
+    conf_color = _conf_color(conf)
+    route_lbl  = _safe(_ROUTE_LABELS.get(route, route.upper()))
+
+    y  = f.get_y()
+    ew = _ew(f)
+
+    # Background stripe
     f.set_fill_color(*_C_BRAND_LIGHT)
     f.set_draw_color(*_C_BRAND_LIGHT)
-    f.rect(f.l_margin, y, _ew(f), 16, style="FD")
+    f.rect(f.l_margin, y, ew, 18, style="FD")
 
-    f.set_xy(f.l_margin + 5, y + 3)
-    f.set_font("Helvetica", "B", 13)
+    # CN Type label
+    f.set_xy(f.l_margin + 5, y + 4)
+    f.set_font("Helvetica", "B", 14)
     f.set_text_color(*_C_BRAND_DARK)
-    f.cell(60, 8, f"CN Type  {label}")
+    f.cell(60, 9, f"CN Type  {label}")
 
-    f.set_xy(f.l_margin + 70, y + 5)
-    f.set_font("Helvetica", "", 10)
+    # Confidence pill — coloured filled rectangle + white text
+    pill_w, pill_h = 46, 8
+    pill_x = f.l_margin + 70
+    pill_y = y + 5
+    f.set_fill_color(*conf_color)
+    f.set_draw_color(*conf_color)
+    f.rect(pill_x, pill_y, pill_w, pill_h, style="FD")
+    f.set_xy(pill_x, pill_y)
+    f.set_font("Helvetica", "B", 9)
+    f.set_text_color(*_C_WHITE)
+    f.cell(pill_w, pill_h, f"  Confidence: {conf:.1%}", align="L")
+
+    # Route label — right aligned
+    f.set_xy(f.l_margin + 122, y + 6)
+    f.set_font("Helvetica", "", 9)
     f.set_text_color(*_C_MUTED)
-    f.cell(50, 6, f"Confidence:  {conf:.1%}")
+    f.cell(ew - 122, 7, route_lbl, align="R")
 
     f.set_text_color(*_C_TEXT)
     f.set_draw_color(*_C_RULE)
-    f.set_xy(f.l_margin, y + 16)
+    f.set_xy(f.l_margin, y + 18)
 
 
 def _section_title(f, title: str) -> None:
@@ -585,19 +714,30 @@ def _confidence_table(f, top5: list) -> None:
 
 
 def _kb_table(f, matches: list) -> None:
-    """CN Type / Score / Mint / Date four-column table."""
+    """
+    CN Type / Similarity / Mint / Date four-column table.
+
+    WHY "Similarity" instead of showing raw RRF score:
+        RRF scores are small fractions (e.g. 0.016) that are meaningless
+        to a numismatist reader.  Normalising to 0-100% gives an intuitive
+        sense of relative match quality without implying false precision.
+    """
     from fpdf.enums import XPos, YPos
     ew = _ew(f)
-    c1, c2, c3 = 28, 24, 55
+    c1, c2, c3 = 28, 28, 55
     c4 = ew - c1 - c2 - c3
     row_h = 7
+
+    # Normalise scores to 0-100 % for display
+    raw_scores = [hit.get("score", 0) for hit in matches]
+    max_s = max(raw_scores) if raw_scores and max(raw_scores) > 0 else 1.0
 
     f.set_fill_color(*_C_BRAND_LIGHT)
     f.set_draw_color(*_C_RULE)
     f.set_font("Helvetica", "B", 9)
     f.set_text_color(*_C_BRAND_DARK)
     f.set_x(f.l_margin)
-    for label, w in [("Type", c1), ("Score", c2), ("Mint", c3), ("Date", c4)]:
+    for label, w in [("CN Type", c1), ("Similarity", c2), ("Mint", c3), ("Date", c4)]:
         f.cell(w, row_h, f"  {label}", border=1, fill=True,
                new_x=XPos.RIGHT, new_y=YPos.TOP)
     f.set_xy(f.l_margin, f.get_y() + row_h)
@@ -607,9 +747,10 @@ def _kb_table(f, matches: list) -> None:
         f.set_font("Helvetica", "", 9)
         f.set_text_color(*_C_TEXT)
         f.set_x(f.l_margin)
+        sim = hit.get("score", 0) / max_s * 100
         for val, w in [
             (_s(str(hit.get("type_id", ""))),   c1),
-            (f"{hit.get('score', 0):.2f}",      c2),
+            (f"{sim:.0f}%",                     c2),
             (_s(hit.get("mint", "")),            c3),
             (_s(hit.get("date", "")),            c4),
         ]:
@@ -676,15 +817,29 @@ def _info_box(f, text: str) -> None:
     f.set_draw_color(*_C_RULE)
 
 
+def _trim_to_sections(text: str) -> str:
+    """
+    Strip verbose reasoning preamble from VLM responses that do not use
+    <think>...</think> tags (e.g. qwen3-vl:4b in plain-text mode).
+
+    WHY: Some Ollama reasoning models output their chain-of-thought as plain
+    prose before the structured answer rather than wrapping it in think-tags.
+    The PDF should show only the six structured sections (METAL:, OBVERSE:,
+    etc.), not the model's internal deliberation.
+
+    Strategy:
+        Find the first occurrence of a section label at the start of a line.
+        Return everything from that point onward.
+        If no section label is found, return the original text (graceful).
+    """
+    m = re.search(
+        r"^(METAL|OBVERSE|REVERSE|INSCRIPTIONS|CONDITION|IDENTIFICATION):",
+        text,
+        re.IGNORECASE | re.MULTILINE,
+    )
+    return text[m.start():].strip() if m else text
+
+
 def _draw_footer_band(f) -> None:
-    from fpdf.enums import XPos, YPos
-    f.set_y(f.h - 14)
-    f.set_fill_color(*_C_BRAND_DARK)
-    f.rect(0, f.h - 14, f.w, 14, style="F")
-    f.set_xy(20, f.h - 10)
-    f.set_text_color(180, 200, 230)
-    f.set_font("Helvetica", "", 8)
-    f.cell(110, 5, "DeepCoin-Core  |  ESPRIT School of Engineering  |  YEBNI")
-    f.set_xy(f.w - 65, f.h - 10)
-    f.cell(45, 5, "corpus-nummorum.eu", align="R")
-    f.set_text_color(*_C_TEXT)
+    """Legacy helper — kept for external callers; body is now in _PDF.footer()."""
+    pass
