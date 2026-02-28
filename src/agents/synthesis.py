@@ -70,10 +70,38 @@ _GREEK_MAP: dict = {
     "ω":"o",
 }
 
+# Typographic characters that NFD decomposition cannot resolve to ASCII.
+# These appear frequently in LLM output (curly quotes, dashes, ligatures)
+# and would silently become '?' via latin-1 encode("replace").
+# Mapped explicitly BEFORE the NFD step so the result is always readable.
+_TYPO_MAP: dict = {
+    "\u2018": "'",   # LEFT  SINGLE QUOTATION MARK  '
+    "\u2019": "'",   # RIGHT SINGLE QUOTATION MARK  '  ← commonest source of '?'
+    "\u201A": ",",   # SINGLE LOW-9 QUOTATION MARK  ‚
+    "\u201C": '"',   # LEFT  DOUBLE QUOTATION MARK  "
+    "\u201D": '"',   # RIGHT DOUBLE QUOTATION MARK  "
+    "\u201E": '"',   # DOUBLE LOW-9 QUOTATION MARK  „
+    "\u2013": "-",   # EN DASH                       –
+    "\u2014": "-",   # EM DASH                       —
+    "\u2015": "-",   # HORIZONTAL BAR                ―
+    "\u2026": "...", # HORIZONTAL ELLIPSIS           …
+    "\u00DF": "ss",  # LATIN SMALL LETTER SHARP S    ß  (German: Geiß → Geiss)
+    "\u00C6": "AE",  # LATIN CAPITAL LIGATURE AE     Æ
+    "\u00E6": "ae",  # LATIN SMALL   LIGATURE AE     æ
+    "\u0152": "OE",  # LATIN CAPITAL LIGATURE OE     Œ
+    "\u0153": "oe",  # LATIN SMALL   LIGATURE OE     œ
+    "\u00D8": "O",   # LATIN CAPITAL LETTER O STROKE Ø
+    "\u00F8": "o",   # LATIN SMALL   LETTER O STROKE ø
+    "\u00D0": "D",   # LATIN CAPITAL LETTER ETH      Ð
+    "\u00F0": "d",   # LATIN SMALL   LETTER ETH      ð
+    "\u00DE": "TH",  # LATIN CAPITAL LETTER THORN    Þ
+    "\u00FE": "th",  # LATIN SMALL   LETTER THORN    þ
+}
+
 
 def _s(text: str) -> str:
     """
-    Sanitise a string for PDF output through five ordered steps.
+    Sanitise a string for PDF output through six ordered steps.
 
     Step 1 — Strip RAG citation markers  ([CONTEXT 1], [CONTEXT CNN], …)
              These are internal prompt tokens that must never appear in print.
@@ -81,15 +109,19 @@ def _s(text: str) -> str:
              Some LLM responses contain inline Markdown even when instructed
              not to.  We extract just the visible text between the markers.
     Step 3 — Collapse excess whitespace left by stripping.
-    Step 4 — Greek → Latin transliteration  (Σ→S, Α→A, …)
+    Step 4 — Typographic character normalisation (_TYPO_MAP)
+             Curly quotes, em/en dashes, ligatures, sharp-s, etc. that NFD
+             decomposition cannot resolve to latin-1.  These are the most
+             frequent source of '?' in LLM-generated text.
+    Step 5 — Greek → Latin transliteration  (Σ→S, Α→A, …)
              fpdf2's built-in fonts use latin-1 encoding, which excludes the
              Greek Unicode block (U+0370–U+03FF).
-    Step 5 — Unicode NFD decomposition + combining-mark removal
+    Step 6 — Unicode NFD decomposition + combining-mark removal
              Converts accented characters (ō, é, ñ, …) to their ASCII base
              letter by decomposing to NFD form and stripping combining marks
-             (Unicode category 'Mn').  This preserves readability instead of
-             emitting the latin-1 replacement character '?'.
-    Step 6 — latin-1 encode/decode  (final safety net for any remaining
+             (Unicode category 'Mn').  Handles the long tail of accented
+             Latin chars not covered by _TYPO_MAP.
+    Step 7 — latin-1 encode/decode  (final safety net for any remaining
              characters outside the font's supported range).
     """
     t = str(text)
@@ -104,14 +136,17 @@ def _s(text: str) -> str:
     # Step 3 — collapse runs of spaces / clean up leftover punctuation gaps
     t = re.sub(r"  +", " ", t).strip()
 
-    # Step 4 — Greek transliteration
+    # Step 4 — typographic character normalisation
+    t = "".join(_TYPO_MAP.get(c, c) for c in t)
+
+    # Step 5 — Greek transliteration
     t = "".join(_GREEK_MAP.get(c, c) for c in t)
 
-    # Step 5 — decompose accented chars, strip combining diacritics
+    # Step 6 — decompose accented chars, strip combining diacritics
     t = unicodedata.normalize("NFD", t)
     t = "".join(c for c in t if unicodedata.category(c) != "Mn")
 
-    # Step 6 — final latin-1 safety net
+    # Step 7 — final latin-1 safety net
     return t.encode("latin-1", "replace").decode("latin-1")
 
 

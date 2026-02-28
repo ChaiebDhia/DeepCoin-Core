@@ -336,6 +336,17 @@ _MD_PATS  = [
     (re.compile(r"(?m)^\s*#{1,6}\s+"),  ""),
     (re.compile(r"#{2,}\s*"),           ""),
 ]
+# Common typographic characters that look odd or become '?' in latin-1 fonts
+_TYPO_MAP = {
+    "\u2018": "'", "\u2019": "'",   # curly single quotes → straight
+    "\u201C": '"', "\u201D": '"',   # curly double quotes → straight
+    "\u201A": ",", "\u201E": '"',
+    "\u2013": "-", "\u2014": "-",   # en/em dash → hyphen
+    "\u2026": "...",                 # ellipsis
+    "\u00DF": "ss",                  # ß → ss
+    "\u00C6": "AE", "\u00E6": "ae",
+    "\u0152": "OE", "\u0153": "oe",
+}
 
 
 def _clean_narrative(text: str) -> str:
@@ -357,6 +368,7 @@ def _clean_narrative(text: str) -> str:
     for pat, repl in _MD_PATS:
         t = pat.sub(repl, t)
     t = re.sub(r"  +", " ", t).strip()
+    t = "".join(_TYPO_MAP.get(c, c) for c in t)   # straighten curly quotes, dashes
     t = unicodedata.normalize("NFD", t)
     t = "".join(c for c in t if unicodedata.category(c) != "Mn")
     return t
