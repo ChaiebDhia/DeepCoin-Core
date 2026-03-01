@@ -168,16 +168,18 @@ class CoinInference:
         if not path.exists():
             raise FileNotFoundError(f"Image not found: {path}")
 
-        # WHY np.fromfile + imdecode instead of cv2.imread:
-        # cv2.imread() on Windows uses the C runtime fopen() which only supports
-        # ANSI paths.  Any non-ASCII character (accented letters, CJK, spaces
-        # encoded differently, etc.) makes imread() silently return None.
-        # Common real-world case: Windows screenshots are saved as
-        # "Capture_d_écran_2026-03-01.png" (French locale).
-        # np.fromfile() delegates to Python's own I/O layer which handles full
-        # Unicode; the resulting byte array is then decoded in memory by
-        # cv2.imdecode() — no file path ever reaches the C runtime.
-        raw     = np.fromfile(str(path), dtype=np.uint8)
+        # WHY open(rb) + np.frombuffer + imdecode instead of cv2.imread / np.fromfile:
+        # cv2.imread() and np.fromfile() both use C-runtime fopen() on Windows,
+        # which only accepts ANSI paths.  Any non-ASCII character (accented
+        # letters, CJK, etc.) causes a silent None return.
+        # Common real-world case: French/Windows screenshots saved as
+        # "Capture_d_écran_2026-03-01.png".
+        # Python's built-in open() in binary mode uses the Windows Unicode API
+        # (CreateFileW) — it handles every valid Unicode path.
+        # np.frombuffer() wraps the in-memory bytes with zero copies;
+        # cv2.imdecode() decodes from memory → no file path reaches the C runtime.
+        with open(str(path), "rb") as _fh:
+            raw     = np.frombuffer(_fh.read(), dtype=np.uint8)
         img_bgr = cv2.imdecode(raw, cv2.IMREAD_COLOR)
         if img_bgr is None:
             raise ValueError(f"OpenCV could not decode image: {path}")

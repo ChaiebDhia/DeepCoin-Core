@@ -95,11 +95,20 @@ def _sanitise_filename(name: str) -> str:
 
     WHY: A filename like '../../etc/passwd.jpg' from a malicious client
     could cause our save path to escape the uploads directory (path traversal).
-    Keeping only alphanumerics, dots, dashes, and underscores is safe.
+    Keeping only ASCII alphanumerics, dots, dashes, and underscores is safe.
+
+    WHY re.ASCII on the \\w class:
+    Python's \\w by default matches Unicode word characters (\\w includes é, ñ,
+    Chinese ideographs, etc.).  Without re.ASCII, "Capture_d_écran.png" passes
+    through unmodified and the saved path contains é.  cv2.imread() and
+    np.fromfile() both use C-runtime fopen() which only accepts ANSI paths on
+    Windows \u2014 they silently return None for any non-ASCII character.
+    re.ASCII restricts \\w to [a-zA-Z0-9_] so every non-ASCII character is
+    replaced with '_', producing a plain-ASCII upload path.
     """
-    name = name.replace("\\", "/").split("/")[-1]   # strip directory components
-    name = re.sub(r"[^\w.\-]", "_", name)           # strip special chars
-    return name[:128]                                # cap length
+    name = name.replace("\\", "/").split("/")[-1]          # strip directory components
+    name = re.sub(r"[^\w.\-]", "_", name, flags=re.ASCII)  # ASCII-only safe chars
+    return name[:128]                                        # cap length
 
 
 # ── route ─────────────────────────────────────────────────────────────────────

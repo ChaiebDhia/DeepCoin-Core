@@ -65,6 +65,19 @@ class TestSanitiseFilename:
         result = _sanitise_filename("evil\x00.jpg")
         assert "\x00" not in result
 
+    def test_non_ascii_replaced(self):
+        """
+        Non-ASCII characters (accented letters, CJK, etc.) must be replaced
+        with '_'.  cv2.imread() and np.fromfile() use C-runtime fopen() on
+        Windows which only accepts ANSI paths — a saved path with 'é' causes a
+        silent None return and a pipeline crash.
+        Real-world case: French locale screenshots 'Capture_d_écran_....png'.
+        """
+        result = _sanitise_filename("Capture_d_écran_2026-03-01.png")
+        assert "é" not in result
+        assert result.isascii()
+        assert result.endswith(".png")
+
 
 # ── _detect_mime ──────────────────────────────────────────────────────────────
 

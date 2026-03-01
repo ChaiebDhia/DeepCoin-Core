@@ -401,9 +401,12 @@ def _opencv_fallback(image_path: str) -> tuple[str, dict]:
     lines    = []
 
     try:
-        # np.fromfile + imdecode: handles non-ASCII paths on Windows
-        # (cv2.imread uses C fopen which only supports ANSI paths)
-        raw = np.fromfile(image_path, dtype=np.uint8)
+        # Use Python open(rb)+frombuffer+imdecode to handle non-ASCII paths on Windows.
+        # cv2.imread and np.fromfile both use C-runtime fopen() which rejects
+        # accented filenames (e.g. French locale screenshots "Capture_d_écran…").
+        # Python's open() uses CreateFileW (Windows Unicode API) — no such limit.
+        with open(image_path, "rb") as _fh:
+            raw = np.frombuffer(_fh.read(), dtype=np.uint8)
         img = cv2.imdecode(raw, cv2.IMREAD_COLOR)
         if img is None:
             raise ValueError(f"cv2.imdecode returned None for {image_path}")
