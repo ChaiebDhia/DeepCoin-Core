@@ -4378,3 +4378,119 @@ The `None` guard fix (Finding 2) added two new unit tests to `tests/unit/test_da
 2. `test_getitem_error_message_contains_path` — same setup, asserts the full path appears in the exception string (debuggability requirement)
 
 All 36 tests pass in `pytest` with no warnings at commit `8354450`.
+
+---
+
+## 32. Layer 5  Next.js 15 Enterprise Frontend (March 2026)
+
+**Commit:** `f61113f`
+**Status:** COMPLETE  production build clean, dev server live, 0 TypeScript errors
+
+---
+
+### What Layer 5 Is
+
+Layer 5 is the user-facing web application that gives DeepCoin a professional, production-grade interface. It replaces the command-line-only workflow with a visual dashboard that allows:
+
+- **Drag-and-drop coin photograph upload** with real-time analysis progress
+- **Full result display**  CNN prediction, top-5 table, TTA indicator, historian narrative, validator forensics, investigator attributes, PDF download
+- **Classification history**  paginated table of all past analyses with route badges and confidence indicators
+- **History detail page**  full analysis reconstruction from stored API data
+- **Live backend health monitoring**  green/amber/red dot in the navigation bar
+
+---
+
+### Technology Decisions
+
+#### Next.js 15 App Router
+
+App Router is the default and recommended path since Next.js 14. Key advantages for DeepCoin:
+
+- **React Server Components** by default  only components marked `"use client"` run in the browser
+- **`React.use(params)`**  In Next.js 15, route segment params are a Promise. `const { id } = React.use(params)` is the correct pattern
+- **`async rewrites()`** in `next.config.ts`  all `/api/*` requests proxy to `http://localhost:8000/api/*`, eliminating CORS in development
+
+#### Tailwind CSS v4  CSS-First Configuration
+
+Tailwind v4 removes `tailwind.config.js` in favour of `@theme inline` blocks in `globals.css`. Standard utility classes work identically. Custom brand colours use CSS custom properties (`var(--surface-1)`).
+
+#### Zustand 5  Upload Phase State Machine
+
+Five-state machine: `idle -> uploading -> processing -> done -> error`. Zustand preferred over Context because per-field selectors prevent re-renders  a progress bar update (20+ per upload) does not re-render the result panel.
+
+#### TanStack Query 5  Server State
+
+History records come from the API and carry: caching, deduplication, background refresh, loading/error states. `queryKey: ["history", skip]` with `staleTime: 30_000` for the list, `staleTime: 300_000` for detail pages.
+
+#### Class Variance Authority (CVA)  Component Variants
+
+Type-safe variant system. `Button` (5 variants: primary/secondary/ghost/danger/gold), `Badge` (route + confidence variants). Invalid variant values are compile-time errors.
+
+---
+
+### File Architecture (22 files, 9603 lines)
+
+```
+frontend/
+ next.config.ts           <- API rewrites: /api/* -> http://localhost:8000
+ .env.local               <- DEEPCOIN_API_URL + NEXT_PUBLIC_API_KEY
+ providers.tsx            <- QueryClientProvider + Toaster
+ types/api.ts             <- TypeScript mirror of all Pydantic schemas
+ lib/
+    api.ts               <- Axios instance + classifyCoin(), getHistory(), getHealth()
+    store.ts             <- Zustand store (UploadPhase state machine)
+    utils.ts             <- cn(), formatConfidence(), routeStyle(), confidenceBg()
+ app/
+    globals.css          <- Dark navy design system (CSS vars + @theme)
+    layout.tsx           <- Root layout: Header + Providers + footer
+    page.tsx             <- Home / Classify page
+    history/
+        page.tsx         <- History list with pagination
+        [id]/page.tsx    <- Detail page (React.use(params))
+ components/
+     ui/
+        button.tsx / badge.tsx / card.tsx / spinner.tsx / progress.tsx
+        header.tsx       <- Sticky nav with brand mark + HealthDot
+        health-dot.tsx   <- Polls /api/health every 30s
+     coin/
+        CoinUploader.tsx <- Drag-and-drop, TTA toggle, file validation, progress
+        AnalysisPanel.tsx<- Full result display + PDF download button
+     history/
+         HistoryTable.tsx <- Paginated table with skeleton loading
+```
+
+---
+
+### Build Verification
+
+```
+npm run build (from frontend/)
+Next.js 16.1.6 with Turbopack  compiled in 4.8s
+TypeScript: 0 errors
+Static pages: 5/5 generated in 687.5ms
+
+Route (app)
+  / (Static)
+  /_not-found (Static)
+  /history (Static)
+  /history/[id] (Dynamic)
+```
+
+---
+
+### Dev Ports
+
+| Service | Port | Start command |
+|---------|------|---------------|
+| Next.js dev server | 3000 | `npm run dev` from `frontend/` |
+| FastAPI backend | 8000 | `uvicorn src.api.main:app --port 8000` from root |
+
+The Next.js rewrites mean the browser only talks to port 3000. FastAPI is never exposed directly to the browser in this setup.
+
+---
+
+### Next Layer
+
+**Layer 6  Docker Compose Infrastructure** (7 services: frontend, api, chromadb, postgres, redis, nginx, localstack)
+
+Iron rule: discuss plan first, wait for "go", then build.

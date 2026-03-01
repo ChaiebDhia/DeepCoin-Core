@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: February 28, 2026 — Layer 0-3 audit complete (8354450): 6 security & hardening fixes. 36/36 tests pass. Layer 5 (Next.js) is next.
+# Last updated: March 2026 — Layer 5 complete (f61113f): Next.js 15 frontend, 22 files, 0 TS errors, prod build clean. Layer 6 (Docker) is next.
 
 ---
 
@@ -903,9 +903,14 @@ All 5 agents fully upgraded. All 3 routes tested and passing.
 - Tests: **34/34 unit tests passing** in 1.31s
 - Server start: `uvicorn src.api.main:app --port 8000 --log-level info`
 
-### Layer 5 — Next.js Frontend 🔲 PENDING
-Directory: `frontend/`
-Stack: Next.js 15 App Router, TypeScript 5, Tailwind CSS 4, shadcn/ui, TanStack Query 5, Zustand 4
+### Layer 5 — Next.js Frontend ✅ COMPLETE (f61113f)
+Directory: `frontend/` (22 files, 9,603 lines, 0 TypeScript errors)
+Stack: Next.js 15 App Router, TypeScript 5, Tailwind CSS v4, CVA, TanStack Query 5, Zustand 5, Axios
+Pages: `/` (classify + hero), `/history` (paginated table), `/history/[id]` (full detail)
+Components: CoinUploader (drag-drop + TTA toggle), AnalysisPanel (CNN + all 3 routes + PDF), HistoryTable, HealthDot
+Design: dark navy brand palette matching PDF report; shadcn-style CVA component system
+Backend proxy: `next.config.ts` rewrites `/api/*` → `http://localhost:8000/api/*`
+Prod build verified: `next build` clean in 4.8s, 5 routes compiled (4 static + 1 dynamic)
 
 ### Layer 6 — Docker + Infrastructure 🔲 PENDING
 File: `docker-compose.yml` (skeleton exists)
@@ -1533,5 +1538,22 @@ Write-Host "EXIT: $LASTEXITCODE"
 ✅ Unit tests                           36/36 pass at commit 8354450
 ```
 
-**NEXT: Layer 5 — Next.js frontend.**
-Say: "Start Layer 5 — Next.js frontend."
+**Layer 5 Next.js frontend: COMPLETE (f61113f).**
+
+```
+✅ Next.js 15 App Router           22 files, 9,603 lines, 0 TS errors
+✅ Zustand 5 state machine         UploadPhase (idle→uploading→processing→done→error)
+✅ TanStack Query 5                history cache, health polling
+✅ Axios + X-API-Key               request interceptor, ApiError normalisation
+✅ CVA components                  Button (5 variants), Badge (route+conf), Card, Spinner
+✅ CoinUploader                    drag-drop, file validation, TTA toggle (default true), progress
+✅ AnalysisPanel                   CNN top-5, Historian/Validator/Investigator, PDF download
+✅ HistoryTable                    skeleton loading, pagination, confidence mini-bar
+✅ HealthDot                       live /api/health polling every 30s
+✅ Dark navy design system         CSS vars + Tailwind v4 @theme, matches PDF palette
+✅ Prod build verified             next build clean 4.8s, 5 routes (4 static + 1 dynamic)
+✅ ENGINEERING_JOURNAL.md          Section 32 added
+```
+
+**NEXT: Layer 6 — Docker Compose Infrastructure.**
+Say: "Start Layer 6 — Docker."
