@@ -3,34 +3,54 @@
 /**
  * app/history/page.tsx — History list page
  * ==========================================
- * Fetches paginated history from GET /api/history and renders it
- * in a sortable HistoryTable.
+ * Paginated history of all coin analyses. Pagination is synced to the URL
+ * (?page=N) so the browser back button works correctly.
  *
- * WHY "use client" for a list page:
- *   Pagination state (skip) lives in React useState — purely client-side.
- *   TanStack Query handles the fetch + caching. Server components cannot
- *   use hooks. If we needed SSR for SEO we'd use a RSC wrapper that passes
- *   initial data as props — unnecessary for an internal analysis tool.
+ * WHY Suspense wraps HistoryContent:
+ *   Next.js App Router requires `useSearchParams()` to be enclosed in a
+ *   Suspense boundary. Without it the entire page opts out of static
+ *   prerendering and throws at build time.
+ *
+ * WHY URL-synced pagination:
+ *   With useState(skip), pressing back after navigating to a detail page
+ *   resets to page 1. Storing the page in the URL makes it part of browser
+ *   history, so back/forward navigation restores the correct page.
  */
 
-import { useState }          from "react";
-import { useQuery }          from "@tanstack/react-query";
-import { History }           from "lucide-react";
+import { Suspense }               from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useQuery }               from "@tanstack/react-query";
+import { History }                from "lucide-react";
 
-import { getHistory }        from "@/lib/api";
-import { HistoryTable }      from "@/components/history/HistoryTable";
-import { Spinner }           from "@/components/ui/spinner";
+import { getHistory }             from "@/lib/api";
+import { HistoryTable }           from "@/components/history/HistoryTable";
+import { Spinner }                from "@/components/ui/spinner";
 
 const PAGE_LIMIT = 20;
 
-export default function HistoryPage() {
-  const [skip, setSkip] = useState(0);
+// ── Main content (needs Suspense because of useSearchParams) ─────────────────
+
+function HistoryContent() {
+  const searchParams = useSearchParams();
+  const router       = useRouter();
+
+  const page = Math.max(1, Number(searchParams.get("page") ?? "1"));
+  const skip = (page - 1) * PAGE_LIMIT;
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey:  ["history", skip],
     queryFn:   () => getHistory(skip, PAGE_LIMIT),
     staleTime: 30_000,
   });
+
+  function handlePageChange(newSkip: number) {
+    const newPage = Math.floor(newSkip / PAGE_LIMIT) + 1;
+    if (newPage <= 1) {
+      router.push("/history");
+    } else {
+      router.push(`/history?page=${newPage}`);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -43,7 +63,7 @@ export default function HistoryPage() {
           </h1>
           {data && (
             <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-              {data.total} records — newest first
+              {data.total} records — newest first · page {page}
             </p>
           )}
         </div>
@@ -72,10 +92,27 @@ export default function HistoryPage() {
           total={data?.total ?? 0}
           skip={skip}
           limit={PAGE_LIMIT}
-          onPageChange={setSkip}
+          onPageChange={handlePageChange}
           isLoading={isLoading}
         />
       )}
     </div>
+  );
+}
+
+// ── Page entry (Suspense boundary required for useSearchParams) ──────────────
+
+export default function HistoryPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center gap-3 py-12 justify-center text-sm" style={{ color: "var(--text-muted)" }}>
+          <Spinner size={18} />
+          Loading history…
+        </div>
+      }
+    >
+      <HistoryContent />
+    </Suspense>
   );
 }

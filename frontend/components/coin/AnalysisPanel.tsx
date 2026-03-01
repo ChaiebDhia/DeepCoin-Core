@@ -17,17 +17,31 @@
  */
 
 import Link                                         from "next/link";
+import { useState, useEffect }                       from "react";
+import { motion }                                    from "framer-motion";
+import CountUp                                       from "react-countup";
 import { Download, Clock, Cpu, BookOpen, Shield, Search } from "lucide-react";
 
-import type { ClassifyResponse, Top5Item }          from "@/types/api";
+import type { ClassifyResponse, Top5Item }           from "@/types/api";
 import {
   formatConfidence, formatDate, confidenceBg,
   confidenceText, routeStyle, truncate,
-}                                                   from "@/lib/utils";
-import { pdfDownloadUrl }                           from "@/lib/api";
+}                                                    from "@/lib/utils";
+import { pdfDownloadUrl }                            from "@/lib/api";
 import { Badge, routeBadgeVariant, confBadgeVariant } from "@/components/ui/badge";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Button }                                   from "@/components/ui/button";
+import { Card, CardHeader, CardTitle, CardContent }  from "@/components/ui/card";
+import { Button }                                    from "@/components/ui/button";
+
+// ── Section colour palette — each route has its own identity ──────────────────
+
+const SECTION_COLORS = {
+  cnn:           { icon: "text-blue-400",    title: "text-blue-300"    },
+  historian:     { icon: "text-emerald-400", title: "text-emerald-300" },
+  validator:     { icon: "text-amber-400",   title: "text-amber-300"   },
+  investigator:  { icon: "text-purple-400",  title: "text-purple-300"  },
+} as const;
+
+type SectionVariant = keyof typeof SECTION_COLORS;
 
 // ── Helper: data row ──────────────────────────────────────────────────────────
 
@@ -44,26 +58,50 @@ function DataRow({ label, value }: { label: string; value?: string | null }) {
 // ── Section wrapper ───────────────────────────────────────────────────────────
 
 function Section({
-  icon, title, children,
-}: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  icon, title, children, variant = "cnn", delay = 0,
+}: {
+  icon:     React.ReactNode;
+  title:    string;
+  children: React.ReactNode;
+  variant?: SectionVariant;
+  delay?:   number;
+}) {
+  const colors = SECTION_COLORS[variant];
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2 text-blue-400">
-          {icon}
-          <CardTitle className="text-blue-300">{title}</CardTitle>
-        </div>
-      </CardHeader>
-      <CardContent>{children}</CardContent>
-    </Card>
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: "easeOut", delay }}
+    >
+      <Card>
+        <CardHeader>
+          <div className={`flex items-center gap-2 ${colors.icon}`}>
+            {icon}
+            <CardTitle className={colors.title}>{title}</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>{children}</CardContent>
+      </Card>
+    </motion.div>
   );
 }
 
 // ── CNN Section ───────────────────────────────────────────────────────────────
 
 function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
+  /**
+   * Animated confidence bars: start at 0% width, grow to real value after mount.
+   * WHY: instant full-width bars look static. A 700ms grow communicates
+   *      "these values were just computed in real-time."
+   */
+  const [barWidths, setBarWidths] = useState<number[]>(cnn.top5.map(() => 0));
+  useEffect(() => {
+    const t = setTimeout(() => setBarWidths(cnn.top5.map(i => i.confidence * 100)), 120);
+    return () => clearTimeout(t);
+  }, [cnn.top5]);
+
   return (
-    <Section icon={<Cpu size={16} />} title="CNN Classification">
+    <Section icon={<Cpu size={16} />} title="CNN Classification" variant="cnn" delay={0}>
       <div className="flex flex-col gap-3">
         {/* Main result */}
         <div className="flex items-center justify-between">
@@ -75,10 +113,14 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
           </div>
           <div className="text-right">
             <p className="text-xs text-[var(--text-muted)] mb-1">Confidence</p>
-            <span
-              className={`text-3xl font-black tabular-nums ${confidenceText(cnn.confidence)}`}
-            >
-              {formatConfidence(cnn.confidence)}
+            <span className={`text-3xl font-black tabular-nums ${confidenceText(cnn.confidence)}`}>
+              <CountUp
+                end={cnn.confidence * 100}
+                decimals={1}
+                suffix="%"
+                duration={1.1}
+                delay={0.15}
+              />
             </span>
           </div>
         </div>
@@ -101,7 +143,7 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
             Top-5 Predictions
           </p>
           <div className="rounded-lg overflow-hidden border border-[var(--border)]">
-            {cnn.top5.map((item: Top5Item) => (
+            {cnn.top5.map((item: Top5Item, idx: number) => (
               <div
                 key={item.rank}
                 className={`flex items-center gap-3 px-3 py-2 text-sm border-b border-[var(--border)] last:border-0
@@ -113,7 +155,10 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
                   <div className="w-24 h-1.5 rounded-full bg-[var(--surface-3)] overflow-hidden">
                     <div
                       className={`h-full rounded-full ${confidenceBg(item.confidence)}`}
-                      style={{ width: `${item.confidence * 100}%` }}
+                      style={{
+                        width:      `${barWidths[idx] ?? 0}%`,
+                        transition: "width 0.7s cubic-bezier(0.4,0,0.2,1)",
+                      }}
                     />
                   </div>
                   <span className={`text-xs font-medium tabular-nums w-12 text-right ${confidenceText(item.confidence)}`}>
@@ -133,7 +178,7 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
 
 function HistorianSection({ result }: { result: ClassifyResponse }) {
   return (
-    <Section icon={<BookOpen size={16} />} title="Historical Analysis">
+    <Section icon={<BookOpen size={16} />} title="Historical Analysis" variant="historian" delay={0.1}>
       <div className="flex flex-col gap-1">
         <DataRow label="CN Type"      value={result.cnn.label ? `CN ${result.cnn.label}` : undefined} />
         <DataRow label="Denomination" value={result.denomination} />
@@ -167,7 +212,7 @@ function ValidatorSection({ result }: { result: ClassifyResponse }) {
     "text-amber-400";
 
   return (
-    <Section icon={<Shield size={16} />} title="Forensic Validation">
+    <Section icon={<Shield size={16} />} title="Forensic Validation" variant="validator" delay={0.1}>
       <div className="flex flex-col gap-1">
         <DataRow label="CN Type"      value={result.cnn.label ? `CN ${result.cnn.label}` : undefined} />
         <DataRow label="Denomination" value={result.denomination} />
@@ -205,7 +250,7 @@ function ValidatorSection({ result }: { result: ClassifyResponse }) {
 
 function InvestigatorSection({ result }: { result: ClassifyResponse }) {
   return (
-    <Section icon={<Search size={16} />} title="Visual Investigation">
+    <Section icon={<Search size={16} />} title="Visual Investigation" variant="investigator" delay={0.1}>
       <div className="flex flex-col gap-3">
         {result.visual_description && (
           <div>

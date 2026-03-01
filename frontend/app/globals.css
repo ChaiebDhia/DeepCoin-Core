@@ -88,3 +88,27 @@ body {
 
 .deepcoin-prose p   { margin-bottom: 0.875rem; line-height: 1.7; }
 .deepcoin-prose p:last-child { margin-bottom: 0; }
+
+/* ── Agent Pipeline animations ───────────────────────────────────────────── */
+
+/**
+ * particle-flow: the glowing dot that travels along the connector rail
+ * between two agent cards in the mission control view.
+ */
+@keyframes particle-flow {
+  0%   { transform: translateX(-100%); opacity: 0; }
+  8%   { opacity: 1; }
+  92%  { opacity: 1; }
+  100% { transform: translateX(500%); opacity: 0; }
+}
+
+/**
+ * typewriter-blink: cursor blink used at the end of the latest log message.
+ */
+@keyframes typewriter-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+.animate-particle   { animation: particle-flow 1.4s linear infinite; }
+.animate-cursor     { animation: typewriter-blink 1s step-end infinite; }
