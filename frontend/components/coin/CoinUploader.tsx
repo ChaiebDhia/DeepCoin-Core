@@ -105,6 +105,84 @@ async function downsizeImage(file: File, maxPx: number = DOWNSIZE_MAX_PX): Promi
   });
 }
 
+// ── Image quality analyser ──────────────────────────────────────────────────
+
+/**
+ * Analyse a coin image for two quality issues and return human-readable warnings.
+ *
+ * WHAT it checks:
+ *   1. Minimum resolution — < 100×100 px is too small for reliable inference
+ *   2. Sharpness — Laplacian variance on a 96×96 greyscale canvas.
+ *      The Laplacian kernel [0,1,0; 1,-4,1; 0,1,0] is an edge-detector:
+ *      a sharp image has strong edges (high variance); a blurry image has
+ *      near-zero edges (low variance). Threshold < 60 = noticeably blurry.
+ *
+ * WHY soft warnings, not blockers:
+ *   The 3-route pipeline handles low-quality images gracefully — blurry photos
+ *   route to the Investigator which still produces a KB-grounded report.
+ *   Blocking uploads would harm the system's core "accept anything" promise.
+ *
+ * @returns Array of warning strings (empty = no issues detected).
+ */
+async function analyseImageQuality(file: File): Promise<string[]> {
+  if (typeof window === "undefined") return [];
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const warnings: string[] = [];
+      const { naturalWidth: W, naturalHeight: H } = img;
+
+      // ── Check 1: minimum resolution ──
+      if (W < 100 || H < 100) {
+        warnings.push(`Image is very small (${W}×${H} px) — results may be unreliable.`);
+      }
+
+      // ── Check 2: sharpness via Laplacian variance on 96×96 canvas ──
+      const SIZE = 96;
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = SIZE;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { resolve(warnings); return; }
+      ctx.drawImage(img, 0, 0, SIZE, SIZE);
+      const { data } = ctx.getImageData(0, 0, SIZE, SIZE);
+
+      // Greyscale conversion (luminance weights: Rec. 601)
+      const gray = new Float32Array(SIZE * SIZE);
+      for (let i = 0; i < SIZE * SIZE; i++) {
+        const p = i * 4;
+        gray[i] = 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2];
+      }
+
+      // Laplacian [0,1,0; 1,-4,1; 0,1,0] — compute variance of responses
+      let sum = 0, sumSq = 0, n = 0;
+      for (let y = 1; y < SIZE - 1; y++) {
+        for (let x = 1; x < SIZE - 1; x++) {
+          const lap =
+            gray[(y - 1) * SIZE + x] + gray[(y + 1) * SIZE + x] +
+            gray[y * SIZE + (x - 1)] + gray[y * SIZE + (x + 1)] -
+            4 * gray[y * SIZE + x];
+          sum   += lap;
+          sumSq += lap * lap;
+          n++;
+        }
+      }
+      const mean     = sum / n;
+      const variance = sumSq / n - mean * mean;
+
+      // < 60 is noticeably blurry on coin photographs
+      if (variance < 60) {
+        warnings.push("Image appears blurry — a sharper photo will improve accuracy.");
+      }
+
+      resolve(warnings);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve([]); };
+    img.src = url;
+  });
+}
+
 export function CoinUploader() {
   const {
     tta, setTta,
@@ -115,7 +193,8 @@ export function CoinUploader() {
     setSelectedFile, setUploadProgress, setPhase, setResult, setError, reset, setCancelFn,
   } = useDeepCoinStore();
 
-  const [isDragging, setIsDragging] = useState(false);
+  const [isDragging,      setIsDragging]      = useState(false);
+  const [qualityWarnings, setQualityWarnings] = useState<string[]>([]);
   const inputRef   = useRef<HTMLInputElement>(null);
   /**
    * AbortController ref for the in-flight classifyCoin Axios request.
@@ -176,7 +255,10 @@ export function CoinUploader() {
       return;
     }
     reset();
+    setQualityWarnings([]);      // clear any previous warnings
     setSelectedFile(file);
+    // Run quality check in background — does not block the UI
+    analyseImageQuality(file).then(setQualityWarnings);
   }
 
   // ── Drag events ────────────────────────────────────────────────────────────
@@ -298,7 +380,7 @@ export function CoinUploader() {
             </p>
             {/* Remove button */}
             <button
-              onClick={(e) => { e.stopPropagation(); abortRef.current?.abort(); abortRef.current = null; reset(); }}
+              onClick={(e) => { e.stopPropagation(); abortRef.current?.abort(); abortRef.current = null; setQualityWarnings([]); reset(); }}
               className="absolute top-2 right-2 text-[var(--text-muted)] hover:text-red-400 transition-colors"
               aria-label="Remove file"
             >
@@ -322,9 +404,46 @@ export function CoinUploader() {
                 {" "}— JPEG / PNG, max 10 MB
               </p>
             </div>
+            {/* Photography guidance — visible in idle state, hidden while dragging */}
+            {!isDragging && (
+              <div className="w-full rounded-lg px-3 py-2.5 text-left"
+                style={{ background: "rgba(59,130,246,0.07)", border: "1px solid rgba(59,130,246,0.15)" }}>
+                <p className="text-xs font-semibold text-blue-300 mb-2">📸 For best results</p>
+                <ul className="space-y-1">
+                  {([
+                    ["🪙", "Photograph the obverse — the portrait or main inscription side"],
+                    ["💡", "Even lighting, no glare — natural light works best"],
+                    ["📐", "Coin flat and in focus, fully visible in the frame"],
+                  ] as [string, string][]).map(([emoji, text]) => (
+                    <li key={text} className="text-xs text-[var(--text-secondary)] flex gap-2">
+                      <span>{emoji}</span><span>{text}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-[var(--text-muted)] mt-2 italic">
+                  Any quality works — the system automatically routes to the right specialist.
+                </p>
+              </div>
+            )}
           </>
         )}
       </div>
+
+      {/* Quality warnings — shown after file is selected if issues detected */}
+      {hasFile && qualityWarnings.length > 0 && (
+        <div className="rounded-lg px-3 py-2.5 text-xs"
+          style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)" }}>
+          <p className="font-semibold text-amber-300 mb-1.5">⚠ Image quality notice</p>
+          <ul className="space-y-0.5">
+            {qualityWarnings.map((w, i) => (
+              <li key={i} className="text-amber-200/80">{w}</li>
+            ))}
+          </ul>
+          <p className="text-[var(--text-muted)] mt-1.5">
+            The system will still analyse this image — accuracy may be lower than usual.
+          </p>
+        </div>
+      )}
 
       {/* Hidden file input */}
       <input

@@ -328,6 +328,13 @@ function InvestigatorSection({ result }: { result: ClassifyResponse }) {
             visual attributes and cross-referenced all <span className="text-purple-300 font-medium">9,541 types</span> in
             the Corpus Nummorum knowledge base to find the closest scholarly match.
           </p>
+          {/* Obverse tip */}
+          <p className="mt-2 pt-2 border-t border-purple-700/30 text-[var(--text-muted)]">
+            💡 <span className="text-purple-300 font-medium">Tip:</span> The classification model was
+            trained on <strong className="text-purple-200">obverse views</strong> (portrait or main
+            inscription side). If you have that side of the coin, re-uploading it may significantly
+            improve the confidence score.
+          </p>
         </div>
         {result.visual_description && (
           <div>
