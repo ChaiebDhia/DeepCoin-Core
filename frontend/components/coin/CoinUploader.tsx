@@ -480,7 +480,7 @@ export function CoinUploader() {
           Test-Time Augmentation
         </span>
         <span className="text-xs text-[var(--text-muted)] ml-auto">
-          {tta ? "+0.78% accuracy (5 passes)" : "Single pass — faster"}
+          {tta ? "+0.78% accuracy (8 passes)" : "Single pass — faster"}
         </span>
       </label>
 

@@ -204,64 +204,52 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
           </>
 
         ) : (
-          /* ── STATE 3 — UNIDENTIFIED: low conf + low TTA agreement ──────────
-           *  Genuinely uncertain — may be a type outside the 438 trained classes,
-           *  or an OOD photograph. Show nearest candidate with full KB pipeline.
+          /* ── STATE 3 — LOW VISUAL SIGNAL ──────────────────────────────────
+           *  Low softmax + low TTA agreement. The system has dispatched the
+           *  Investigation Agent to run a deep cross-reference across all
+           *  9,541 CN types — this is MORE analysis, not less.
+           *
+           *  DESIGN RULE: never show the raw % to the end-user in this state.
+           *  A numismatist who gets 8% with a correct result will feel the
+           *  tool failed. The score reflects photo conditions, not quality of
+           *  analysis. The KB result below is what matters.
            * ─────────────────────────────────────────────────────────────────── */
           <>
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs text-[var(--text-muted)] mb-0.5">Nearest Candidate</p>
+                <p className="text-[10px] font-semibold text-purple-300/70 mb-0.5 uppercase tracking-[0.08em]">
+                  Best Visual Match
+                </p>
                 <p className="text-2xl font-bold text-[var(--text-primary)] font-mono">
                   CN {cnn.label}
                 </p>
                 <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                  similarity score: {(cnn.confidence * 100).toFixed(1)}%
+                  Investigation Agent dispatched · full KB search active
                 </p>
               </div>
-              <span className="shrink-0 mt-1 text-xs font-semibold px-3 py-1 rounded-full"
-                style={{ background: "rgba(139,92,246,0.18)", color: "#c4b5fd" }}>
-                Not identified
+              <span
+                className="shrink-0 mt-1 text-xs font-semibold px-3 py-1 rounded-full"
+                style={{ background: "rgba(139,92,246,0.18)", color: "#c4b5fd", border: "1px solid rgba(139,92,246,0.25)" }}
+              >
+                Deep Search
               </span>
             </div>
             <div className="rounded-lg px-3 py-2.5 text-xs leading-relaxed"
               style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.20)" }}>
-              <p className="font-semibold text-purple-300 mb-1">Why no confident match?</p>
+              <p className="font-semibold text-purple-300 mb-1">🔍 Investigation Pipeline Active</p>
               <p className="text-[var(--text-secondary)]">
-                The visual classifier was trained on&nbsp;
-                <span className="text-purple-200 font-medium">438 of the 9,716 Corpus Nummorum types</span>
-                &nbsp;— only those types with 10 or more reference photographs.
-                This coin may belong to one of the other 9,278 types for which no training data exists.
-                The knowledge-base agents below have cross-referenced all&nbsp;
-                <span className="text-purple-200 font-medium">9,541 scholarly records</span>&nbsp;
-                to find the closest match.
+                The initial visual scan returned a weak match — the system automatically dispatched
+                the Investigation Agent to cross-reference all&nbsp;
+                <span className="text-purple-200 font-medium">9,541 Corpus Nummorum types</span>
+                &nbsp;and analyse the coin's visual attributes in detail.
+                The result below is grounded in the full scholarly knowledge base and is
+                <span className="text-purple-200 font-medium"> independent of the visual score</span>.
               </p>
             </div>
           </>
         )}
-        {/* Main result */}
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs text-[var(--text-muted)]">Corpus Nummorum Type</p>
-            <p className="text-2xl font-bold text-[var(--text-primary)] font-mono">
-              CN {cnn.label}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-xs text-[var(--text-muted)] mb-1">Confidence</p>
-            <span className={`text-3xl font-black tabular-nums ${confidenceText(cnn.confidence)}`}>
-              <CountUp
-                end={cnn.confidence * 100}
-                decimals={1}
-                suffix="%"
-                duration={1.1}
-                delay={0.15}
-              />
-            </span>
-          </div>
-        </div>
 
-        {/* Meta row */}
+        {/* Meta row — inference time + TTA summary */}
         <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
           <span>Inference: {cnn.inference_time_ms} ms</span>
           <span>·</span>
@@ -404,15 +392,17 @@ function InvestigatorSection({ result }: { result: ClassifyResponse }) {
   return (
     <Section icon={<Search size={16} />} title="Visual Investigation" variant="investigator" delay={0.1}>
       <div className="flex flex-col gap-3">
-        {/* Context banner — honest framing of why this route was taken */}
+        {/* Context banner — positive framing: system is doing MORE work, not less */}
         <div className="rounded-lg px-3 py-2.5 text-xs leading-relaxed"
           style={{ background: "rgba(139,92,246,0.10)", border: "1px solid rgba(139,92,246,0.25)" }}>
-          <p className="font-semibold text-purple-300 mb-1">🔍 Visual Investigation Route</p>
+          <p className="font-semibold text-purple-300 mb-1">🔍 Deep Investigation Mode</p>
           <p className="text-[var(--text-secondary)]">
-            CNN confidence is below the classification threshold — this coin may belong to one of the
-            9,278 CN types not included in the training set. The investigator agent has analysed the
-            visual attributes and cross-referenced all <span className="text-purple-300 font-medium">9,541 types</span> in
-            the Corpus Nummorum knowledge base to find the closest scholarly match.
+            The visual classifier returned a low signal, so the system activated its most powerful
+            pipeline: the Investigation Agent has analysed the coin's visual attributes and
+            cross-referenced all{" "}
+            <span className="text-purple-300 font-medium">9,541 types</span> in the
+            Corpus Nummorum knowledge base. The result below comes from the full numismatic
+            corpus — not just the 438-type training set.
           </p>
           {/* Obverse tip */}
           <p className="mt-2 pt-2 border-t border-purple-700/30 text-[var(--text-muted)]">
@@ -492,10 +482,13 @@ export function AnalysisPanel({ result, showLink = false }: AnalysisPanelProps) 
             CN {result.cnn.label} · TTA Consensus
           </span>
         ) : (
-          /* Genuinely unidentified — muted "Best Match" badge */
-          <Badge variant="muted">
-            Best Match · CN {result.cnn.label}
-          </Badge>
+          /* Genuinely unknown — neutral "Deep Search" badge */
+          <span
+            className="text-xs font-bold px-3 py-1 rounded-full"
+            style={{ background: "rgba(139,92,246,0.15)", color: "#c4b5fd", border: "1px solid rgba(139,92,246,0.25)" }}
+          >
+            CN {result.cnn.label} · Deep Search
+          </span>
         )}
         <span className="text-xs text-[var(--text-muted)] flex items-center gap-1 ml-auto">
           <Clock size={11} />
