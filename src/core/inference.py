@@ -178,7 +178,28 @@ class CoinInference:
         lab_eq     = cv2.merge((l_eq, a, b))
         img_bgr    = cv2.cvtColor(lab_eq, cv2.COLOR_LAB2BGR)
 
-        # ── Step 2: BGR → RGB (EfficientNet pretrained on ImageNet = RGB) ────
+        # ── Step 2: Aspect-preserving resize to 299×299 ──────────────────────
+        # WHY: EfficientNet-B3 was calibrated on 299×299 images during training.
+        # Raw uploads can be any size (200px thumbnail → 8 MP phone photo).
+        # get_val_transforms() has no resize because prep_engine.py already saved
+        # processed images at 299×299 — but production photos are never
+        # pre-processed. Simple cv2.resize() would distort coin geometry.
+        # We replicate _resize_and_pad() from prep_engine.py exactly:
+        #   scale so longest edge = 299 → zero-pad shortest edge to 299.
+        _SIZE   = 299
+        h, w    = img_bgr.shape[:2]
+        scale   = _SIZE / max(h, w)
+        new_h   = int(h * scale)
+        new_w   = int(w * scale)
+        interp  = cv2.INTER_AREA if scale < 1 else cv2.INTER_CUBIC
+        resized = cv2.resize(img_bgr, (new_w, new_h), interpolation=interp)
+        canvas  = np.zeros((_SIZE, _SIZE, 3), dtype=np.uint8)
+        y_off   = (_SIZE - new_h) // 2
+        x_off   = (_SIZE - new_w) // 2
+        canvas[y_off:y_off + new_h, x_off:x_off + new_w] = resized
+        img_bgr = canvas
+
+        # ── Step 3: BGR → RGB (EfficientNet pretrained on ImageNet = RGB) ────
         # OpenCV loads as BGR; feeding BGR to an RGB-pretrained model shifts
         # every colour channel → wrong feature activations throughout all layers.
         img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)

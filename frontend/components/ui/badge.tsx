@@ -16,7 +16,7 @@ const badgeVariants = cva(
       variant: {
         historian:    "bg-green-700/80  text-green-100",
         validator:    "bg-amber-600/80  text-amber-100",
-        investigator: "bg-red-700/80    text-red-100",
+        investigator: "bg-purple-700/80 text-purple-100",
         high:         "bg-green-600     text-white",
         medium:       "bg-amber-500     text-white",
         low:          "bg-red-500       text-white",

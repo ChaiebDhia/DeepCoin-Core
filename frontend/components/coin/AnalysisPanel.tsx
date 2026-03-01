@@ -88,11 +88,18 @@ function Section({
 
 // ── CNN Section ───────────────────────────────────────────────────────────────
 
+// ─── Confidence threshold displayed to end-users ─────────────────────────────
+// WHY 0.70: below 70% the top-1 prediction flips too often to be presented as
+// a classification. We still run the KB pipeline and show it as "closest match"
+// so the user always gets maximum information — just framed honestly.
+const DISPLAY_CONF_THRESHOLD = 0.70;
+
 function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
   /**
-   * Animated confidence bars: start at 0% width, grow to real value after mount.
-   * WHY: instant full-width bars look static. A 700ms grow communicates
-   *      "these values were just computed in real-time."
+   * Two visual modes:
+   * - IDENTIFIED  (conf ≥ 0.70):  "CN 1015" + green CountUp % + top-5 bars
+   * - UNIDENTIFIED (conf < 0.70): "Nearest Candidate: CN 1015" + purple pill
+   *                               + explanation + top-5 still shown
    */
   const [barWidths, setBarWidths] = useState<number[]>(cnn.top5.map(() => 0));
   useEffect(() => {
@@ -100,48 +107,60 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
     return () => clearTimeout(t);
   }, [cnn.top5]);
 
-  // Confidence context message — shown when the model is uncertain.
-  // WHY: raw % without context looks alarming. Users need to understand
-  // that <40% is expected for coins outside the 438 training types.
-  const lowConf = cnn.confidence < 0.40;
+  const identified = cnn.confidence >= DISPLAY_CONF_THRESHOLD;
 
   return (
     <Section icon={<Cpu size={16} />} title="CNN Classification" variant="cnn" delay={0}>
       <div className="flex flex-col gap-3">
-        {/* Main result */}
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs text-[var(--text-muted)]">Corpus Nummorum Type</p>
-            <p className="text-2xl font-bold text-[var(--text-primary)] font-mono">
-              CN {cnn.label}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-xs text-[var(--text-muted)] mb-1">Confidence</p>
-            <span className={`text-3xl font-black tabular-nums ${confidenceText(cnn.confidence)}`}>
-              <CountUp
-                end={cnn.confidence * 100}
-                decimals={1}
-                suffix="%"
-                duration={1.1}
-                delay={0.15}
-              />
-            </span>
-          </div>
-        </div>
 
-        {/* Low-confidence context note */}
-        {lowConf && (
-          <div className="rounded-lg px-3 py-2.5 text-xs leading-relaxed"
-            style={{ background: "rgba(139,92,246,0.10)", border: "1px solid rgba(139,92,246,0.25)" }}>
-            <span className="font-semibold text-purple-300">ℹ️ Expected result — </span>
-            <span className="text-[var(--text-secondary)]">
-              The CNN was trained on 438 of the 9,716 Corpus Nummorum types (those with ≥10 reference
-              images). Coins from the remaining 9,278 types will naturally produce low scores here — the
-              Visual Investigation agent cross-references the full 9,541-type knowledge base to find the
-              closest scholarly match.
-            </span>
+        {identified ? (
+          /* ── IDENTIFIED: show type + animated confidence % ─────────────── */
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-[var(--text-muted)]">Identified Type</p>
+              <p className="text-2xl font-bold text-[var(--text-primary)] font-mono">
+                CN {cnn.label}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-[var(--text-muted)] mb-1">Confidence</p>
+              <span className={`text-3xl font-black tabular-nums ${confidenceText(cnn.confidence)}`}>
+                <CountUp end={cnn.confidence * 100} decimals={1} suffix="%" duration={1.1} delay={0.15} />
+              </span>
+            </div>
           </div>
+        ) : (
+          /* ── UNIDENTIFIED: friendly framing, no scary % ─────────────────── */
+          <>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs text-[var(--text-muted)] mb-0.5">Nearest Candidate</p>
+                <p className="text-2xl font-bold text-[var(--text-primary)] font-mono">
+                  CN {cnn.label}
+                </p>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  similarity score: {(cnn.confidence * 100).toFixed(1)}%
+                </p>
+              </div>
+              <span className="shrink-0 mt-1 text-xs font-semibold px-3 py-1 rounded-full"
+                style={{ background: "rgba(139,92,246,0.18)", color: "#c4b5fd" }}>
+                Not identified
+              </span>
+            </div>
+            <div className="rounded-lg px-3 py-2.5 text-xs leading-relaxed"
+              style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.20)" }}>
+              <p className="font-semibold text-purple-300 mb-1">Why no confident match?</p>
+              <p className="text-[var(--text-secondary)]">
+                The visual classifier was trained on&nbsp;
+                <span className="text-purple-200 font-medium">438 of the 9,716 Corpus Nummorum types</span>
+                &nbsp;— only those types with 10 or more reference photographs.
+                This coin may belong to one of the other 9,278 types for which no training data exists.
+                The knowledge-base agents below have cross-referenced all&nbsp;
+                <span className="text-purple-200 font-medium">9,541 scholarly records</span>&nbsp;
+                to find the closest match.
+              </p>
+            </div>
+          </>
         )}
         {/* Main result */}
         <div className="flex items-center justify-between">
@@ -217,8 +236,10 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
 // ── Historian Section ─────────────────────────────────────────────────────────
 
 function HistorianSection({ result }: { result: ClassifyResponse }) {
+  const isLowConf  = result.cnn.confidence < DISPLAY_CONF_THRESHOLD;
+  const sectionTitle = isLowConf ? "Best Scholarly Match" : "Historical Analysis";
   return (
-    <Section icon={<BookOpen size={16} />} title="Historical Analysis" variant="historian" delay={0.1}>
+    <Section icon={<BookOpen size={16} />} title={sectionTitle} variant="historian" delay={0.1}>
       <div className="flex flex-col gap-1">
         <DataRow label="CN Type"      value={result.cnn.label ? `CN ${result.cnn.label}` : undefined} />
         <DataRow label="Denomination" value={result.denomination} />
@@ -246,13 +267,18 @@ function HistorianSection({ result }: { result: ClassifyResponse }) {
 // ── Validator Section ─────────────────────────────────────────────────────────
 
 function ValidatorSection({ result }: { result: ClassifyResponse }) {
+  // Even in validator route, if confidence is below display threshold, frame
+  // the section as "Best Match" so the user understands this is a suggestion.
+  const isLowConf   = result.cnn.confidence < DISPLAY_CONF_THRESHOLD;
   const statusColor =
     result.material_status === "consistent" ? "text-green-400" :
     result.material_status === "mismatch"   ? "text-red-400"   :
     "text-amber-400";
 
   return (
-    <Section icon={<Shield size={16} />} title="Forensic Validation" variant="validator" delay={0.1}>
+    <Section icon={<Shield size={16} />}
+      title={isLowConf ? "Best Match · Forensic Check" : "Forensic Validation"}
+      variant="validator" delay={0.1}>
       <div className="flex flex-col gap-1">
         <DataRow label="CN Type"      value={result.cnn.label ? `CN ${result.cnn.label}` : undefined} />
         <DataRow label="Denomination" value={result.denomination} />
@@ -355,9 +381,15 @@ export function AnalysisPanel({ result, showLink = false }: AnalysisPanelProps) 
         <span className={`text-xs font-bold px-3 py-1 rounded-full ${routeColor}`}>
           {routeLabel}
         </span>
-        <Badge variant={confBadgeVariant(result.cnn.confidence)}>
-          CN {result.cnn.label} · {formatConfidence(result.cnn.confidence)}
-        </Badge>
+        {result.cnn.confidence >= DISPLAY_CONF_THRESHOLD ? (
+          <Badge variant={confBadgeVariant(result.cnn.confidence)}>
+            CN {result.cnn.label} · {formatConfidence(result.cnn.confidence)}
+          </Badge>
+        ) : (
+          <Badge variant="muted">
+            Best Match · CN {result.cnn.label}
+          </Badge>
+        )}
         <span className="text-xs text-[var(--text-muted)] flex items-center gap-1 ml-auto">
           <Clock size={11} />
           {result.processing_time_s.toFixed(1)} s · {formatDate(result.timestamp)}
