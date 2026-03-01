@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: March 2026 — P2–16 production audit done (6dad389): GZip, SQL pagination, GPU semaphore, JSON logging, HSTS, X-Request-ID, canvas downsize, Cancel button, X button, CLAHE singleton. Layer 6 (Docker) is next.
+# Last updated: March 2026 — Phase 3+4 UX complete (e92c1ba): 3-way CNN display (Identified/TTA Consensus/Deep Search), confidence anxiety fix, CN links everywhere, delete button, filter bar, CTA banners, stats strip, copy link. Known issue: HSV patina/silver false mismatch (diagnosed, fix ready). HEAD: ca16ead. Layer 6 (Docker) is next.
 
 ---
 
@@ -906,17 +906,47 @@ All 5 agents fully upgraded. All 3 routes tested and passing.
 - Tests: **36/36 unit tests passing**
 - Server start: `uvicorn src.api.main:app --port 8000 --log-level info`
 
-### Layer 5 — Next.js Frontend ✅ COMPLETE v2 + Full Production Hardening (latest: 6dad389)
+### Layer 5 — Next.js Frontend ✅ COMPLETE v3 + Phase 3+4 UX (latest: e92c1ba)
 Directory: `frontend/` (25+ files, 0 TypeScript errors)
 Stack: Next.js 15 App Router, TypeScript 5, Tailwind CSS v4, CVA, TanStack Query 5, Zustand 5, Axios, Framer Motion 12, react-countup 6
 Pages: `/` (classify + hero), `/history` (paginated table, URL-synced), `/history/[id]` (full detail)
-Components: CoinUploader (drag-drop + TTA toggle + AbortController + Cancel button + canvas downsize), AgentPipeline (fullscreen modal, mission control, X button), AnalysisPanel (animated bars + CountUp + route colours), HistoryTable, HealthDot
+Components: CoinUploader (drag-drop + TTA toggle + AbortController + Cancel button + canvas downsize), AgentPipeline (fullscreen modal, mission control, X button), AnalysisPanel (animated bars + CountUp + route colours + 3-state CNN display), HistoryTable (filter bar + delete), HealthDot
 Animations: Framer Motion AnimatePresence transitions, particle-beam connectors in AgentPipeline, CountUp confidence number, CSS cubic-bezier bar growth
 Error boundaries: `app/error.tsx`, `app/history/error.tsx`, `app/history/[id]/error.tsx`
 URL pagination: `history/page.tsx` uses `useSearchParams` + `useRouter` wrapped in `<Suspense>`
 Security: 6 HTTP headers (CSP dev/prod split, `blob:` in img-src, HSTS 2yr preload, X-Frame-Options:DENY, nosniff, Referrer-Policy, Permissions-Policy), AbortController cancellation, blob URL lifecycle management (`useMemo` + cleanup `useEffect`), reactive Zustand selectors
 Design: dark navy brand palette matching PDF report; shadcn-style CVA component system
-70% confidence threshold: below shows "Nearest Candidate" / "Not Identified" purple pill
+
+**3-way CNN display states (702e3eb):**
+- `DISPLAY_CONF_THRESHOLD = 0.70`, `TTA_VOTE_THRESHOLD = 0.75` constants in AnalysisPanel
+- State 1 (conf ≥ 0.70): green CountUp % — Identified
+- State 2 (vote_fraction ≥ 0.75): teal "TTA Consensus" badge + "N/8 agree" — no raw %
+- State 3 (below both): purple "Deep Search" badge + "Best visual match" — no raw %, no failure language
+- Header badge follows same 3-state colour (green/teal/purple)
+- `types/api.ts`: added `vote_fraction: number | null`, `tta_passes: number`, `temperature: number` to `CnnResult`
+
+**Confidence anxiety elimination (451f3f2):**
+- State 3 reframed: no "could not classify" language, no raw %, "Deep Search" / "Best Visual Match"
+- Removed duplicate raw confidence block (technical debt that defeated State-3 suppression)
+- Investigator banner: "Deep Investigation Mode" positive framing
+- TTA label fixed: hardcoded "5 passes" → reads `cnn.tta_passes` (correct: 8)
+- History detail page full rewrite: Quick Facts grid, action bar, `getConfidenceTier()`, metadata strip
+
+**Phase 3 UX — CN links, delete, filter bar (0455d45):**
+- Backend: `delete_by_id(record_id) -> bool` in `_store.py` (threading.Lock, DELETE SQL)
+- Backend: `DELETE /api/history/{id}` endpoint (204/404 REST semantics)
+- Frontend: `deleteHistoryItem(id)` in `lib/api.ts`; `useMutation` + `invalidateQueries` in history page
+- HistoryTable full rewrite: filter bar (search input + route pills, client-side `useMemo`)
+- Delete button: HTML5-compliant sibling of `<Link>` (not nested inside `<a>`), `Trash2` icon, `window.confirm()` guard
+- Top-5 table: CN label → `<a href=corpus-nummorum.eu/types/{id} target=_blank rel=noopener noreferrer>` with `↗`
+
+**Phase 4 UX — CTA banners, linked badges, stats, copy link (e92c1ba):**
+- CTA banner in CnnSection below top-5: gradient border, ExternalLink hover micro-animation (+2px diagonal)
+- Header badge (all 3 states): wrapped in `<a style="display:contents">` — zero layout impact, badge = CN link
+- CN Type rows in HistorianSection + ValidatorSection: blue `<a>` + ExternalLink icon
+- History detail `<h1>` CN label: direct external link to CN record
+- History stats strip: SQL total count (global) + per-route breakdown + avg confidence (page window)
+- Copy link button: `navigator.clipboard.writeText(window.location.href)`, 2s `Check` / "Copied!" feedback
 
 **Cancel / Abort architecture:**
 - `CoinUploader`: red Cancel button replaces Analyse during loading; `handleCancel()` calls `abortRef.current.abort()` + `reset()`
@@ -1210,7 +1240,18 @@ pytest (9.0.2)      # unit testing (34 tests across 3 files)
 | `1ab77e6` | feat: Cancel button (AbortController) + CLAHE singleton in CoinInference.__init__() |
 | `9ddad23` | feat: X button on AgentPipeline modal + _cancelFn bridge in Zustand store |
 | `c7ef23d` | feat: P2-P9 audit — SQL COUNT, GPU semaphore, docs gate, SQL pagination, upload delete, GZip, metrics auth, noopener |
-| `6dad389` | feat: P10-P16 audit — HSTS, JSON logging, RAG BM25 warning, CSP prod, sync history, X-Request-ID, canvas downsize ← LATEST |
+| `6dad389` | feat: P10-P16 audit — HSTS, JSON logging, RAG BM25 warning, CSP prod, sync history, X-Request-ID, canvas downsize |
+| `b3e7030` | fix: strip non-ASCII chars from upload filenames (re.ASCII flag) + open(rb)+frombuffer in cv imread calls |
+| `07f8ca6` | fix: probe Ollama model availability before use — prevents indefinite hang; bump classify timeout to 10 min |
+| `cadfac0` | feat: auto-crop coin region before CLAHE — HoughCircles + contour fallback + centre-crop; fixes low confidence on screenshots |
+| `9e09438` | feat: CNN station shows preprocessing steps (auto-crop + CLAHE) in mission control log; friendlier subtitles |
+| `c8b74a7` | feat: preprocessor stage in mission control + glow fix + 8-pass TTA |
+| `29098e6` | fix: temperature scaling + vote-fraction routing override for screenshot uploads |
+| `702e3eb` | feat: 3-way CNN display — Identified / TTA Consensus / Deep Search; DISPLAY_CONF_THRESHOLD=0.70, TTA_VOTE_THRESHOLD=0.75 |
+| `451f3f2` | ux: eliminate confidence anxiety + enrich history detail page (Quick Facts grid, getConfidenceTier, TTA label fix) |
+| `0455d45` | feat: CN links in top-5, delete button + filter bar (Phase 3 UX) + DELETE /api/history/{id} backend |
+| `e92c1ba` | feat: CN CTAs, linked type rows, stats strip, copy link (Phase 4 UX) |
+| `ca16ead` | docs: engineering journal sections 41-45 — Phase 3+4 UX, HSV patina false-mismatch analysis ← LATEST |
 
 ---
 
@@ -1453,8 +1494,40 @@ records = [r for r in metadata if "error" not in r]
 All Layer 3 enterprise upgrade items are COMPLETE.
 All PDF quality issues resolved through commits 509834f → 68a3c21.
 All Layer 5 live-testing UX issues resolved through d732767 → 47d3ef9.
-No remaining scheduled issues.
+Phase 3+4 UX complete through e92c1ba.
+One open engineering issue remains (see below).
 See Section 7 Build Order for what was fixed and in which commit.
+
+---
+
+### OPEN ISSUE — HSV Patina/Silver False Mismatch (NOT YET FIXED)
+
+**Symptom:** Validator reports `"mismatch"` at 94% detection confidence for patinated ancient silver coins. PDF displays "bronze detected / silver expected" with `uncertainty: low`.
+
+**Root cause:** Ancient silver sulphide patina (Ag₂S) has HSV values S≈55–80, H≈15–25. These fall inside the bronze detector window (`H:5–25, S:50–180`) and above the silver mask ceiling (`S < 40`). All 3 crop scales vote "bronze" → `vote_count=3` → `uncertainty="low"` → `det_confidence≈0.94`. The system is confidently wrong.
+
+**File:** `src/agents/validator.py`
+- Silver mask: `cv2.inRange(hsv, np.array([0,0,80]), np.array([179,40,255]))` at ~line 196 — `S_max=40` is the problem
+- `_METAL_THRESHOLDS["bronze"]`: `h_min:5, h_max:25, s_min:50, s_max:180` — patina falls inside
+- `_materials_match()`: ~line 260 — returns False, triggering `"mismatch"` status
+
+**Fix 1 — raise silver saturation ceiling:**
+```python
+# Change S_max from 40 → 70:
+silver_mask = cv2.inRange(hsv, np.array([0, 0, 80]), np.array([179, 70, 255]))
+```
+Captures lightly toned silver (S=40–70) without overlapping true bronze (S>70 is visually reddish).
+
+**Fix 2 — CNN+KB consensus override:**
+```python
+# If CNN conf > 0.85 AND KB says silver AND HSV says bronze → emit "uncertain"
+if cnn_confidence > 0.85 and expected == "silver" and detected == "bronze":
+    status = "uncertain"
+```
+Validator yields to CNN+KB consensus when HSV patina ambiguity is high.
+
+**Test case:** `data/processed/21027/` (CN type 21027, silver drachm, conf 42.9%)
+**Status:** Fix identified. Waiting for bronze sample validation before applying S_max change.
   → Structured fields scraped from corpus-nummorum.eu
   → Validated by Berlin-Brandenburg Academy of Sciences (DFG-funded)
   → Stored in ChromaDB, searched via hybrid BM25+vector
@@ -1706,6 +1779,43 @@ tsc: 0 errors | build: clean (5 routes)
 ✅ P14: sync history append         removed asyncio.to_thread — SQLite WAL write < 1ms, no benefit
 ✅ P15: X-Request-ID middleware     every request gets UUID4; echoed in response header
 ✅ P16: canvas downsize             downsizeImage(file, maxPx=1024) before upload; JPEG 0.85
+```
+
+**Layer 5 Phase 3+4 UX: COMPLETE (e92c1ba) — 0 TS errors.**
+
+```
+✅ 3-way CNN display               Identified (green) / TTA Consensus (teal) / Deep Search (purple)
+✅ DISPLAY_CONF_THRESHOLD=0.70     raw % hidden below 0.70 — replaces "Not Identified" framing
+✅ TTA_VOTE_THRESHOLD=0.75         6/8 TTA agreement → State 2 (TTA Consensus)
+✅ vote_fraction / tta_passes      new fields in types/api.ts CnnResult
+✅ Confidence anxiety fix          no failure language in State 3; duplicate block removed
+✅ TTA label fix                   hardcoded "5 passes" → reads cnn.tta_passes (correct: 8)
+✅ History detail rewrite          Quick Facts grid, action bar, getConfidenceTier(), metadata strip
+✅ delete_by_id() + DELETE endpoint  204/404 REST semantics, threading.Lock
+✅ useMutation + invalidateQueries  TanStack Query idiomatic delete wiring
+✅ HistoryTable filter bar          search + route pills, client-side useMemo
+✅ Delete button HTML5-compliant    sibling of <Link> (not nested), Trash2, window.confirm
+✅ CN links in top-5               blue <a> with ↗ and noopener noreferrer
+✅ CTA banner                      below top-5, ExternalLink hover micro-animation
+✅ Header badge as CN link          display:contents wrapper — zero layout impact
+✅ CN Type rows linked             ExternalLink icon in Historian + Validator sections
+✅ History <h1> linked              direct CN record link
+✅ Stats strip                     SQL total (global) + route breakdown + avg conf (page)
+✅ Copy link button                navigator.clipboard + 2s Check feedback
+```
+
+**KNOWN ISSUE: HSV patina/silver false mismatch (NOT YET FIXED).**
+
+```
+Symptom:   validator reports "bronze detected / silver expected" at 94% confidence for patinated silver coins
+Root cause: ancient silver sulphide patina has S≈55-80 and H≈15-25
+           → falls inside bronze detector window (H:5-25, S:50-180)
+           → silver mask threshold S < 40 misses it entirely
+Fix 1:     raise silver S_max 40 → 70 in cv2.inRange() (validator.py ~line 196)
+Fix 2:     consensus override: if CNN conf > 0.85 AND expected==silver AND detected==bronze
+           → emit status="uncertain" instead of "mismatch"
+Test case: data/processed/21027/ (CN type 21027, silver, conf 42.9%)
+Status:    fix identified, parameter validation against bronze test set required before applying
 ```
 
 **NEXT: Layer 6 — Docker Compose Infrastructure.**
