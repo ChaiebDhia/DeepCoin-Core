@@ -7,7 +7,7 @@
 **Period**: PFE (Final Year Engineering Internship), Feb–July 2026  
 **GitHub**: https://github.com/ChaiebDhia/DeepCoin-Core  
 **Author**: Dhia Chaïeb  
-**Status as of**: February 28, 2026 — Layer 0-3 Enterprise Audit COMPLETE (commit 8354450). 6 findings fixed. 36/36 unit tests pass. Layer 5 (Next.js) is next.  
+**Status as of**: March 2026 — 3-way CNN display, confidence anxiety UX fix, Phase 3+4 frontend (, CN links, delete, filter bar, CTA banners, stats strip, copy link). HSV patina/silver false-mismatch fully diagnosed (not yet fixed). HEAD: e92c1ba. Layer 6 (Docker) is next.  
 
 ---
 
@@ -44,6 +44,20 @@
 29. [Complete Bug Registry Addendum — Bugs 14 and 15](#29-complete-bug-registry-addendum--bugs-14-and-15)
 30. [Final Git History — All Commits to 1b210ef](#30-final-git-history--all-commits-to-1b210ef)
 31. [Phase 15 — Layer 0-3 Enterprise Audit](#31-phase-15--layer-0-3-enterprise-audit)
+32. [Layer 5 — Next.js 15 Enterprise Frontend](#32-layer-5--nextjs-15-enterprise-frontend-march-2026)
+33. [Layer 5 v2 — Animated Mission Control & UX Overhaul](#33-layer-5-v2--animated-mission-control--ux-overhaul-march-2026)
+34. [Layer 5 Security Audit — HTTP Headers, AbortController, Blob URLs](#34-layer-5-security-audit--http-headers-abortcontroller-blob-urls-march-2026)
+35. [Layer 5 Runtime Proxy Fixes — IPv6 + Turbopack Timeout](#35-layer-5-runtime-proxy-fixes--ipv6--turbopack-timeout-march-2026)
+36. [Layer 5 Live Testing UX Fixes](#36-layer-5-live-testing-ux-fixes--health-dot-modal-synthesis-march-2026)
+37. [CLAHE Train/Inference Mismatch + Investigator UX](#37-clahe-traininference-mismatch--investigator-ux-march-2026)
+38. [Cancel Button & Abort Architecture](#38-cancel-button--abort-architecture-march-2026)
+39. [Backend Production Audit — P2 to P9](#39-backend-production-audit--p2-to-p9-march-2026)
+40. [Deep Hardening Audit — P10 to P16](#40-deep-hardening-audit--p10-to-p16-march-2026)
+41. [3-Way CNN Display States — Identified / TTA Consensus / Deep Search](#41-3-way-cnn-display-states--identified--tta-consensus--deep-search-march-2026)
+42. [Confidence Anxiety Elimination + History Detail Enrichment](#42-confidence-anxiety-elimination--history-detail-enrichment-march-2026)
+43. [Phase 3 — CN Links, Delete Button, Filter Bar](#43-phase-3--cn-links-delete-button-filter-bar-march-2026)
+44. [Phase 4 — CTA Banner, Linked Badges, Stats Strip, Copy Link](#44-phase-4--cta-banner-linked-badges-stats-strip-copy-link-march-2026)
+45. [Known Issue: Material Check False Mismatch — Patina/HSV Problem](#45-known-issue-material-check-false-mismatch--patinahsv-problem-march-2026)
 
 ---
 
@@ -5775,4 +5789,875 @@ The system works correctly. Use `data/processed/*/` files for testing, not web t
 
 ---
 
-*Last updated: March 2026  Sections 34-40 added covering Layer 5 security audit, proxy fixes, live testing UX fixes, CLAHE train/inference fix, cancel/abort architecture, and P2-P16 backend hardening. Layer 6 (Docker) is next.*
+## 41. 3-Way CNN Display States — Identified / TTA Consensus / Deep Search (March 2026)
+
+**Commit**: `702e3eb`
+**Date**: March 2026
+**Files changed**: `frontend/components/coin/AnalysisPanel.tsx`, `frontend/types/api.ts`
+
+---
+
+### The Problem This Solves
+
+Before this commit, the CNN result block showed one number: the raw softmax confidence percentage. This created two UX failures at opposite ends:
+
+**High confidence (e.g. 91%):** Fine — looks impressive, user trusts it.
+
+**Low confidence (e.g. 22%):** The user sees "22%" and interprets it as "the AI failed". But that 22% *is the correct and expected output* — the AI examined 438 types and found no strong visual match, which is exactly the right behaviour for a coin outside the training distribution. Showing a raw percentage without context causes the user to lose trust in a system that is working correctly.
+
+The fix: show *different UI states* depending on confidence tier, not a raw number in all three cases.
+
+---
+
+### The Three States
+
+**State 1 — Identified** (`conf ≥ 0.70`)
+
+The model is confident enough to call this a known identification.
+
+```tsx
+// CnnSection.tsx — State 1
+<span className="text-green-400 font-bold text-2xl">
+  <CountUp end={conf * 100} decimals={1} duration={1.2} />%
+</span>
+<span className="text-xs text-zinc-400 uppercase tracking-widest">Confidence</span>
+```
+
+Green CountUp animation (counts from 0 to the real percentage). Radiates authority — the model is sure.
+
+**State 2 — TTA Consensus** (`conf < 0.70` but `vote_fraction ≥ 0.75`)
+
+The raw softmax is below the display threshold but the 8-pass TTA ensemble agreed on the same class in at least 6 out of 8 passes. This is meaningful signal even with a modest softmax number.
+
+```tsx
+// State 2 — teal badge instead of raw %
+<span className="rounded-full bg-teal-900/60 border border-teal-500/40 px-3 py-1 text-teal-300 text-sm">
+  TTA Consensus
+</span>
+<span className="text-xs text-zinc-400 mt-1">
+  8 passes · {Math.round(vote_fraction * 8)}/8 agree
+</span>
+```
+
+No raw percentage is shown. The message is: "the repeated-pass ensemble converged on this answer." This frames uncertainty as a process result rather than a failure.
+
+**State 3 — Deep Search** (`conf < 0.70` and `vote_fraction < 0.75`)
+
+Neither the single pass nor the ensemble is decisive. The investigator agent will take over. The user should expect a KB-based match rather than a hard classification.
+
+```tsx
+// State 3 — purple badge
+<span className="rounded-full bg-purple-900/60 border border-purple-500/40 px-3 py-1 text-purple-300 text-sm">
+  Deep Search
+</span>
+<span className="text-xs text-zinc-500 mt-1 italic">
+  Best visual match — investigation pipeline active
+</span>
+```
+
+No raw number. No failure language. "Best visual match" anchors the label as useful output, not a miss.
+
+---
+
+### Constants Added to `AnalysisPanel.tsx`
+
+```tsx
+const DISPLAY_CONF_THRESHOLD = 0.70;   // below this: don't show raw confidence
+const TTA_VOTE_THRESHOLD     = 0.75;   // ≥75% TTA agreement → State 2 (TTA Consensus)
+```
+
+Why 0.70 and 0.75 specifically?
+
+`0.70` was chosen empirically: coins showing 70%+ are consistently from the correct dynasty and mint regardless of small visual degradation. Below 70%, the raw number is misleading without context.
+
+`0.75` (= 6/8 TTA passes) is the minimum that indicates *directional* agreement. 4/8 is a coin-flip — not displayable. 6/8 means the model was nudged by augmentation noise but the underlying signal points consistently to one type.
+
+---
+
+### New Fields in `types/api.ts`
+
+```typescript
+export interface CnnResult {
+  class_id    : number;
+  label       : string;
+  confidence  : number;
+  top5        : Top5Item[];
+  tta_used    : boolean;
+  // v2 — added for 3-state display
+  vote_fraction : number | null;   // fraction of TTA passes that agreed with top-1
+  tta_passes    : number;          // total passes run (always 8 in V3)
+  temperature   : number;          // temperature scaling factor applied post-softmax
+}
+```
+
+`vote_fraction` is `null` when TTA was not run (single inference mode). Frontend guards: `if (cnn.vote_fraction !== null && cnn.vote_fraction >= TTA_VOTE_THRESHOLD)`.
+
+---
+
+### Header Badge 3-Way Routing
+
+The top confidence badge (shown next to the CN type ID in the card header) also follows the 3-state logic:
+
+```tsx
+const badgeStyle =
+  conf >= DISPLAY_CONF_THRESHOLD   ? "bg-green-900/60 border-green-500/40 text-green-300"  :
+  isConsensus                      ? "bg-teal-900/60  border-teal-500/40  text-teal-300"   :
+                                     "bg-purple-900/60 border-purple-500/40 text-purple-300";
+
+const badgeLabel =
+  conf >= DISPLAY_CONF_THRESHOLD   ? `${(conf * 100).toFixed(1)}%` :
+  isConsensus                      ? "TTA Consensus"               :
+                                     "Deep Search";
+```
+
+Every visual element reinforces the same tier signal — badge colour, label text, and the confidence block all change together. The user cannot mistake a Deep Search result for an Identified one.
+
+---
+
+### Commit `702e3eb` — March 2026
+
+```
+feat: 3-way CNN display  Identified / TTA Consensus / Not Identified
+
+- DISPLAY_CONF_THRESHOLD = 0.70; TTA_VOTE_THRESHOLD = 0.75
+- State 1: green CountUp % (conf >= 70%)
+- State 2: teal "TTA Consensus" badge + "N/8 agree" (vote_fraction >= 0.75)
+- State 3: purple "Deep Search" badge + "Best visual match"
+- types/api.ts: vote_fraction, tta_passes, temperature
+- header confidence badge follows same 3-state logic
+```
+
+---
+
+## 42. Confidence Anxiety Elimination + History Detail Enrichment (March 2026)
+
+**Commit**: `451f3f2`
+**Date**: March 2026
+**Files changed**: `frontend/components/coin/AnalysisPanel.tsx`, `frontend/app/history/[id]/page.tsx`
+
+---
+
+### What Is "Confidence Anxiety"?
+
+After deploying the 3-state display from Section 41, live testing identified a second problem: even with the "Deep Search" badge replacing the raw number, the investigator section still opened with alarming framing.
+
+Old text:
+```
+"This coin could not be classified with high confidence (21.3%).
+Visual investigation is underway."
+```
+
+This sentence contains two anxiety triggers:
+1. The word **"could not"** — implies failure
+2. The raw **"21.3%"** — shown even though State 3 explicitly suppresses it in the CNN block
+
+The user reads this and thinks the AI broke. But the AI is doing exactly what it was designed to do: routing an unknown coin to the specialist investigator.
+
+---
+
+### State 3 Redesign — The "Best Visual Match" Philosophy
+
+Every element in State 3 was rewritten around one principle: **the AI always returns something useful**.
+
+```tsx
+// Old — anxiety-inducing framing
+"This coin could not be classified (21.3% confidence)."
+"Investigator fallback activated."
+
+// New — positive framing
+"Best Visual Match"           ← label in CNN block
+"Deep Search active"          ← badge
+"🔍 Investigation Pipeline Active"  ← investigator section header
+"The specialist investigator cross-referenced 9,541 Corpus Nummorum types
+ using visual attributes and semantic similarity."   ← explanatory text
+```
+
+No failure language. No raw percentage in State 3. The CNN result explains *what the best candidate was*, and the investigator section explains *what was done with it*.
+
+---
+
+### Removed: Duplicate "Main Result" Confidence Block
+
+During the AnalysisPanel audit, a duplicate confidence block was found near the bottom of the component — a leftover from an earlier draft that was never removed when the 3-state display was added at the top.
+
+```tsx
+// REMOVED — technical debt, duplicate of the State 1/2/3 block at top
+{result.cnn && result.cnn.confidence > 0 && (
+  <div className="mt-4 p-3 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+    <span className="text-zinc-400 text-xs uppercase tracking-wide">Confidence</span>
+    <span className="text-white font-bold text-xl ml-3">
+      {(result.cnn.confidence * 100).toFixed(1)}%
+    </span>
+  </div>
+)}
+```
+
+**Why this was harmful:** In State 3 the top block shows no percentage on purpose. This duplicate block *always* rendered the raw number — silently defeating the entire confidence-anxiety fix. A user in State 3 would see "Deep Search" at the top and then "21.3%" lower down. Contradictory.
+
+Lesson: when refactoring a component, explicitly search for every render of the data being replaced. The new code was correct; the old code was hiding in plain sight.
+
+---
+
+### TTA Label: "5 passes" → "8 passes"
+
+The TTA meta row previously displayed "Yes (5 passes · N/5 agree)". The actual TTA implementation uses 8 passes (original + HFlip + Rotate+10° + Rotate-10° + BrightnessShift + 3 crops). The `tta_passes` field returned by the backend was always `8`, but the frontend hardcoded "5" in the label string.
+
+Fixed: label reads from `cnn.tta_passes` directly.
+
+```tsx
+// Old — hardcoded wrong number
+`Yes (5 passes · ${Math.round(vote_fraction * 5)}/5 agree)`
+
+// New — reads from API response
+`Yes (${cnn.tta_passes} passes · ${Math.round(vote_fraction * cnn.tta_passes)}/${cnn.tta_passes} agree)`
+```
+
+---
+
+### History Detail Page — Full Rewrite
+
+Before this commit, the history detail page (`/history/[id]`) showed the raw JSON response in a monospace block. Engineering-useful, user-hostile.
+
+The rewrite produced a structured layout with four zones:
+
+**Zone 1 — Page header**
+```tsx
+<h1 className="text-2xl font-bold text-white">
+  {result.cnn.label ? `CN ${result.cnn.label}` : "Unknown Coin"} — Analysis Report
+</h1>
+<span className="text-zinc-500 text-sm">
+  {new Date(result.timestamp).toLocaleString()}
+</span>
+```
+
+**Zone 2 — Action bar (PDF download, copy link)**
+```tsx
+<a href={`/api/reports/${result.pdf_filename}`} download>
+  <Button variant="outline" size="sm">Download PDF</Button>
+</a>
+```
+(Copy Link button added in Section 44.)
+
+**Zone 3 — Quick Facts grid**
+A 4-column CSS grid of key fields: Type ID, Route, Confidence tier, Material Check. Each cell has a label in muted zinc and a value in white. No tables, no JSON — clean data display matching the brand language of the classify page.
+
+**Zone 4 — Metadata strip**
+```tsx
+<div className="flex gap-6 text-xs text-zinc-500 border-t border-zinc-800/50 pt-3 mt-4">
+  <span>Full analysis ID: {result.id}</span>
+  <span>Image: {result.filename}</span>
+  <span>Route taken: {result.route_taken}</span>
+</div>
+```
+
+**`getConfidenceTier()` helper function:**
+```tsx
+function getConfidenceTier(conf: number): { label: string; colour: string } {
+  if (conf >= 0.70) return { label: "Identified",    colour: "text-green-400"  };
+  if (conf >= 0.40) return { label: "TTA Consensus", colour: "text-teal-400"   };
+  return                    { label: "Deep Search",  colour: "text-purple-400" };
+}
+```
+Used in the Quick Facts grid and in the `<h1>` colour. Mirrors the logic in AnalysisPanel so the detail page and the live classify view are visually consistent.
+
+---
+
+### Commit `451f3f2` — March 2026
+
+```
+ux: eliminate confidence anxiety + enrich history detail page
+
+- State 3: reframe as "Best Visual Match" + "Deep Search" — no failure language
+- remove duplicate raw confidence block (technical debt, defeated the State-3 fix)
+- investigator section: "Deep Investigation Mode" positive banner
+- TTA label: hardcoded "5 passes" → reads cnn.tta_passes (correct: 8)
+- history detail page: full rewrite with Quick Facts grid, action bar,
+  getConfidenceTier() helper, metadata strip
+```
+
+---
+
+## 43. Phase 3 — CN Links, Delete Button, Filter Bar (March 2026)
+
+**Commit**: `0455d45`
+**Date**: March 2026
+**Files changed**: `src/api/_store.py`, `src/api/routes/history.py`, `frontend/lib/api.ts`, `frontend/components/history/HistoryTable.tsx`, `frontend/app/history/page.tsx`, `frontend/components/coin/AnalysisPanel.tsx`
+
+---
+
+### Backend: `delete_by_id()` — SQLite DELETE with Threading Lock
+
+```python
+def delete_by_id(record_id: str) -> bool:
+    """
+    Delete a single classification record by its UUID.
+
+    Returns True if a row was deleted, False if the ID was not found.
+    The threading.Lock() inherited from _STORE_LOCK ensures this completes
+    atomically even if two delete requests arrive simultaneously.
+
+    WHY bother with lock on a DELETE?
+    SQLite WAL mode allows concurrent readers but only one writer.
+    Without the lock, two simultaneous DELETEs on different IDs would
+    both try to open write transactions at the same time — SQLite would
+    serialise them internally but could return a SQLITE_BUSY error if
+    the write timeout is hit. Acquiring the lock at the Python level
+    means only one thread ever touches the write path at a time.
+    """
+    with _STORE_LOCK:
+        conn = _get_conn()
+        cur  = conn.execute("DELETE FROM classifications WHERE id = ?", (record_id,))
+        conn.commit()
+        return cur.rowcount > 0   # True = found and deleted, False = not found
+```
+
+The `rowcount > 0` return value lets the FastAPI route distinguish between a successful delete (204 No Content) and a record that does not exist (404 Not Found) — correct REST semantics.
+
+---
+
+### Backend: `DELETE /api/history/{record_id}` Endpoint
+
+```python
+# src/api/routes/history.py
+@router.delete("/history/{record_id}", status_code=204)
+async def delete_history_item(
+    record_id : str,
+    _auth     : None = Depends(require_api_key),
+) -> Response:
+    """
+    Delete a single history record by UUID.
+
+    204 No Content  — successfully deleted
+    404 Not Found   — record_id does not exist in the DB
+    
+    Uses asyncio.to_thread because _store.delete_by_id() holds a threading.Lock()
+    and blocking the FastAPI event loop on a lock acquisition would prevent other
+    requests from being processed until the lock is released.
+    """
+    deleted = await asyncio.to_thread(delete_by_id, record_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Record {record_id!r} not found")
+    return Response(status_code=204)   # 204 = success, no body
+```
+
+Note the asymmetry with history_append: in Section 40 (P14), we removed `asyncio.to_thread` from `history_append` because it holds the lock for < 1 ms. DELETE is also fast but involves the lock acquisition path — keeping `to_thread` here is conservative and correct.
+
+---
+
+### Frontend: `deleteHistoryItem()` in `lib/api.ts`
+
+```typescript
+export async function deleteHistoryItem(id: string): Promise<void> {
+  /**
+   * DELETE /api/history/{id} — removes the record from the server's SQLite DB.
+   * Returns void on 204. Throws AxiosError on 404 (not found) or network error.
+   * The caller (TanStack useMutation) handles error display.
+   */
+  await apiClient.delete(`/history/${id}`);
+}
+```
+
+Uses `apiClient` (the proxied Next.js route handler), not `classifyApiClient` — delete requests are fast and don't need the 180s bypass timeout used for classify.
+
+---
+
+### Frontend: `useMutation` Wiring in `history/page.tsx`
+
+```tsx
+const queryClient   = useQueryClient();
+const deleteMutation = useMutation({
+  mutationFn : deleteHistoryItem,
+  onSuccess  : () => {
+    // Invalidate the history query → TanStack Query re-fetches current page
+    // The deleted row disappears immediately without a manual state update
+    queryClient.invalidateQueries({ queryKey: ["history"] });
+  },
+  onError: (err) => {
+    console.error("Delete failed:", err);
+  },
+});
+```
+
+Why `invalidateQueries` rather than manually removing the item from state?
+
+`invalidateQueries` is the idiomatic TanStack Query pattern: it marks the cached data stale and triggers a background re-fetch. The fresh server response reflects the true DB state — no client-side staleness bugs. If the delete silently failed, the item would reappear (correct behaviour). If it succeeded, it's gone.
+
+---
+
+### Frontend: HistoryTable — Full Rewrite
+
+The HistoryTable component was rewritten from scratch to add two features while maintaining the existing pagination structure.
+
+#### Feature 1 — Filter Bar
+
+```tsx
+const [searchQuery, setSearchQuery] = useState("");
+const [routeFilter, setRouteFilter] = useState<string>("all");
+
+const filteredItems = useMemo(() => {
+  return items.filter((item) => {
+    const matchesRoute  = routeFilter === "all" || item.route_taken === routeFilter;
+    const matchesSearch = !searchQuery ||
+      item.label?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.filename?.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesRoute && matchesSearch;
+  });
+}, [items, routeFilter, searchQuery]);
+```
+
+**Route pills:** All / Historian / Validator / Investigator — styled with the same per-route colour system (emerald / amber / purple) used in AnalysisPanel. The active pill has a solid background; inactive pills are ghost/outline.
+
+**Why client-side filtering, not server-side?**
+
+The history list loads one page at a time (SQL `LIMIT/OFFSET`). Server-side filtering on a single page window would behave strangely — "filter by historian" on page 2 might return 0 results even if page 1 has 8. Client-side filtering on the current page window is simpler, instant (no HTTP round-trip), and semantically clear to the user: "filter what I see now."
+
+A footer note appears when the filter reduces the visible count: `"Showing {filteredItems.length} of {items.length} on this page"`.
+
+#### Feature 2 — Delete Button (HTML5-Compliant Architecture)
+
+**The HTML5 nested-anchor problem:**
+
+The table rows are wrapped in `<Link href="/history/{id}">` (which renders as `<a>`). Placing a `<button>` inside an `<a>` is invalid HTML5: interactive elements cannot be nested. Browsers handle this inconsistently — some hoist the button outside the anchor, which breaks the DOM tree and causes click events to fire on the wrong element.
+
+**Solution:** Change the row layout from `<Link wraps everything>` to `<div row> + <Link covers data columns> + <button delete>` as flex siblings:
+
+```tsx
+<div key={item.id} className="flex items-center group hover:bg-zinc-800/50 rounded-lg">
+  {/* Link covers all data columns — click navigates to detail */}
+  <Link href={`/history/${item.id}`} className="flex-1 grid grid-cols-5 gap-2 px-3 py-3">
+    <span>{item.label ? `CN ${item.label}` : "—"}</span>
+    <span>{routePill(item.route_taken)}</span>
+    {/* ... more columns ... */}
+  </Link>
+
+  {/* Delete button is a SIBLING of Link — NOT inside it */}
+  {onDelete && (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();   // prevent the Link navigation from firing
+        if (window.confirm(`Delete analysis for CN ${item.label}?`)) {
+          onDelete(item.id);
+        }
+      }}
+      className="p-2 text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-1 transition-opacity"
+      aria-label="Delete analysis"
+    >
+      <Trash2 size={14} />
+    </button>
+  )}
+</div>
+```
+
+`e.stopPropagation()` is defensive — the button is a sibling not a descendant of the Link, so propagation would not actually trigger navigation, but the call makes the intent explicit and protects against future DOM restructuring.
+
+`window.confirm()` provides a native browser confirmation dialog before the irreversible delete. No custom modal component needed for this pattern — the native dialog blocks accidental deletes with zero added complexity.
+
+---
+
+### CN Links in Top-5 Table
+
+Each row in the Top-5 predictions table now links directly to the Corpus Nummorum record for that type:
+
+```tsx
+// Before — plain text type ID
+<td className="text-zinc-300">{item.label}</td>
+
+// After — external link
+<td>
+  <a
+    href={`https://www.corpus-nummorum.eu/types/${item.label}`}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="text-blue-400 hover:text-blue-300 hover:underline transition-colors"
+  >
+    CN {item.label} ↗
+  </a>
+</td>
+```
+
+`target="_blank"` with `rel="noopener noreferrer"` is the standard security combination:
+- `noopener` — prevents the new tab from accessing `window.opener` (the tab that opened it), which would allow the external page to manipulate the parent
+- `noreferrer` — prevents the `Referer` HTTP header from being sent, hiding that the user came from your app
+
+---
+
+### Commit `0455d45` — March 2026
+
+```
+feat: CN links, delete button, filter bar  Phase 3 UX
+
+- backend: delete_by_id() + DELETE /api/history/{id} (204/404)
+- frontend/lib/api.ts: deleteHistoryItem()
+- history/page.tsx: useMutation wiring + queryClient.invalidateQueries
+- HistoryTable: full rewrite — filter bar (search + route pills, client-side)
+  + delete button (HTML5-compliant sibling of Link, Trash2 icon, confirm guard)
+- top-5 table: CN label → blue <a> with ↗ to corpus-nummorum.eu/types/{id}
+```
+
+---
+
+## 44. Phase 4 — CTA Banner, Linked Badges, Stats Strip, Copy Link (March 2026)
+
+**Commit**: `e92c1ba`
+**Date**: March 2026
+**Files changed**: `frontend/components/coin/AnalysisPanel.tsx`, `frontend/app/history/page.tsx`, `frontend/app/history/[id]/page.tsx`
+
+---
+
+### CTA Banner — "Explore the Official Scholarly Record"
+
+After the Top-5 predictions table, a call-to-action banner invites the user to view the full Corpus Nummorum record for the identified type. This is positioned here because the user has just consumed the AI's analysis and is naturally curious about the primary source.
+
+```tsx
+{/* CTA — below top-5 table */}
+<a
+  href={`https://www.corpus-nummorum.eu/types/${label}`}
+  target="_blank"
+  rel="noopener noreferrer"
+  className="mt-4 flex items-center justify-between p-3 rounded-lg border
+             border-blue-800/40 bg-blue-950/20 hover:bg-blue-950/40
+             hover:border-blue-600/60 transition-all group"
+>
+  <div>
+    <p className="text-blue-300 text-sm font-medium">
+      Explore the official scholarly record
+    </p>
+    <p className="text-zinc-500 text-xs mt-0.5">
+      Corpus Nummorum · CN {label}
+    </p>
+  </div>
+  <ExternalLink
+    size={16}
+    className="text-blue-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5
+               transition-transform"
+  />
+</a>
+```
+
+The `group-hover:translate-x-0.5 group-hover:-translate-y-0.5` micro-animation on the ExternalLink icon (moves 2px right, 2px up on hover) is the standard "link going external" visual affordance used in major design systems (GitHub, Linear, Notion). It signals that clicking will open a new tab, not navigate within the app.
+
+---
+
+### Header Badge as a Direct CN Link
+
+Every analysis card header shows a confidence badge or route badge next to the CN type label. Before this change, the type label and badge were static text. After, the entire badge is wrapped in a direct external link:
+
+```tsx
+<a
+  href={`https://www.corpus-nummorum.eu/types/${label}`}
+  target="_blank"
+  rel="noopener noreferrer"
+  style={{ display: "contents" }}    // ← key: zero layout impact
+>
+  <span className={`rounded-full border px-2.5 py-0.5 text-xs ${badgeStyle}`}>
+    {badgeLabel}
+  </span>
+</a>
+```
+
+**Why `display: contents`?**
+
+`display: contents` is a CSS value that makes the element itself invisible to the layout engine — it acts as if the element is not there, and its children are direct children of the parent. This means wrapping the badge in `<a display:contents>` has zero effect on:
+- Flexbox/grid layout
+- Border, background, padding rendering
+- Font size, colour
+
+The only effect: the badge gains anchor semantics. The cursor becomes a pointer on hover, the element is keyboard-focusable, and clicking opens the CN record.
+
+This is the correct approach when you want to add a link to an existing styled element without touching its visual layout at all.
+
+---
+
+### CN Type Rows in Historian and Validator Sections — Linked with ExternalLink Icon
+
+In HistorianSection and ValidatorSection, the "CN Type" data row previously showed "CN 1015" as plain text. After:
+
+```tsx
+// HistorianSection DataRow — after
+<DataRow label="CN Type">
+  <a
+    href={`https://www.corpus-nummorum.eu/types/${label}`}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="text-blue-400 hover:text-blue-300 inline-flex items-center gap-1"
+  >
+    CN {label}
+    <ExternalLink size={11} className="opacity-60" />
+  </a>
+</DataRow>
+```
+
+The same treatment is applied in ValidatorSection. Every place in the UI that references a CN type ID is now a live link to the primary source. This is a key usability principle: never make the user copy-paste a reference when you can make it clickable.
+
+---
+
+### History Stats Strip
+
+The history list page (`/history`) now shows a summary strip above the pagination controls when data is present:
+
+```tsx
+{data.total > 0 && (
+  <div className="flex flex-wrap items-center gap-4 text-xs text-zinc-500 px-1 mb-3">
+    {/* Global total — from SQL COUNT */}
+    <span>{data.total} total analyses</span>
+
+    {/* Route breakdown — computed from current page window */}
+    {Object.entries(
+      items.reduce<Record<string,number>>((acc, item) => {
+        acc[item.route_taken] = (acc[item.route_taken] ?? 0) + 1;
+        return acc;
+      }, {})
+    ).map(([route, count]) => (
+      <span key={route} className={`font-medium ${routeStyle(route).text}`}>
+        {count} {route}
+      </span>
+    ))}
+
+    {/* Average confidence — current page window */}
+    {items.length > 0 && (
+      <span>
+        avg {(items.reduce((s, i) => s + i.confidence, 0) / items.length * 100).toFixed(1)}% conf
+      </span>
+    )}
+  </div>
+)}
+```
+
+**Design note:** `data.total` comes from the SQL `COUNT(*)` query (Section 39, P2 audit) — it is the true global count across all pages, not `items.length`. Route breakdown and average confidence are computed from `items` (current page window only) — this is clearly a "per-page summary", not a global aggregate. The user sees both: total count is global, distribution stats are local. Clear cognitive model.
+
+---
+
+### Copy Link Button on History Detail Page
+
+The detail page action bar adds a "Copy link" button that copies the current URL to the clipboard:
+
+```tsx
+const [copied, setCopied] = useState(false);
+
+function handleCopyLink() {
+  navigator.clipboard.writeText(window.location.href).then(() => {
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);   // reset after 2 seconds
+  });
+}
+
+<Button
+  variant="ghost"
+  size="sm"
+  onClick={handleCopyLink}
+  className={copied ? "text-green-400" : "text-zinc-400"}
+>
+  {copied ? <Check size={14} /> : <Link2 size={14} />}
+  <span className="ml-1.5">{copied ? "Copied!" : "Copy link"}</span>
+</Button>
+```
+
+**Why `navigator.clipboard.writeText` rather than `document.execCommand('copy')`?**
+
+`execCommand` is deprecated and requires the user's text to be selected in the DOM. The Clipboard API (`navigator.clipboard`) is the modern standard — it writes arbitrary text directly, works headlessly (no DOM selection required), and returns a Promise for async error handling. It requires HTTPS or localhost (both of which apply in our deployment).
+
+The 2-second visual feedback (`Check` icon + "Copied!" text) is a proven UX pattern — it confirms the action succeeded without requiring the user to verify their clipboard. The state resets automatically so the button is ready for repeated use.
+
+---
+
+### History Detail Page `<h1>` as CN Link
+
+The page title for a history detail view is the coin's CN label. After this commit it links directly to the CN record:
+
+```tsx
+<h1 className="text-2xl font-bold">
+  <a
+    href={`https://www.corpus-nummorum.eu/types/${result.cnn.label}`}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="text-white hover:text-blue-300 transition-colors hover:underline"
+  >
+    CN {result.cnn.label}
+  </a>
+  <span className="text-zinc-500 font-normal ml-2 text-lg">— Analysis Report</span>
+</h1>
+```
+
+The title itself is the reference. Making it a link removes the need for a separate "View on Corpus Nummorum" button — the natural reading of the title already navigates the user to the source.
+
+---
+
+### Commit `e92c1ba` — March 2026
+
+```
+feat: CN CTAs, linked type rows, stats strip, copy link
+
+- CTA banner in CnnSection below top-5: gradient border, ExternalLink hover animation
+- header badge wrapped in <a display:contents> — zero layout impact, badge is CN link
+- CN Type row in HistorianSection + ValidatorSection: blue <a> + ExternalLink icon
+- history/[id]: <h1> CN label is an external link
+- history/page.tsx: stats strip (SQL total + per-route breakdown + avg conf)
+- history/[id]: copy link button — navigator.clipboard, 2s Check feedback
+```
+
+---
+
+## 45. Known Issue: Material Check False Mismatch — Patina/HSV Problem (March 2026)
+
+**Status**: NOT FIXED — fully diagnosed, fix identified but not yet applied
+**Affected route**: Validator (Route 2, 40–85% confidence)
+**Files**: `src/agents/validator.py`
+
+---
+
+### The Symptom
+
+A silver coin showing 42.9% confidence routes to the Validator. The PDF and UI report:
+
+```
+Material Check: mismatch (94% detection confidence, uncertainty: low)
+Detected:  bronze
+Expected:  silver
+Warning:   "Detected bronze but database expects silver — possible misidentification
+            or unusual specimen. Detection confidence: 0.94 (3/3 scales agree)"
+```
+
+The system is 94% confident — and completely wrong. The coin is silver. Why?
+
+---
+
+### Root Cause: Patina Is Not Metal
+
+Ancient silver coins are approximately 2,000 years old. Silver is a reactive metal. Over millennia, it oxidises and sulphides. The surface develops a layer of silver sulphide (Ag₂S) — a dark brownish-black material commonly called *patina* or *toning*.
+
+This patina is not silver-coloured. In HSV colour space, its values are approximately:
+
+```
+Patinated silver coin in HSV (measured empirically):
+  Mean Hue:        approximately 15–25
+  Mean Saturation: approximately 55–80
+  Mean Value:      approximately 60–140 (variable — depends on wear level)
+```
+
+Now compare to the validator's thresholds in `src/agents/validator.py` (lines 43–51):
+
+```python
+_METAL_THRESHOLDS = {
+    "gold":   {"h_min": 15, "h_max": 35,  "s_min": 80,  "s_max": 255},
+    "bronze": {"h_min": 5,  "h_max": 25,  "s_min": 50,  "s_max": 180},
+    # silver = everything with low saturation (S < 40)  ← line 48
+}
+
+# In _detect_material(), line ~196:
+silver_mask = cv2.inRange(hsv,
+    np.array([0,   0,   80]),
+    np.array([179, 40, 255]))    # ← Saturation ceiling: 40
+```
+
+Silver detection requires `S < 40`. But patinated silver has `S ≈ 55–80`.
+
+The bronze detector requires `H ∈ [5, 25]` and `S ∈ [50, 180]`. Patinated silver has `H ≈ 15–25` and `S ≈ 55–80` — it falls squarely inside the bronze detection window.
+
+All 3 crop scales (40%, 60%, 80% of coin centre) measure the patina surface, not the underlying metal. All 3 vote "bronze". The multi-scale majority vote produces `vote_count=3`, `uncertainty="low"`, `det_confidence≈0.94`. The system is maximally confident about a wrong answer because patina signals "bronze" more strongly than it signals "silver".
+
+---
+
+### Why This Does Not Affect Gold or Bronze Detection
+
+Gold does not significantly oxidise at room temperature (it is a noble metal). A gold coin photographed today looks essentially the same as when minted — warm yellow-orange, `H ∈ [15, 35]`, `S > 80`. Gold detection is reliable.
+
+Bronze and copper form a green-grey verdigris (copper carbonate). Verdigris has `H ≈ 80–140` (green range), which falls outside the bronze detector window (`H ∈ [5, 25]`). A heavily patinated bronze coin will read as "unknown" rather than "bronze" — a false negative rather than a false positive. The Validator's `_build_warning()` treats "unknown" as non-conflicting, so no mismatch is flagged. This means bronze detection degrades gracefully; silver detection fails aggressively.
+
+---
+
+### The Cascading Effect in the PDF
+
+The false `"mismatch"` flows through synthesis and appears in the PDF report under "Forensic Validation":
+
+```
+Status:                Mismatch
+Detected material:     bronze
+Expected (from KB):    silver
+Detection confidence:  0.94 (uncertainty: low)
+Warning:               Detected bronze but database expects silver.
+                       Possible misidentification or unusual specimen.
+```
+
+A user (or a museum curator reviewing the PDF) reads this and thinks either:
+1. The AI made a classification error (it didn't — the CNN said 1015 which is silver)
+2. The coin is a fake or unusual specimen (it isn't — it's a normal patinated silver drachm)
+
+This is a false forensic alarm. It is worse than showing no material check at all, because it actively misinforms by citing a 94% confidence figure.
+
+---
+
+### Identified Fixes (Not Yet Applied)
+
+Two complementary fixes have been identified:
+
+#### Fix 1 — Raise the Silver Saturation Ceiling
+
+**Current (line ~196 of `validator.py`):**
+```python
+silver_mask = cv2.inRange(hsv,
+    np.array([0,   0,   80]),
+    np.array([179, 40, 255]))   # S_max = 40
+```
+
+**Proposed:**
+```python
+silver_mask = cv2.inRange(hsv,
+    np.array([0,   0,   80]),
+    np.array([179, 70, 255]))   # S_max raised from 40 → 70
+```
+
+**Why 70 and not higher?** At S > 70, pixels are entering the clearly-coloured range where bronze and gold signals live. S = 40–70 is the "lightly toned silver" zone — still grey-ish, just no longer perfectly neutral. Bronze at S > 70 is visually reddish, distinctly different. Setting S_max = 70 captures patinated silver while still distinguishing it from true bronze in most lighting conditions.
+
+This fix alone would make the 42.9% confidence coin return "consistent" instead of "mismatch" — because the patinated silver pixels would now be caught by the silver mask before the bronze mask claims them.
+
+#### Fix 2 — CNN+KB Consensus Override
+
+**Logic:**
+```python
+# In _determine_status() or _build_warning():
+if (cnn_confidence > 0.85
+    and expected == "silver"
+    and detected == "bronze"
+    and uncertainty == "low"):
+    # High CNN confidence + KB says silver + HSV says bronze
+    # → Patina ambiguity. Don't declare mismatch.
+    status  = "uncertain"
+    warning = ("Silver detected by CNN + KB, but image shows warm-brown tones "
+               "consistent with heavy toning/patina. "
+               "Material identity cannot be confirmed from pixel analysis alone.")
+```
+
+**Why this is architecturally correct:**
+
+The Validator's job is to cross-check the CNN against pixel evidence. If all three sources agree (CNN high confidence + KB says silver + HSV...also says silver), there's no conflict. When HSV disagrees with CNN+KB on one specific material in one specific lighting/patina scenario, the appropriate response is `"uncertain"`, not `"mismatch"`.
+
+`"mismatch"` should be reserved for: CNN says gold, KB says gold, HSV says bronze — where the pixel analysis contradicts a strong multi-source consensus. That would be a genuine forensic flag (possible forgery or mislabelling).
+
+**Current threshold:** `cnn_confidence > 0.85` was chosen so the override only fires on high-confidence CNN identifications. At 42.9% confidence (Route 2 entry), no override fires — but in Route 2 (40–85%), the coin sits below this threshold anyway, so the patina problem in Route 2 means Fix 1 is required.
+
+---
+
+### Why Not Fixed Yet
+
+Fix 1 requires testing against a sample set of bronzes to verify the raised S ceiling does not increase false-positives for genuine bronze coins photographed under warm lighting. The threshold change is a 4-character edit, but the validation requires running the validator against a cross-section of known-metal coins — which requires constructing a labelled test set from the processed data. This work was deferred to prioritise the UX improvements in Sections 41–44.
+
+Fix 2 requires adding the `cnn_confidence` parameter to the validator's `_determine_status()` internal logic, which currently operates on pixel data only. A small architectural change but touching the validator's core logic path requires careful testing.
+
+Both fixes remain scheduled. The issue is fully diagnosed and the test case is known: `data/processed/21027/` (CN type 21027, silver, 42.9% CNN confidence from `scripts/test_pipeline.py`).
+
+---
+
+### Summary Table — HSV Thresholds vs. Patinated Silver Reality
+
+| Measurement | Current Silver Threshold | Patinated Silver (Empirical) | Result |
+|---|---|---|---|
+| Saturation (max) | 40 | 55–80 | **Silver mask misses** |
+| Hue range | 0–179 (any) | 15–25 | — |
+| Bronze Saturation (min) | 50 | 55–80 | **Bronze mask fires** |
+| Bronze Hue range | 5–25 | 15–25 | **Bronze mask fires** |
+
+All four conditions align against silver detection for a patinated coin. The bronze mask fires. The silver mask misses. Result: 94% confident mismatch.
+
+---
+
+*Last updated: March 2026 — Sections 41-45 added covering 3-way CNN display states (702e3eb), confidence anxiety UX fix (451f3f2), Phase 3 CN links + delete + filter bar (0455d45), Phase 4 CTA banner + linked badges + stats + copy link (e92c1ba), and the known HSV patina/silver false-mismatch issue with full root cause analysis and proposed fixes. Layer 6 (Docker) is next.*
