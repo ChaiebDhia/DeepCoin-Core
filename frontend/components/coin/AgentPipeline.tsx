@@ -35,12 +35,14 @@ const AGENTS = [
   {
     emoji:    "🔬",
     name:     "CNN",
-    subtitle: "EfficientNet-B3",
+    subtitle: "Crop · Enhance · Classify",
     color:    "#3b82f6",
     bgActive: "rgba(59,130,246,0.14)",
     border:   "rgba(59,130,246,0.40)",
     messages: [
-      "Loading EfficientNet-B3 weights…",
+      "Auto-detecting coin region…",
+      "Cropping to coin boundary…",
+      "Enhancing contrast (CLAHE)…",
       "Extracting 1,536 visual features…",
       "Running softmax over 438 classes…",
       "TTA — averaging 5 forward passes…",
@@ -82,7 +84,7 @@ const AGENTS = [
   {
     emoji:    "📄",
     name:     "Synthesis",
-    subtitle: "fpdf2 report",
+    subtitle: "Compiling PDF report",
     color:    "#d4a853",
     bgActive: "rgba(212,168,83,0.14)",
     border:   "rgba(212,168,83,0.40)",
