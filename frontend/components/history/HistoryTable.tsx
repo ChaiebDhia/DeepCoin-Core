@@ -3,142 +3,335 @@
 /**
  * components/history/HistoryTable.tsx
  * ====================================
- * Sortable, paginated history table component.
- * Receives HistorySummary[] from the parent page (server + client fetch).
+ * Paginated history table with client-side filter bar and per-row delete.
  *
- * WHY pagination in the component, not just the API:
- *   The parent page fetches one "window" from the API (skip/limit).
- *   The component shows that window and emits onPageChange callbacks.
- *   This separates concerns: the component only knows about display,
- *   the page decides when to re-fetch.
+ * FILTER STRATEGY — client-side on the current page window:
+ *   The parent fetches a window (skip/limit) from the API. Filtering is
+ *   applied on that window in the browser — no extra round-trips for a
+ *   single-user local app with ≤20 rows per page. If a future version
+ *   needs server-side filtering (large datasets), the filter state can be
+ *   lifted to URL params and passed to getHistory(skip, limit, route, q).
+ *
+ * DELETE BUTTON — outside the <Link> wrapper:
+ *   HTML5 forbids interactive content (button) inside <a>. The row uses
+ *   a flex container: <Link> takes flex-1 for the data cells, and the
+ *   delete <button> sits as a sibling flex child. This is semantically
+ *   correct and avoids nested-anchor warnings.
  */
 
-import Link                                 from "next/link";
-import { ChevronLeft, ChevronRight, FileText } from "lucide-react";
+import { useState, useMemo }               from "react";
+import Link                                from "next/link";
+import {
+  ChevronLeft, ChevronRight, FileText, Trash2, Search, X,
+}                                          from "lucide-react";
 
-import type { HistorySummary }              from "@/types/api";
+import type { HistorySummary }             from "@/types/api";
 import {
   formatConfidence, formatDate, routeStyle, confidenceBg,
-}                                           from "@/lib/utils";
-import { Badge, routeBadgeVariant }         from "@/components/ui/badge";
-import { Button }                           from "@/components/ui/button";
+}                                          from "@/lib/utils";
+import { Badge, routeBadgeVariant }        from "@/components/ui/badge";
+import { Button }                          from "@/components/ui/button";
+
+// ── filter constants ──────────────────────────────────────────────────────────
+
+const ROUTE_OPTIONS: { value: string; label: string }[] = [
+  { value: "",             label: "All"          },
+  { value: "historian",    label: "Historian"    },
+  { value: "validator",    label: "Validator"    },
+  { value: "investigator", label: "Investigator" },
+];
+
+// ── props ─────────────────────────────────────────────────────────────────────
 
 interface HistoryTableProps {
-  items:          HistorySummary[];
-  total:          number;
-  skip:           number;
-  limit:          number;
-  onPageChange:   (newSkip: number) => void;
-  isLoading?:     boolean;
+  items:        HistorySummary[];
+  total:        number;
+  skip:         number;
+  limit:        number;
+  onPageChange: (newSkip: number) => void;
+  onDelete?:    (id: string) => void;
+  isLoading?:   boolean;
 }
 
+// ── component ─────────────────────────────────────────────────────────────────
+
 export function HistoryTable({
-  items, total, skip, limit, onPageChange, isLoading = false,
+  items, total, skip, limit, onPageChange, onDelete, isLoading = false,
 }: HistoryTableProps) {
   const currentPage = Math.floor(skip / limit) + 1;
   const totalPages  = Math.ceil(total / limit);
 
+  // ── filter state ────────────────────────────────────────────────────────────
+
+  const [search,      setSearch]      = useState("");
+  const [routeFilter, setRouteFilter] = useState("");
+
+  /**
+   * Apply route + search filters on the current page window.
+   * Both filters are combined with AND logic.
+   */
+  const filteredItems = useMemo(() => {
+    let result = items;
+    if (routeFilter) {
+      result = result.filter((r) => r.route_taken === routeFilter);
+    }
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      result  = result.filter(
+        (r) =>
+          r.label.toLowerCase().includes(q) ||
+          r.image_filename.toLowerCase().includes(q),
+      );
+    }
+    return result;
+  }, [items, search, routeFilter]);
+
+  // ── delete handler ───────────────────────────────────────────────────────────
+
+  function handleDelete(id: string) {
+    if (!onDelete) return;
+    if (window.confirm("Permanently delete this record from history?")) {
+      onDelete(id);
+    }
+  }
+
+  // ── render ───────────────────────────────────────────────────────────────────
+
   return (
     <div className="flex flex-col gap-4">
-      {/* Table */}
-      <div className="rounded-xl border border-[var(--border)] overflow-hidden">
-        {/* Header */}
-        <div className="grid grid-cols-[1fr_120px_100px_100px_80px] gap-3 px-4 py-2.5 bg-[var(--surface-2)] text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
-          <span>Image / Type</span>
-          <span>Route</span>
-          <span>Confidence</span>
-          <span>Date</span>
-          <span className="text-right">Report</span>
+
+      {/* ─ Filter bar ─────────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-3">
+
+        {/* Search input */}
+        <div className="relative flex-1 min-w-[200px]">
+          <Search
+            size={14}
+            className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+            style={{ color: "var(--text-muted)" }}
+          />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Filter by CN type or filename…"
+            className="w-full h-9 pl-9 pr-8 rounded-lg text-sm focus:outline-none focus:ring-1"
+            style={{
+              background:   "var(--surface-2)",
+              border:       "1px solid var(--border)",
+              color:        "var(--text-primary)",
+              // @ts-expect-error — CSS custom property placeholder colour via inline style not typed
+              "--tw-ring-color": "var(--brand-light)",
+            }}
+          />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 transition-colors"
+              style={{ color: "var(--text-muted)" }}
+              aria-label="Clear search"
+            >
+              <X size={12} />
+            </button>
+          )}
         </div>
 
-        {/* Rows */}
-        {isLoading ? (
-          /* Skeleton rows */
-          Array.from({ length: 5 }).map((_, i) => (
-            <div
-              key={i}
-              className="grid grid-cols-[1fr_120px_100px_100px_80px] gap-3 px-4 py-3 border-t border-[var(--border)] animate-pulse"
-            >
-              <div className="h-4 w-40 rounded bg-[var(--surface-3)]" />
-              <div className="h-5 w-20 rounded-full bg-[var(--surface-3)]" />
-              <div className="h-4 w-16 rounded bg-[var(--surface-3)]" />
-              <div className="h-4 w-28 rounded bg-[var(--surface-3)]" />
-              <div className="h-4 w-8 rounded bg-[var(--surface-3)] ml-auto" />
-            </div>
-          ))
-        ) : items.length === 0 ? (
-          <div className="px-4 py-12 text-center text-sm text-[var(--text-muted)]">
-            No analyses yet. Upload a coin to get started.
+        {/* Route filter pills */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {ROUTE_OPTIONS.map((opt) => {
+            const active = routeFilter === opt.value;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => setRouteFilter(opt.value)}
+                className="h-9 px-3 rounded-lg text-xs font-medium border transition-colors"
+                style={{
+                  background:  active ? "var(--brand-light)"  : "var(--surface-2)",
+                  borderColor: active ? "var(--brand-light)"  : "var(--border)",
+                  color:       active ? "#ffffff"             : "var(--text-muted)",
+                }}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ─ Table ──────────────────────────────────────────────────────────── */}
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--border)" }}>
+
+        {/* Header row */}
+        <div
+          className="flex items-center gap-3 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider"
+          style={{ background: "var(--surface-2)", color: "var(--text-muted)" }}
+        >
+          <span className="flex-1 min-w-0">Image / Type</span>
+          <span className="w-[120px] shrink-0">Route</span>
+          <span className="w-[110px] shrink-0">Confidence</span>
+          <span className="w-[100px] shrink-0">Date</span>
+          <span className="w-[44px] shrink-0 text-right">Report</span>
+          {/* Delete column header — only shown when handler is wired */}
+          {onDelete && <span className="w-10 shrink-0" />}
+        </div>
+
+        {/* Skeleton rows */}
+        {isLoading && Array.from({ length: 5 }).map((_, i) => (
+          <div
+            key={i}
+            className="flex items-center gap-3 px-4 py-3 border-t animate-pulse"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <div className="h-4 flex-1 rounded" style={{ background: "var(--surface-3)" }} />
+            <div className="h-5 w-20 rounded-full shrink-0" style={{ background: "var(--surface-3)" }} />
+            <div className="h-4 w-24 rounded shrink-0" style={{ background: "var(--surface-3)" }} />
+            <div className="h-4 w-20 rounded shrink-0" style={{ background: "var(--surface-3)" }} />
+            <div className="h-4 w-6 rounded ml-auto shrink-0" style={{ background: "var(--surface-3)" }} />
           </div>
-        ) : (
-          items.map((row) => (
+        ))}
+
+        {/* Empty state */}
+        {!isLoading && filteredItems.length === 0 && (
+          <div className="px-4 py-12 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+            {items.length === 0
+              ? "No analyses yet. Upload a coin to get started."
+              : "No records match the current filters."}
+          </div>
+        )}
+
+        {/* Data rows */}
+        {!isLoading && filteredItems.map((row) => (
+          <div
+            key={row.id}
+            className="flex items-center border-t transition-colors"
+            style={{
+              borderColor: "var(--border)",
+              background:  "var(--surface-1)",
+            }}
+            onMouseEnter={(e) =>
+              (e.currentTarget.style.background = "var(--surface-2)")
+            }
+            onMouseLeave={(e) =>
+              (e.currentTarget.style.background = "var(--surface-1)")
+            }
+          >
+            {/*
+              Link covers the 5 data columns — flex-1 so it fills all space
+              except the delete button. Using flex instead of grid here keeps
+              the <button> outside the <a>, satisfying HTML5 interactive-content
+              nesting rules.
+            */}
             <Link
-              key={row.id}
               href={`/history/${row.id}`}
-              className="grid grid-cols-[1fr_120px_100px_100px_80px] gap-3 items-center px-4 py-3 border-t border-[var(--border)] bg-[var(--surface-1)] hover:bg-[var(--surface-2)] transition-colors"
+              className="flex flex-1 items-center gap-3 min-w-0 px-4 py-3"
             >
-              {/* File + type */}
-              <div className="flex flex-col min-w-0">
-                <span className="text-sm font-medium text-[var(--text-primary)] truncate">
+              {/* Image / Type */}
+              <div className="flex-1 flex flex-col min-w-0">
+                <span
+                  className="text-sm font-medium truncate"
+                  style={{ color: "var(--text-primary)" }}
+                >
                   CN {row.label}
                 </span>
-                <span className="text-xs text-[var(--text-muted)] truncate">
+                <span
+                  className="text-xs truncate"
+                  style={{ color: "var(--text-muted)" }}
+                >
                   {row.image_filename}
                 </span>
               </div>
 
               {/* Route badge */}
-              <Badge variant={routeBadgeVariant(row.route_taken)} className="w-fit">
-                {routeStyle(row.route_taken).label}
-              </Badge>
+              <div className="w-[120px] shrink-0">
+                <Badge variant={routeBadgeVariant(row.route_taken)} className="w-fit">
+                  {routeStyle(row.route_taken).label}
+                </Badge>
+              </div>
 
-              {/* Confidence pill */}
-              <div className="flex items-center gap-2">
-                <div className="h-1.5 w-16 rounded-full bg-[var(--surface-3)] overflow-hidden">
+              {/* Confidence bar + value */}
+              <div className="w-[110px] shrink-0 flex items-center gap-2">
+                <div
+                  className="h-1.5 w-14 rounded-full overflow-hidden"
+                  style={{ background: "var(--surface-3)" }}
+                >
                   <div
                     className={`h-full rounded-full ${confidenceBg(row.confidence)}`}
                     style={{ width: `${row.confidence * 100}%` }}
                   />
                 </div>
-                <span className="text-xs font-mono text-[var(--text-secondary)]">
+                <span
+                  className="text-xs font-mono"
+                  style={{ color: "var(--text-secondary)" }}
+                >
                   {formatConfidence(row.confidence)}
                 </span>
               </div>
 
               {/* Timestamp */}
-              <span className="text-xs text-[var(--text-muted)]">
-                {formatDate(row.timestamp)}
-              </span>
+              <div className="w-[100px] shrink-0">
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  {formatDate(row.timestamp)}
+                </span>
+              </div>
 
-              {/* PDF link */}
-              <div className="text-right">
+              {/* PDF download */}
+              <div className="w-[44px] shrink-0 text-right">
                 {row.pdf_url ? (
                   <button
                     onClick={(e) => {
                       e.preventDefault();
-                      window.open(row.pdf_url!, "_blank");
+                      e.stopPropagation();
+                      window.open(row.pdf_url!, "_blank", "noopener,noreferrer");
                     }}
-                    className="text-[var(--text-muted)] hover:text-blue-400 transition-colors"
-                    aria-label="Download PDF"
+                    className="transition-colors"
+                    style={{ color: "var(--text-muted)" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = "#60a5fa")}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
+                    aria-label="Download PDF report"
                   >
                     <FileText size={16} />
                   </button>
                 ) : (
-                  <span className="text-[var(--surface-3)]">
+                  <span style={{ color: "var(--surface-3)" }}>
                     <FileText size={16} />
                   </span>
                 )}
               </div>
             </Link>
-          ))
-        )}
+
+            {/* Delete button — sibling of <Link>, NOT inside <a> */}
+            {onDelete && (
+              <div className="w-10 shrink-0 flex items-center justify-center">
+                <button
+                  onClick={() => handleDelete(row.id)}
+                  className="p-1.5 rounded transition-colors"
+                  style={{ color: "var(--text-muted)" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#f87171")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
+                  aria-label="Delete record"
+                  title="Delete"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
       </div>
 
-      {/* Pagination */}
+      {/* ─ Pagination ─────────────────────────────────────────────────────── */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm text-[var(--text-muted)]">
+        <div
+          className="flex items-center justify-between text-sm"
+          style={{ color: "var(--text-muted)" }}
+        >
           <span>
-            {skip + 1}–{Math.min(skip + limit, total)} of {total} records
+            {skip + 1}–{Math.min(skip + limit, total)} of {total}
+            {filteredItems.length < items.length && (
+              <span style={{ color: "var(--brand-light)" }} className="ml-1">
+                · {filteredItems.length} shown after filter
+              </span>
+            )}
           </span>
           <div className="flex items-center gap-2">
             <Button

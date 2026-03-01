@@ -228,6 +228,42 @@ def count() -> int:
             return 0
 
 
+def delete_by_id(record_id: str) -> bool:
+    """
+    Delete one classification record from the database by its UUID.
+
+    WHAT: Executes a DELETE statement by primary key.
+
+    WHY return bool:
+        The caller (DELETE /api/history/{id} endpoint) needs to distinguish
+        between "deleted successfully" and "id not found" to return the
+        correct HTTP status code (204 vs 404).  rowcount == 0 means no row
+        matched the id.
+
+    Args:
+        record_id: UUID string matching the `id` column.
+
+    Returns:
+        True if exactly one row was deleted.  False if id not found or on error.
+
+    Thread-safe: protected by _lock.
+    """
+    with _lock:
+        try:
+            conn    = _get_conn()
+            cursor  = conn.execute(
+                "DELETE FROM classifications WHERE id = ?",
+                (record_id,),
+            )
+            conn.commit()
+            deleted = cursor.rowcount > 0
+            conn.close()
+            return deleted
+        except Exception as exc:
+            logger.error("History store delete_by_id error for %s: %s", record_id, exc)
+            return False
+
+
 def load_page(skip: int = 0, limit: int = 20) -> list[dict]:
     """
     Return a paginated slice of records ordered newest-first.

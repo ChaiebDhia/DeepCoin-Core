@@ -29,9 +29,9 @@ import asyncio
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 
-from src.api._store  import get_by_id, load_page, count as history_count
+from src.api._store  import get_by_id, load_page, count as history_count, delete_by_id
 from src.api.schemas import ClassifyResponse, CnnResult, Top5Item, HistoryListResponse, HistorySummary
 
 logger = logging.getLogger(__name__)
@@ -134,3 +134,32 @@ async def get_history_item(record_id: str) -> ClassifyResponse:
     except Exception as exc:
         logger.error("Failed to deserialise history record %s: %s", record_id, exc)
         raise HTTPException(status_code=500, detail="Stored record is malformed.")
+
+
+# ── delete ─────────────────────────────────────────────────────────────────────
+
+@router.delete(
+    "/history/{record_id}",
+    status_code=204,
+    summary="Delete one past classification by ID",
+)
+async def delete_history_item(record_id: str) -> Response:
+    """
+    DELETE /api/history/{id}
+
+    Permanently removes one classification record from the history store.
+    Returns 204 No Content on success, 404 if the id does not exist.
+
+    WHY 204 (not 200):
+        HTTP 204 means "success with no response body" — the canonical
+        status for a successful DELETE in REST conventions.  The frontend
+        TanStack mutation doesn't need a body; it just calls
+        queryClient.invalidateQueries() to refresh the history list.
+    """
+    deleted = await asyncio.to_thread(delete_by_id, record_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Record '{record_id}' not found.",
+        )
+    return Response(status_code=204)

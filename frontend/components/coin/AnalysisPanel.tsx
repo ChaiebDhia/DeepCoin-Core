@@ -279,7 +279,15 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
                   ${item.rank === 1 ? "bg-blue-900/20" : "bg-[var(--surface-2)]"}`}
               >
                 <span className="text-[var(--text-muted)] w-4 text-xs font-mono">{item.rank}</span>
-                <span className="font-mono text-[var(--text-primary)] flex-1">CN {item.label}</span>
+                <a
+                  href={`https://www.corpus-nummorum.eu/types/${item.label}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="font-mono text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 transition-colors flex-1"
+                >
+                  CN {item.label} ↗
+                </a>
                 <div className="flex items-center gap-2">
                   <div className="w-24 h-1.5 rounded-full bg-[var(--surface-3)] overflow-hidden">
                     <div

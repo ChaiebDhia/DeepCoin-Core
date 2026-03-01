@@ -17,14 +17,14 @@
  *   history, so back/forward navigation restores the correct page.
  */
 
-import { Suspense }               from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import { useQuery }               from "@tanstack/react-query";
-import { History }                from "lucide-react";
+import { Suspense }                                from "react";
+import { useSearchParams, useRouter }              from "next/navigation";
+import { useQuery, useMutation, useQueryClient }   from "@tanstack/react-query";
+import { History }                                 from "lucide-react";
 
-import { getHistory }             from "@/lib/api";
-import { HistoryTable }           from "@/components/history/HistoryTable";
-import { Spinner }                from "@/components/ui/spinner";
+import { getHistory, deleteHistoryItem }           from "@/lib/api";
+import { HistoryTable }                            from "@/components/history/HistoryTable";
+import { Spinner }                                 from "@/components/ui/spinner";
 
 const PAGE_LIMIT = 20;
 
@@ -33,6 +33,7 @@ const PAGE_LIMIT = 20;
 function HistoryContent() {
   const searchParams = useSearchParams();
   const router       = useRouter();
+  const queryClient  = useQueryClient();
 
   const page = Math.max(1, Number(searchParams.get("page") ?? "1"));
   const skip = (page - 1) * PAGE_LIMIT;
@@ -41,6 +42,21 @@ function HistoryContent() {
     queryKey:  ["history", skip],
     queryFn:   () => getHistory(skip, PAGE_LIMIT),
     staleTime: 30_000,
+  });
+
+  /**
+   * Delete mutation.
+   * On success: invalidate ["history"] so every cached page refreshes.
+   * WHY invalidateQueries instead of setQueryData:
+   *   Deleting one row may shift the entire pagination. A manual cache
+   *   update would need to rebuild every page window correctly. Invalidating
+   *   triggers a background refetch — simpler and always correct.
+   */
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteHistoryItem(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["history"] });
+    },
   });
 
   function handlePageChange(newSkip: number) {
@@ -93,6 +109,7 @@ function HistoryContent() {
           skip={skip}
           limit={PAGE_LIMIT}
           onPageChange={handlePageChange}
+          onDelete={(id) => deleteMutation.mutate(id)}
           isLoading={isLoading}
         />
       )}

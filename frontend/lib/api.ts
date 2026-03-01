@@ -183,6 +183,20 @@ export async function getHistoryItem(id: string): Promise<ClassifyResponse> {
 }
 
 /**
+ * DELETE /api/history/{id}
+ *
+ * Permanently remove one past classification record.
+ * Returns void on success (HTTP 204); throws ApiError on 404 or network error.
+ */
+export async function deleteHistoryItem(id: string): Promise<void> {
+  try {
+    await apiClient.delete(`/history/${id}`);
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+/**
  * GET /api/health
  *
  * Check that FastAPI, the model, RAG engine and ChromaDB are all up.
