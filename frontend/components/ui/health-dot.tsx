@@ -28,13 +28,15 @@ export function HealthDot() {
     retry:           false,
   });
 
-  const dotColor = isError                   ? "bg-red-500" :
-                   data?.status === "ok"     ? "bg-green-500" :
+  const isHealthy = data?.status === "healthy" || data?.status === "ok";
+
+  const dotColor = isError      ? "bg-red-500" :
+                   isHealthy   ? "bg-green-500" :
                    data?.status === "degraded" ? "bg-amber-400" :
                    "bg-slate-600";   // no data yet — neutral
 
-  const label =  isError                   ? "Backend unreachable" :
-                 data?.status === "ok"     ? `API v${data.version} — all systems OK` :
+  const label =  isError      ? "Backend unreachable" :
+                 isHealthy   ? `API v${data?.version} — all systems OK` :
                  data?.status === "degraded" ? `API degraded — check components` :
                  "Connecting…";
 
@@ -48,7 +50,7 @@ export function HealthDot() {
         className={cn(
           "h-2 w-2 rounded-full shrink-0",
           dotColor,
-          data?.status === "ok" && "animate-pulse",
+          isHealthy && "animate-pulse",
         )}
       />
       <span className="hidden sm:block">{label}</span>

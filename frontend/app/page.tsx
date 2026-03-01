@@ -65,17 +65,19 @@ export default function HomePage() {
         )}
       </AnimatePresence>
 
+      {/* AgentPipeline — fixed full-screen modal overlay during processing */}
+      <AnimatePresence>
+        {isProcessing && <AgentPipeline key="pipeline" />}
+      </AnimatePresence>
+
       {/* Main grid */}
       <div className={hasResult
         ? "grid grid-cols-1 lg:grid-cols-2 gap-8 items-start"
         : "flex justify-center"
       }>
-        {/* Uploader + AgentPipeline */}
+        {/* Uploader */}
         <div className="flex flex-col gap-4">
           <CoinUploader />
-          <AnimatePresence mode="wait">
-            {isProcessing && <AgentPipeline key="pipeline" />}
-          </AnimatePresence>
         </div>
 
         {/* Result panel — slides in from right */}

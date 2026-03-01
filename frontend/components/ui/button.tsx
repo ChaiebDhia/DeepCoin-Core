@@ -52,7 +52,8 @@ export interface ButtonProps
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, ...props }, ref) => (
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  ({ className, variant, size, asChild: _asChild, ...props }, ref) => (
     <button
       ref={ref}
       className={cn(buttonVariants({ variant, size }), className)}

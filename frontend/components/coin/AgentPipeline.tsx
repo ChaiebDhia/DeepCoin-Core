@@ -129,7 +129,8 @@ export function AgentPipeline() {
     const agent   = AGENTS[stageIdx];
     const idx     = msgIdxRef.current[stageIdx];
     const message = agent.messages[idx];
-    msgIdxRef.current[stageIdx] = (idx + 1) % agent.messages.length;
+    // Advance but stop at the last message — do NOT wrap around
+    msgIdxRef.current[stageIdx] = Math.min(idx + 1, agent.messages.length - 1);
     const id = ++logIdRef.current;
     setLog(l => [...l.slice(-7), { id, agentIdx: stageIdx, message }]);
   };
@@ -178,12 +179,21 @@ export function AgentPipeline() {
   const elapsedSec = (elapsed / 1000).toFixed(1);
 
   return (
+    // ── Fixed fullscreen overlay with backdrop blur ──────────────────────────
     <motion.div
-      initial={{ opacity: 0, y: 28 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -16, scale: 0.97 }}
-      transition={{ duration: 0.4, ease: "easeOut" }}
-      className="rounded-2xl overflow-hidden"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.25 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backdropFilter: "blur(8px)", background: "rgba(4,10,20,0.75)" }}
+    >
+    <motion.div
+      initial={{ opacity: 0, scale: 0.94, y: 24 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.94, y: 16 }}
+      transition={{ duration: 0.35, ease: "easeOut" }}
+      className="rounded-2xl overflow-hidden w-full max-w-xl"
       style={{
         border: "1px solid rgba(255,255,255,0.07)",
         background: "linear-gradient(145deg, #0d1a2e 0%, #080e1a 100%)",
@@ -378,6 +388,7 @@ export function AgentPipeline() {
           </AnimatePresence>
         </div>
       </div>
+    </motion.div>
     </motion.div>
   );
 }

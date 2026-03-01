@@ -96,14 +96,9 @@ export interface HistoryListResponse {
 // ── Health model ──────────────────────────────────────────────────────────────
 
 export interface HealthResponse {
-  status:  "ok" | "degraded";
+  // FastAPI returns "healthy" (not "ok") — keeping "ok" for fallback compat
+  status:  "healthy" | "degraded" | "ok";
   version: string;
-  components: {
-    model:       boolean;
-    rag_engine:  boolean;
-    chroma_db:   boolean;
-    uploads_dir: boolean;
-    reports_dir: boolean;
-  };
-  uptime_s: number;
+  components: Record<string, string>;
+  uptime_s?: number;
 }
