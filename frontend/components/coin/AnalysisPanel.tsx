@@ -100,9 +100,49 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
     return () => clearTimeout(t);
   }, [cnn.top5]);
 
+  // Confidence context message — shown when the model is uncertain.
+  // WHY: raw % without context looks alarming. Users need to understand
+  // that <40% is expected for coins outside the 438 training types.
+  const lowConf = cnn.confidence < 0.40;
+
   return (
     <Section icon={<Cpu size={16} />} title="CNN Classification" variant="cnn" delay={0}>
       <div className="flex flex-col gap-3">
+        {/* Main result */}
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs text-[var(--text-muted)]">Corpus Nummorum Type</p>
+            <p className="text-2xl font-bold text-[var(--text-primary)] font-mono">
+              CN {cnn.label}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-[var(--text-muted)] mb-1">Confidence</p>
+            <span className={`text-3xl font-black tabular-nums ${confidenceText(cnn.confidence)}`}>
+              <CountUp
+                end={cnn.confidence * 100}
+                decimals={1}
+                suffix="%"
+                duration={1.1}
+                delay={0.15}
+              />
+            </span>
+          </div>
+        </div>
+
+        {/* Low-confidence context note */}
+        {lowConf && (
+          <div className="rounded-lg px-3 py-2.5 text-xs leading-relaxed"
+            style={{ background: "rgba(139,92,246,0.10)", border: "1px solid rgba(139,92,246,0.25)" }}>
+            <span className="font-semibold text-purple-300">ℹ️ Expected result — </span>
+            <span className="text-[var(--text-secondary)]">
+              The CNN was trained on 438 of the 9,716 Corpus Nummorum types (those with ≥10 reference
+              images). Coins from the remaining 9,278 types will naturally produce low scores here — the
+              Visual Investigation agent cross-references the full 9,541-type knowledge base to find the
+              closest scholarly match.
+            </span>
+          </div>
+        )}
         {/* Main result */}
         <div className="flex items-center justify-between">
           <div>
@@ -252,6 +292,17 @@ function InvestigatorSection({ result }: { result: ClassifyResponse }) {
   return (
     <Section icon={<Search size={16} />} title="Visual Investigation" variant="investigator" delay={0.1}>
       <div className="flex flex-col gap-3">
+        {/* Context banner — honest framing of why this route was taken */}
+        <div className="rounded-lg px-3 py-2.5 text-xs leading-relaxed"
+          style={{ background: "rgba(139,92,246,0.10)", border: "1px solid rgba(139,92,246,0.25)" }}>
+          <p className="font-semibold text-purple-300 mb-1">🔍 Visual Investigation Route</p>
+          <p className="text-[var(--text-secondary)]">
+            CNN confidence is below the classification threshold — this coin may belong to one of the
+            9,278 CN types not included in the training set. The investigator agent has analysed the
+            visual attributes and cross-referenced all <span className="text-purple-300 font-medium">9,541 types</span> in
+            the Corpus Nummorum knowledge base to find the closest scholarly match.
+          </p>
+        </div>
         {result.visual_description && (
           <div>
             <p className="text-xs text-[var(--text-muted)] mb-1 uppercase tracking-wide">

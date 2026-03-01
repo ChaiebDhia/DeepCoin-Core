@@ -139,6 +139,22 @@ class CoinInference:
         """
         Load image from disk as RGB numpy array (H, W, 3) uint8.
 
+        CRITICAL — applies CLAHE preprocessing to match training distribution.
+
+        The model (best_model.pth) was trained exclusively on CLAHE-enhanced
+        images produced by prep_engine.py (clipLimit=2.0, tileGridSize=(8,8)).
+        Skipping CLAHE here creates a train/inference distribution mismatch:
+          - Raw photos have lower contrast than CLAHE-processed training images
+          - Lower contrast → weaker convolutional feature activations
+          - Weaker activations → softmax spreads probability mass more evenly
+          - Result: top-1 confidence 5–15% instead of expected 50–90%
+          - Even coin types the model knows well appear to be "unknown"
+
+        The CLAHE parameters MUST exactly match prep_engine.py:
+          CLAHE_CLIP = 2.0   (too high amplifies noise; too low = no effect)
+          CLAHE_TILE = (8,8) (localised enhancement over 64 sub-tiles)
+          L channel only     (preserves metal patina colour in A, B channels)
+
         Raises:
             FileNotFoundError: if the path doesn't exist
             ValueError:        if OpenCV can't decode the file
@@ -147,13 +163,24 @@ class CoinInference:
         if not path.exists():
             raise FileNotFoundError(f"Image not found: {path}")
 
-        # OpenCV loads as BGR — convert to RGB immediately
-        # WHY? EfficientNet was pretrained on ImageNet (RGB).
-        # Feeding BGR shifts every colour channel → garbage features.
         img_bgr = cv2.imread(str(path))
         if img_bgr is None:
             raise ValueError(f"OpenCV could not decode image: {path}")
 
+        # ── Step 1: CLAHE in LAB colour space (identical to prep_engine.py) ──
+        # Convert BGR → LAB, apply CLAHE to L channel only, convert back.
+        # WHY L only: A and B carry colour (patina) — enhancing them distorts
+        # the oxidation hues that numismatists use to date coins.
+        lab        = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2LAB)
+        l, a, b    = cv2.split(lab)
+        clahe      = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        l_eq       = clahe.apply(l)
+        lab_eq     = cv2.merge((l_eq, a, b))
+        img_bgr    = cv2.cvtColor(lab_eq, cv2.COLOR_LAB2BGR)
+
+        # ── Step 2: BGR → RGB (EfficientNet pretrained on ImageNet = RGB) ────
+        # OpenCV loads as BGR; feeding BGR to an RGB-pretrained model shifts
+        # every colour channel → wrong feature activations throughout all layers.
         img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
         return img_rgb
 
