@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: March 2026 — Layer 5 v2 + security audit + live-testing UX fixes (47d3ef9): CLAHE train/inference mismatch fix, investigator UX, health dot, AgentPipeline modal, synthesis cycling, proxy/IPv6 fixes. Layer 6 (Docker) is next.
+# Last updated: March 2026 — P2–16 production audit done (6dad389): GZip, SQL pagination, GPU semaphore, JSON logging, HSTS, X-Request-ID, canvas downsize, Cancel button, X button, CLAHE singleton. Layer 6 (Docker) is next.
 
 ---
 
@@ -892,44 +892,45 @@ All 5 agents fully upgraded. All 3 routes tested and passing.
 - Signature change from `to_pdf(markdown_str, path)` → `to_pdf(state_dict, path)`
 - **Audit fix (8354450):** `import re as _re` removed from inside `_enrich_label()` and `_basename()` — both now use module-level `re`; eliminates a redundant stdlib import executed on every PDF render call
 
-### Layer 4 — FastAPI Backend ✅ ENTERPRISE-HARDENED (latest: 1b210ef)
-- `src/api/main.py`: lifespan, real CORS (`ALLOWED_ORIGINS` env), real health endpoint (5 component checks → 503 if degraded), `_cleanup_old_files(max_age_hours=24)` at startup, `/api/metrics` Prometheus text
+### Layer 4 — FastAPI Backend ✅ ENTERPRISE-HARDENED (latest: 6dad389)
+- `src/api/main.py`: lifespan, real CORS (`ALLOWED_ORIGINS` env), real health endpoint (5 component checks → 503 if degraded), `_cleanup_old_files(max_age_hours=24)` at startup, `/api/metrics` (auth-gated, Prometheus text), GZipMiddleware(500B), X-Request-ID ASGI middleware, ENV-gated docs (`docs_url=None` in production)
+- `src/api/logging_config.py` (NEW): `configure_logging()` — `LOG_FORMAT=json|text`, `LOG_LEVEL`, silences httpx/chromadb/sentence_transformers; `python-json-logger>=3.0.0` dependency
 - `src/api/schemas.py`: Pydantic v2 — `ClassifyResponse`, `CnnResult`, `Top5Item`, `HistoryListResponse`, `HistorySummary`
-- `src/api/_store.py`: **SQLite** (WAL mode, B-tree indexed, O(log n) writes) — replaces old O(n) JSON store
+- `src/api/_store.py`: **SQLite** (WAL mode, B-tree indexed) — `count()` O(log n) SQL COUNT, `load_page(skip,limit)` SQL LIMIT/OFFSET, replaces O(n) Python-slice pagination
 - `src/api/auth.py`: `require_api_key` dependency — `hmac.compare_digest`, dev-mode passthrough when `DEEPCOIN_API_KEY` unset
 - `src/api/limiter.py`: slowapi singleton, `10/minute` on `/api/classify`
-- `src/api/routes/classify.py`: `Depends(require_api_key)` + `@limiter.limit("10/minute")` — fully secured
-- `src/api/routes/history.py`: `GET /api/history` (paginated, newest-first) + `GET /api/history/{id}`
+- `src/api/routes/classify.py`: `Depends(require_api_key)` + `@limiter.limit("10/minute")` + `asyncio.Semaphore(1)` GPU guard + `save_path.unlink(missing_ok=True)` in `finally:` + sync `history_append`
+- `src/api/routes/history.py`: `GET /api/history` (SQL paginated, newest-first) + `GET /api/history/{id}`
 - `GET /api/reports/{filename}`: PDF serving with path traversal protection
-- `GET /api/metrics`: Prometheus text format — uptime, reports_total, history_total, model_loaded, uploads_total
 - `src/__init__.py`: `__version__ = "0.4.0"` — single version source of truth
-- Tests: **34/34 unit tests passing** in 1.31s
+- Tests: **36/36 unit tests passing**
 - Server start: `uvicorn src.api.main:app --port 8000 --log-level info`
 
-### Layer 5 — Next.js Frontend ✅ COMPLETE v2 + Security Audit + Proxy Fix
-Directory: `frontend/` (25 files, 0 TypeScript errors)
+### Layer 5 — Next.js Frontend ✅ COMPLETE v2 + Full Production Hardening (latest: 6dad389)
+Directory: `frontend/` (25+ files, 0 TypeScript errors)
 Stack: Next.js 15 App Router, TypeScript 5, Tailwind CSS v4, CVA, TanStack Query 5, Zustand 5, Axios, Framer Motion 12, react-countup 6
 Pages: `/` (classify + hero), `/history` (paginated table, URL-synced), `/history/[id]` (full detail)
-Components: CoinUploader (drag-drop + TTA toggle + AbortController), AgentPipeline (mission control), AnalysisPanel (animated bars + CountUp), HistoryTable, HealthDot
+Components: CoinUploader (drag-drop + TTA toggle + AbortController + Cancel button + canvas downsize), AgentPipeline (fullscreen modal, mission control, X button), AnalysisPanel (animated bars + CountUp + route colours), HistoryTable, HealthDot
 Animations: Framer Motion AnimatePresence transitions, particle-beam connectors in AgentPipeline, CountUp confidence number, CSS cubic-bezier bar growth
 Error boundaries: `app/error.tsx`, `app/history/error.tsx`, `app/history/[id]/error.tsx`
 URL pagination: `history/page.tsx` uses `useSearchParams` + `useRouter` wrapped in `<Suspense>`
-Security: 6 HTTP headers (CSP with blob:, X-Frame-Options:DENY, nosniff, Referrer-Policy, Permissions-Policy), AbortController cancellation, blob URL lifecycle management
+Security: 6 HTTP headers (CSP dev/prod split, `blob:` in img-src, HSTS 2yr preload, X-Frame-Options:DENY, nosniff, Referrer-Policy, Permissions-Policy), AbortController cancellation, blob URL lifecycle management (`useMemo` + cleanup `useEffect`), reactive Zustand selectors
 Design: dark navy brand palette matching PDF report; shadcn-style CVA component system
+70% confidence threshold: below shows "Nearest Candidate" / "Not Identified" purple pill
 
-**Runtime proxy fixes (discovered during live testing):**
+**Cancel / Abort architecture:**
+- `CoinUploader`: red Cancel button replaces Analyse during loading; `handleCancel()` calls `abortRef.current.abort()` + `reset()`
+- `AgentPipeline`: X button in modal header; hover state via `useState(xHovered)` (not DOM mutation — Framer Motion conflict)
+- `store.ts`: `_cancelFn: (() => void) | null` + `setCancelFn` action — sibling-communication bridge between CoinUploader and AgentPipeline
 
-**Fix A — IPv6 resolution (`ECONNREFUSED ::1:8000`):**
-- Cause: Node.js on Windows resolves `localhost` → IPv6 `::1`; Uvicorn binds IPv4 `127.0.0.1` only
-- Fix: `DEEPCOIN_API_URL=http://127.0.0.1:8000` in `.env.local` (explicit IPv4)
+**Client-side image downsize (P16):**
+- `downsizeImage(file, maxPx=1024)` — canvas JPEG 0.85, returns original if already ≤ 1024px
+- Called before every `classifyCoin()` — eliminates large DSLR uploads hitting the API
 
-**Fix B — Turbopack proxy timeout (`ECONNRESET`) on classify:**
-- Cause: Next.js Turbopack dev-server proxy has a hard ~30s socket timeout. Ollama LLM takes 15–60s → proxy kills connection mid-response.
-- Fix: Two-client architecture in `lib/api.ts`:
-  - `apiClient` (baseURL `/api`, 120s) — health, history — go through proxy as before
-  - `classifyApiClient` (baseURL `NEXT_PUBLIC_CLASSIFY_URL=http://127.0.0.1:8000`, 180s) — classify ONLY — calls FastAPI directly from the browser, bypasses proxy
-  - FastAPI's `ALLOWED_ORIGINS=http://localhost:3000` already permits CORS from the browser
-  - `.env.local: NEXT_PUBLIC_CLASSIFY_URL=http://127.0.0.1:8000`
+**Runtime proxy fixes:**
+- IPv6: `DEEPCOIN_API_URL=http://127.0.0.1:8000` in `.env.local` (Node.js `localhost` → `::1` bug)
+- Turbopack timeout: `classifyApiClient` (direct to FastAPI, 180s) — bypasses ~30s proxy timeout
+- CSP `connect-src http://127.0.0.1:8000` added to allow direct browser→FastAPI calls
 
 Prod build verified: `next build` clean, 5 routes compiled (4 static + 1 dynamic), tsc: 0 errors
 
@@ -1205,7 +1206,11 @@ pytest (9.0.2)      # unit testing (34 tests across 3 files)
 | `a2e8e50` | fix: synthesis log idx guard (bail-out replaces Math.min cap) |
 | `d732767` | fix: synthesis stage messages — user-friendly wording |
 | `bc99423` | fix: CLAHE in inference._load_image() + investigator UX (purple badge, context banners) |
-| `47d3ef9` | fix: anchor lib/ gitignore to root; track frontend/lib/*.ts (api.ts, store.ts, utils.ts) ← LATEST |
+| `47d3ef9` | fix: anchor lib/ gitignore to root; track frontend/lib/*.ts (api.ts, store.ts, utils.ts) |
+| `1ab77e6` | feat: Cancel button (AbortController) + CLAHE singleton in CoinInference.__init__() |
+| `9ddad23` | feat: X button on AgentPipeline modal + _cancelFn bridge in Zustand store |
+| `c7ef23d` | feat: P2-P9 audit — SQL COUNT, GPU semaphore, docs gate, SQL pagination, upload delete, GZip, metrics auth, noopener |
+| `6dad389` | feat: P10-P16 audit — HSTS, JSON logging, RAG BM25 warning, CSP prod, sync history, X-Request-ID, canvas downsize ← LATEST |
 
 ---
 
@@ -1667,6 +1672,40 @@ tsc: 0 errors | build: clean (5 routes)
 ✅ CnnSection low-conf callout      conf<40%: explains 438/9716 constraint, sets expectations
 ✅ InvestigatorSection banner       Opens with context: "low conf is expected, KB covers 9541 types"
 ✅ frontend/lib/*.ts now tracked    .gitignore lib/→/lib/ anchors Python rule; api.ts+store.ts+utils.ts committed
+```
+
+**Cancel / X button abort architecture: COMPLETE (1ab77e6 + 9ddad23).**
+
+```
+✅ Cancel button (CoinUploader)     AbortController.abort() + setCancelFn(null) + reset() during isLoading
+✅ X button (AgentPipeline modal)   useState(xHovered) hover state; onCancel prop wired from store._cancelFn
+✅ Zustand _cancelFn bridge         sibling communication: CoinUploader → store → AgentPipeline
+✅ CLAHE singleton                  cv2.createCLAHE() in __init__, reused across all TTA passes
+```
+
+**P2–P9 backend audit: COMPLETE (c7ef23d) — 36/36 tests passing.**
+
+```
+✅ P2: history count O(log n)       SELECT COUNT(*) replaces len(load_all())
+✅ P3: GPU semaphore                asyncio.Semaphore(1) prevents concurrent CUDA OOM
+✅ P4: docs gated by ENV            docs_url=None when ENV=production
+✅ P5: SQL pagination               LIMIT/OFFSET replaces Python-slice O(n) memory
+✅ P6: upload file cleanup          save_path.unlink(missing_ok=True) in finally:
+✅ P7: GZip middleware              minimum_size=500 — 60–70% compression on classify responses
+✅ P8: metrics auth                 Depends(require_api_key) on /api/metrics
+✅ P9: noopener noreferrer          PDF link target=_blank security fix
+```
+
+**P10–P16 deep hardening: COMPLETE (6dad389) — 36/36 tests, 0 TS errors.**
+
+```
+✅ P10: HSTS header                 max-age=63072000; includeSubDomains; preload
+✅ P11: JSON structured logging     src/api/logging_config.py; LOG_FORMAT=json|text; silences noisy libs
+✅ P12: RAG BM25 warning            logger.warning() when ChromaDB returns nothing — no silent fallback
+✅ P13: CSP unsafe-eval prod        removed from production CSP; dev-only via isDev flag
+✅ P14: sync history append         removed asyncio.to_thread — SQLite WAL write < 1ms, no benefit
+✅ P15: X-Request-ID middleware     every request gets UUID4; echoed in response header
+✅ P16: canvas downsize             downsizeImage(file, maxPx=1024) before upload; JPEG 0.85
 ```
 
 **NEXT: Layer 6 — Docker Compose Infrastructure.**
