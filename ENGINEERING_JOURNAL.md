@@ -4494,3 +4494,233 @@ The Next.js rewrites mean the browser only talks to port 3000. FastAPI is never 
 **Layer 6  Docker Compose Infrastructure** (7 services: frontend, api, chromadb, postgres, redis, nginx, localstack)
 
 Iron rule: discuss plan first, wait for "go", then build.
+
+---
+
+## 33. Layer 5 v2  Animated Mission Control & UX Overhaul (March 2026)
+
+**Commit:** `b0fa6da`
+**Status:** COMPLETE  0 TypeScript errors, prod build clean, all 5 routes compile
+
+---
+
+### Motivation
+
+After the Layer 5 audit, 10 real issues were identified. The two categories were:
+
+1. **Bugs** — missing error boundaries, pagination state lost on browser back
+2. **UX gaps** — boring spinner, no visual feedback about which AI agent is running, all result sections identical blue, static confidence number
+
+The user directive: *"something out of the box and user friendly and mind blowing"* — driven by the goal of showing the multi-agent pipeline visually as it runs.
+
+---
+
+### Change 1 — AgentPipeline Mission Control (`components/coin/AgentPipeline.tsx`)
+
+**WHAT:** A full-screen animated component that replaces the plain spinner while the API call is in flight.
+
+**HOW it works:**
+
+```
+4 stations (timed to match real pipeline latency):
+  🔬 CNN Classifier     — activates at    0 ms  (visual ID)
+  📚 Knowledge Base     — activates at 1200 ms  (RAG retrieval)
+  🧠 LLM Synthesis      — activates at 2800 ms  (narrative generation)
+  📄 Report Builder     — activates at 17000 ms (PDF assembly)
+
+Time-based not event-based: the API is a black box, we have no mid-flight
+events. Stage durations match the real gatekeeper node_timings measured in test.
+```
+
+**Architecture details:**
+
+- Two intervals run simultaneously: a 100 ms tick (elapsed counter + stage check) and a 2500 ms emitter (appends agent "chat" messages to the log)
+- All mutable values accessed inside interval callbacks use `useRef` — avoids stale-closure bugs where React state is captured at interval creation time
+- `startRef` (timestamp), `activeStageRef` (index), `msgIdxRef` (next message), `addMessageRef` (function ref) prevent all such bugs
+- `AnimatePresence mode="popLayout"` on the chat log entries: each new message slides in from the left with `height: 0 → auto` so the log expands smoothly
+- Connector rails use CSS `@keyframes particle-flow` — a `radial-gradient` dot travels from left to right along the rail, creating a real-time "data flowing" effect
+- Active card glows with `box-shadow: 0 0 22px 3px <agent-color>26` (10% alpha of the agent colour)
+
+**WHY this approach instead of a LibreOffice-style progress bar:**
+
+The multi-agent pipeline is the technical contribution of the PFE. Showing users which specialist is running (CNN → KB → LLM → PDF) communicates the architecture's key insight — that different AI systems for different confidence ranges — in a way a plain spinner never could.
+
+---
+
+### Change 2 — Framer Motion Transitions (`app/page.tsx`)
+
+**WHAT:** Entrance/exit animations on the three main UI states (hero, processing, result).
+
+```tsx
+// Hero block fades down when user uploads
+<AnimatePresence>
+  {phase === "idle" && (
+    <motion.div exit={{ opacity: 0, y: -12, scale: 0.98 }}>
+      <HeroSection />
+    </motion.div>
+  )}
+</AnimatePresence>
+
+// Processing: AgentPipeline slides up, exits on completion
+<AnimatePresence mode="wait">
+  {phase === "processing" && <AgentPipeline />}
+</AnimatePresence>
+
+// Result slides in from the right
+<AnimatePresence>
+  {phase === "done" && (
+    <motion.div initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }}>
+      <AnalysisPanel />
+    </motion.div>
+  )}
+</AnimatePresence>
+```
+
+`mode="wait"` on the processing block ensures the AgentPipeline fully exits before the result panel enters — prevents both being visible simultaneously.
+
+---
+
+### Change 3 — Animated Result Sections (`components/coin/AnalysisPanel.tsx`)
+
+**Three sub-changes:**
+
+**a) Per-route colour coding via `SECTION_COLORS`:**
+```ts
+const SECTION_COLORS = {
+  cnn:         { icon: "text-blue-400",    title: "text-blue-300"    },
+  historian:   { icon: "text-emerald-400", title: "text-emerald-300" },
+  validator:   { icon: "text-amber-400",   title: "text-amber-300"   },
+  investigator:{ icon: "text-purple-400",  title: "text-purple-300"  },
+};
+```
+Each result card visually signals which agent produced it — CNN=blue, historian=emerald, validator=amber, investigator=purple. Matches the AgentPipeline station colours.
+
+**b) Animated confidence bars:**
+```tsx
+// starts at 0, snaps to real value after 120ms via setState
+const [barWidths, setBarWidths] = useState(() => top5.map(() => 0));
+useEffect(() => {
+  const t = setTimeout(() =>
+    setBarWidths(top5.map(p => p.confidence * 100)), 120);
+  return () => clearTimeout(t);
+}, [top5]);
+// CSS: transition: width 0.7s cubic-bezier(0.4, 0, 0.2, 1)
+```
+The bars grow from 0% to their real value in 700 ms — communicates that the values are computed, not static.
+
+**c) CountUp confidence number:**
+```tsx
+<CountUp end={cnn.confidence * 100} decimals={1} suffix="%" duration={1.1} delay={0.15} />
+```
+The big confidence number counts up from 0 to e.g. 91.1% in 1.1 s. Impact: makes high confidence feel earned and low confidence feel measured.
+
+---
+
+### Change 4 — CSS Animations (`app/globals.css`)
+
+```css
+@keyframes particle-flow {
+  0%   { left: 0%;   opacity: 0;   }
+  10%  { opacity: 1;               }
+  90%  { opacity: 1;               }
+  100% { left: 100%; opacity: 0;   }
+}
+
+@keyframes typewriter-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+.animate-particle { animation: particle-flow 1.6s linear infinite; }
+.animate-cursor   { animation: typewriter-blink 1s step-end infinite; }
+```
+
+`particle-flow`: opacity ramps up/down at 10%/90% so the dot fades in/out smoothly at both ends — preventing the harsh teleport effect when it wraps.
+
+---
+
+### Change 5 — Error Boundaries (3 files)
+
+**WHY:** Without error boundaries, any unhandled exception in the component tree causes a blank white page with no explanation. Next.js requires one `error.tsx` per route segment.
+
+| File | Scope |
+|------|-------|
+| `app/error.tsx` | Root — catches errors in `/` |
+| `app/history/error.tsx` | Catches errors in `/history` |
+| `app/history/[id]/error.tsx` | Catches errors in `/history/123` |
+
+All three: `"use client"` (required by Next.js), accept `{ error, reset }` props, show the error message + digest (for support ticket correlation), provide "Try again" and "Go back" buttons.
+
+---
+
+### Change 6 — URL-Synced Pagination (`app/history/page.tsx`)
+
+**WHAT:** Replaced `useState(0)` with `useSearchParams()` → `/history?page=N`.
+
+**WHY the split into `HistoryContent` + `HistoryPage`:**
+
+Next.js requires `useSearchParams()` to be in a component wrapped by `<Suspense>`. Without the boundary, the build fails:
+
+```
+Error: `useSearchParams()` should be wrapped in a suspense boundary at page "/"
+```
+
+Pattern used:
+```tsx
+// HistoryContent — uses useSearchParams, MUST be inside Suspense
+function HistoryContent() {
+  const searchParams = useSearchParams();
+  const router       = useRouter();
+  const page = Math.max(1, Number(searchParams.get("page") ?? "1"));
+  const skip = (page - 1) * PAGE_LIMIT;
+  // ...
+  function handlePageChange(newSkip: number) {
+    const newPage = Math.floor(newSkip / PAGE_LIMIT) + 1;
+    if (newPage <= 1) router.push("/history");
+    else              router.push(`/history?page=${newPage}`);
+  }
+}
+
+// HistoryPage — provides the Suspense boundary
+export default function HistoryPage() {
+  return <Suspense fallback={<Spinner />}><HistoryContent /></Suspense>;
+}
+```
+
+**Impact:** Browser back button after navigating to a detail page now correctly returns to the same history page, not page 1.
+
+---
+
+### Dependencies Added
+
+| Package | Version | Why |
+|---------|---------|-----|
+| `framer-motion` | 12.x | `AnimatePresence`, `motion.div` layout transitions |
+| `react-countup` | 6.x | CountUp component — confidence number animation |
+
+Both ship their own TypeScript declarations — no `@types/` packages needed.
+
+---
+
+### Installed with
+
+```powershell
+npm install framer-motion react-countup --save
+# 74 packages, 0 vulnerabilities
+```
+
+---
+
+### Build Result
+
+```
+Next.js 16.1.6 (Turbopack)
+✓ Compiled successfully in 16.1s
+✓ TypeScript: 0 errors
+✓ 5 routes generated (4 static + 1 dynamic)
+tsc --noEmit: 0 errors
+```
+
+---
+
+*Last updated: March 2026 — Layer 5 v2 complete (b0fa6da). Mission Control UI, Framer Motion, error boundaries, URL pagination. Layer 6 (Docker) is next.*
