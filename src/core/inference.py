@@ -55,20 +55,39 @@ _TTA_TRANSFORMS = [
     # Pass 1 — no extra augmentation (clean baseline)
     None,
     # Pass 2 — horizontal flip
+    # WHY: coins photographed from either side are mirrored in the training set
     A.Compose([A.HorizontalFlip(p=1.0),
                A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
                ToTensorV2()]),
-    # Pass 3 — small clockwise rotation
+    # Pass 3 — small clockwise rotation (+10°)
     A.Compose([A.Rotate(limit=(10, 10), p=1.0),
                A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
                ToTensorV2()]),
-    # Pass 4 — small counter-clockwise rotation
+    # Pass 4 — small counter-clockwise rotation (-10°)
     A.Compose([A.Rotate(limit=(-10, -10), p=1.0),
                A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
                ToTensorV2()]),
-    # Pass 5 — slight brightness boost (simulates different lighting)
-    A.Compose([A.RandomBrightnessContrast(brightness_limit=(0.1, 0.1),
+    # Pass 5 — slight brightness boost (+0.12)
+    # Simulates well-lit museum vs ambient photography
+    A.Compose([A.RandomBrightnessContrast(brightness_limit=(0.12, 0.12),
                                           contrast_limit=0, p=1.0),
+               A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+               ToTensorV2()]),
+    # Pass 6 — wider clockwise rotation (+15°)
+    # Covers hand-held photos tilted more noticeably
+    A.Compose([A.Rotate(limit=(15, 15), p=1.0),
+               A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+               ToTensorV2()]),
+    # Pass 7 — brightness reduction (-0.12)
+    # Complements pass 5: handles underexposed / shadow photos
+    A.Compose([A.RandomBrightnessContrast(brightness_limit=(-0.12, -0.12),
+                                          contrast_limit=0, p=1.0),
+               A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+               ToTensorV2()]),
+    # Pass 8 — contrast boost (+0.15)
+    # Accentuates relief details on well-preserved coins; also in training aug set
+    A.Compose([A.RandomBrightnessContrast(brightness_limit=0,
+                                          contrast_limit=(0.15, 0.15), p=1.0),
                A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
                ToTensorV2()]),
 ]

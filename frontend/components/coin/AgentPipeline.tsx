@@ -33,19 +33,33 @@ import { X }                              from "lucide-react";
 
 const AGENTS = [
   {
+    emoji:    "�️",
+    name:     "Preprocessor",
+    subtitle: "Crop · Enhance · Normalise",
+    color:    "#f59e0b",
+    bgActive: "rgba(245,158,11,0.14)",
+    border:   "rgba(245,158,11,0.42)",
+    messages: [
+      "Decoding uploaded image…",
+      "Detecting coin region boundary…",
+      "Cropping to region of interest…",
+      "Applying CLAHE contrast boost (LAB)…",
+      "Resizing to 299×299 for CNN input…",
+      "Normalising to ImageNet statistics…",
+    ],
+  },
+  {
     emoji:    "🔬",
     name:     "CNN",
-    subtitle: "Crop · Enhance · Classify",
+    subtitle: "EfficientNet-B3 · 438 classes",
     color:    "#3b82f6",
     bgActive: "rgba(59,130,246,0.14)",
     border:   "rgba(59,130,246,0.40)",
     messages: [
-      "Auto-detecting coin region…",
-      "Cropping to coin boundary…",
-      "Enhancing contrast (CLAHE)…",
       "Extracting 1,536 visual features…",
       "Running softmax over 438 classes…",
-      "TTA — averaging 5 forward passes…",
+      "TTA — averaging 8 forward passes…",
+      "Computing top-5 confidence scores…",
       "Routing by confidence threshold…",
     ],
   },
@@ -104,8 +118,15 @@ const AGENTS = [
   messages: readonly string[];
 }>;
 
-/** ms after processing starts when each stage becomes active */
-const STAGE_STARTS = [0, 1200, 2800, 17_000];
+/**
+ * ms after processing starts when each stage becomes active.
+ * Preprocessor: 0 – 1 200 ms (OpenCV ops — fast)
+ * CNN:          1 200 – 2 600 ms (EfficientNet + 8-pass TTA on GPU)
+ * KB:           2 600 – 4 200 ms (BM25 + ChromaDB + RRF)
+ * LLM:          4 200 – 18 000 ms (Ollama gemma3:4b or remote provider)
+ * Synthesis:    ≥ 18 000 ms (fpdf2 render, triggered when result arrives)
+ */
+const STAGE_STARTS = [0, 1_200, 2_600, 4_200, 18_000];
 
 type LogEntry = {
   id:       number;
@@ -123,8 +144,8 @@ interface AgentPipelineProps {
 export function AgentPipeline({ onCancel }: AgentPipelineProps) {
   const startRef        = useRef(Date.now());
   const logIdRef        = useRef(0);
-  const activeStageRef  = useRef(0);        // stale-closure-safe current stage
-  const msgIdxRef       = useRef([0, 0, 0, 0]); // next msg index per agent
+  const activeStageRef  = useRef(0);           // stale-closure-safe current stage
+  const msgIdxRef       = useRef([0, 0, 0, 0, 0]); // next msg index per agent (5 stages)
 
   const [elapsed, setElapsed]         = useState(0);
   const [activeStage, setActiveStage] = useState(0);
@@ -203,10 +224,11 @@ export function AgentPipeline({ onCancel }: AgentPipelineProps) {
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.94, y: 16 }}
       transition={{ duration: 0.35, ease: "easeOut" }}
-      className="rounded-2xl overflow-hidden w-full max-w-xl"
+      className="rounded-2xl w-full max-w-2xl"
       style={{
-        border: "1px solid rgba(255,255,255,0.07)",
+        border:     "1px solid rgba(255,255,255,0.07)",
         background: "linear-gradient(145deg, #0d1a2e 0%, #080e1a 100%)",
+        overflow:   "hidden",
       }}
     >
       {/* ── Header ───────────────────────────────────────────────────── */}
@@ -251,7 +273,10 @@ export function AgentPipeline({ onCancel }: AgentPipelineProps) {
       </div>
 
       {/* ── Agent stations + connectors ──────────────────────────────── */}
-      <div className="flex items-center justify-center px-4 py-7 gap-0 overflow-x-auto">
+      {/* NOTE: overflow-x-auto was removed intentionally. Setting overflow-x:auto
+           forces overflow-y:hidden (CSS spec), which clips the vertical glow
+           box-shadows.  All 5 stations fit inside max-w-2xl at 68px/card.  */}
+      <div className="flex items-center justify-center px-6 py-8 gap-0">
         {AGENTS.map((agent, i) => {
           const isActive  = activeStage === i;
           const isDone    = doneStages.has(i);
@@ -268,7 +293,7 @@ export function AgentPipeline({ onCancel }: AgentPipelineProps) {
                   y:       0,
                 }}
                 transition={{ delay: i * 0.08, duration: 0.35, ease: "easeOut" }}
-                className="flex flex-col items-center gap-2 rounded-xl px-3 py-3.5 min-w-[82px]"
+                className="flex flex-col items-center gap-2 rounded-xl px-2.5 py-3 min-w-[68px]"
                 style={{
                   background:  isActive ? agent.bgActive
                              : isDone   ? "rgba(255,255,255,0.03)"
@@ -326,7 +351,7 @@ export function AgentPipeline({ onCancel }: AgentPipelineProps) {
               {/* ── Connector beam ─────────────────────────────────── */}
               {i < AGENTS.length - 1 && (
                 <div
-                  className="relative mx-1.5 h-0.5 w-10 rounded-full overflow-hidden shrink-0"
+                  className="relative mx-1 h-0.5 w-8 rounded-full overflow-hidden shrink-0"
                   style={{ backgroundColor: "rgba(255,255,255,0.06)" }}
                 >
                   {(isActive || doneStages.has(i)) && (
