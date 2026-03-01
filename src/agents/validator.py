@@ -150,7 +150,10 @@ class Validator:
 
         Returns (metal_str, detection_confidence_0_to_1, uncertainty_str, stats_dict).
         """
-        img = cv2.imread(image_path)
+        # np.fromfile + imdecode: handles non-ASCII paths on Windows
+        # (cv2.imread uses C fopen which only supports ANSI paths)
+        raw = np.fromfile(image_path, dtype=np.uint8)
+        img = cv2.imdecode(raw, cv2.IMREAD_COLOR)
         if img is None:
             return "unknown", 0.0, "low", {"error": "cannot read image"}
 

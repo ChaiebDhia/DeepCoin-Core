@@ -401,9 +401,12 @@ def _opencv_fallback(image_path: str) -> tuple[str, dict]:
     lines    = []
 
     try:
-        img = cv2.imread(image_path)
+        # np.fromfile + imdecode: handles non-ASCII paths on Windows
+        # (cv2.imread uses C fopen which only supports ANSI paths)
+        raw = np.fromfile(image_path, dtype=np.uint8)
+        img = cv2.imdecode(raw, cv2.IMREAD_COLOR)
         if img is None:
-            raise ValueError(f"cv2.imread returned None for {image_path}")
+            raise ValueError(f"cv2.imdecode returned None for {image_path}")
 
         h, w = img.shape[:2]
         # Central 60% crop
