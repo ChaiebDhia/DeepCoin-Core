@@ -34,8 +34,20 @@ export interface CnnResult {
   confidence:         number;
   top5:               Top5Item[];
   inference_time_ms:  number;
-  /** Whether Test-Time Augmentation (5 passes) was applied. */
+  /** Whether Test-Time Augmentation was applied. */
   tta_used:           boolean;
+  /**
+   * Fraction of TTA passes (0.0–1.0) that independently selected the same
+   * top-1 class. null when TTA was not used.
+   * WHY this matters: a coin at 8% confidence with vote_fraction=1.0 means
+   * every augmented view agreed — the low softmax is a photo-quality artefact,
+   * not classification uncertainty. The UI surfaces this as "TTA Consensus".
+   */
+  vote_fraction:      number | null;
+  /** Number of TTA forward passes actually performed (1 when TTA off). */
+  tta_passes:         number;
+  /** Temperature scalar T used in softmax(z/T). 1.0 = no calibration applied. */
+  temperature:        number;
 }
 
 // ── Main classify response ────────────────────────────────────────────────────

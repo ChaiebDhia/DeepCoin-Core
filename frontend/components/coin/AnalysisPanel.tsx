@@ -94,12 +94,28 @@ function Section({
 // so the user always gets maximum information — just framed honestly.
 const DISPLAY_CONF_THRESHOLD = 0.70;
 
+// ─── TTA consensus threshold ─────────────────────────────────────────────────
+// When 8 TTA passes are used we track what fraction independently selected the
+// same top-1 class. At ≥ 75% (6/8+ passes agree) we promote the display to
+// "TTA Consensus Identified" even if the raw softmax is below 0.70.
+//
+// WHY: A coin at 8% confidence but vote_fraction = 1.0 means every augmented
+// view agreed on the same type. The low softmax reflects image capture quality
+// (screenshot, angle, lighting), NOT actual uncertainty. Showing "Not identified"
+// in that case would mislead the user about the reliability of the result.
+const TTA_VOTE_THRESHOLD = 0.75;
+
 function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
   /**
-   * Two visual modes:
-   * - IDENTIFIED  (conf ≥ 0.70):  "CN 1015" + green CountUp % + top-5 bars
-   * - UNIDENTIFIED (conf < 0.70): "Nearest Candidate: CN 1015" + purple pill
-   *                               + explanation + top-5 still shown
+   * THREE visual modes:
+   * 1. IDENTIFIED    (conf ≥ 0.70)                  → green type + CountUp %
+   * 2. TTA CONSENSUS (conf < 0.70, vote ≥ 0.75)    → teal badge + photo-quality note
+   * 3. UNIDENTIFIED  (conf < 0.70, vote < 0.75)    → purple "Not identified" pill
+   *
+   * The TTA Consensus state exists for the case where all 8 TTA passes agree
+   * on the correct type but the raw softmax is depressed by photo quality
+   * (screenshot, angle, lighting). Without this third state, a correctly
+   * classified coin would display as "Not identified" — misleading the user.
    */
   const [barWidths, setBarWidths] = useState<number[]>(cnn.top5.map(() => 0));
   useEffect(() => {
@@ -107,14 +123,24 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
     return () => clearTimeout(t);
   }, [cnn.top5]);
 
-  const identified = cnn.confidence >= DISPLAY_CONF_THRESHOLD;
+  const identified   = cnn.confidence >= DISPLAY_CONF_THRESHOLD;
+  // TTA consensus: low raw confidence but the augmented views all agreed
+  const ttaConsensus = !identified
+    && cnn.vote_fraction != null
+    && cnn.vote_fraction >= TTA_VOTE_THRESHOLD;
+  // Derived display helpers
+  const numPasses  = cnn.tta_passes ?? (cnn.tta_used ? 8 : 1);
+  const agreeCount = cnn.vote_fraction != null
+    ? Math.round(cnn.vote_fraction * numPasses)
+    : null;
+  const passLabel  = agreeCount != null ? `${agreeCount}/${numPasses}` : null;
 
   return (
     <Section icon={<Cpu size={16} />} title="CNN Classification" variant="cnn" delay={0}>
       <div className="flex flex-col gap-3">
 
         {identified ? (
-          /* ── IDENTIFIED: show type + animated confidence % ─────────────── */
+          /* ── STATE 1 — IDENTIFIED: conf ≥ 70% ──────────────────────────── */
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-[var(--text-muted)]">Identified Type</p>
@@ -129,8 +155,59 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
               </span>
             </div>
           </div>
+
+        ) : ttaConsensus ? (
+          /* ── STATE 2 — TTA CONSENSUS ────────────────────────────────────────
+           *  All augmented passes agreed → the model IS certain. The low softmax
+           *  is caused by photo conditions (screenshot, angle, lighting), not by
+           *  genuine classification uncertainty. Show as identified + explain why.
+           * ─────────────────────────────────────────────────────────────────── */
+          <>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs text-[var(--text-muted)] mb-0.5">Identified Type</p>
+                <p className="text-2xl font-bold text-[var(--text-primary)] font-mono">
+                  CN {cnn.label}
+                </p>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  similarity score: {(cnn.confidence * 100).toFixed(1)}%
+                </p>
+              </div>
+              <span
+                className="shrink-0 mt-1 text-xs font-semibold px-3 py-1 rounded-full"
+                style={{
+                  background: "rgba(20,184,166,0.18)",
+                  color:      "#5eead4",
+                  border:     "1px solid rgba(20,184,166,0.30)",
+                }}
+              >
+                TTA Consensus{passLabel ? ` (${passLabel})` : ""}
+              </span>
+            </div>
+            <div
+              className="rounded-lg px-3 py-2.5 text-xs leading-relaxed"
+              style={{ background: "rgba(20,184,166,0.07)", border: "1px solid rgba(20,184,166,0.22)" }}
+            >
+              <p className="font-semibold text-teal-300 mb-1">Why is the score low?</p>
+              <p className="text-[var(--text-secondary)]">
+                The classifier was consistent across{" "}
+                <span className="text-teal-200 font-medium">
+                  all {numPasses} augmented views{passLabel ? ` (${passLabel} agree)` : ""}
+                </span>
+                {" "}— the low percentage reflects{" "}
+                <span className="text-teal-200 font-medium">image capture conditions</span>
+                {" "}(screenshot quality, angle, lighting) rather than classification
+                uncertainty. The knowledge-base agents have retrieved the full scholarly
+                record for this type.
+              </p>
+            </div>
+          </>
+
         ) : (
-          /* ── UNIDENTIFIED: friendly framing, no scary % ─────────────────── */
+          /* ── STATE 3 — UNIDENTIFIED: low conf + low TTA agreement ──────────
+           *  Genuinely uncertain — may be a type outside the 438 trained classes,
+           *  or an OOD photograph. Show nearest candidate with full KB pipeline.
+           * ─────────────────────────────────────────────────────────────────── */
           <>
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -190,8 +267,13 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
           <span>·</span>
           <span>
             TTA:{" "}
-            <span className={cnn.tta_used ? "text-green-400" : "text-[var(--text-muted)]"}>
-              {cnn.tta_used ? "Yes (5 passes)" : "No"}
+            <span className={cnn.tta_used
+              ? (ttaConsensus ? "text-teal-400" : "text-green-400")
+              : "text-[var(--text-muted)]"}
+            >
+              {cnn.tta_used
+                ? `Yes (${numPasses} passes${passLabel ? ` · ${passLabel} agree` : ""})`
+                : "No"}
             </span>
           </span>
         </div>
@@ -236,7 +318,10 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
 // ── Historian Section ─────────────────────────────────────────────────────────
 
 function HistorianSection({ result }: { result: ClassifyResponse }) {
-  const isLowConf  = result.cnn.confidence < DISPLAY_CONF_THRESHOLD;
+  // TTA consensus counts as confident — show full "Historical Analysis" title
+  // instead of "Best Scholarly Match". Only degrade for genuine uncertainty.
+  const isLowConf = result.cnn.confidence < DISPLAY_CONF_THRESHOLD
+    && !(result.cnn.vote_fraction != null && result.cnn.vote_fraction >= TTA_VOTE_THRESHOLD);
   const sectionTitle = isLowConf ? "Best Scholarly Match" : "Historical Analysis";
   return (
     <Section icon={<BookOpen size={16} />} title={sectionTitle} variant="historian" delay={0.1}>
@@ -267,9 +352,10 @@ function HistorianSection({ result }: { result: ClassifyResponse }) {
 // ── Validator Section ─────────────────────────────────────────────────────────
 
 function ValidatorSection({ result }: { result: ClassifyResponse }) {
-  // Even in validator route, if confidence is below display threshold, frame
-  // the section as "Best Match" so the user understands this is a suggestion.
-  const isLowConf   = result.cnn.confidence < DISPLAY_CONF_THRESHOLD;
+  // TTA consensus counts as confident — show full "Forensic Validation" title.
+  // Only degrade to "Best Match · Forensic Check" for genuinely uncertain predictions.
+  const isLowConf = result.cnn.confidence < DISPLAY_CONF_THRESHOLD
+    && !(result.cnn.vote_fraction != null && result.cnn.vote_fraction >= TTA_VOTE_THRESHOLD);
   const statusColor =
     result.material_status === "consistent" ? "text-green-400" :
     result.material_status === "mismatch"   ? "text-red-400"   :
@@ -389,10 +475,24 @@ export function AnalysisPanel({ result, showLink = false }: AnalysisPanelProps) 
           {routeLabel}
         </span>
         {result.cnn.confidence >= DISPLAY_CONF_THRESHOLD ? (
+          /* High confidence — normal coloured badge */
           <Badge variant={confBadgeVariant(result.cnn.confidence)}>
             CN {result.cnn.label} · {formatConfidence(result.cnn.confidence)}
           </Badge>
+        ) : (result.cnn.vote_fraction != null && result.cnn.vote_fraction >= TTA_VOTE_THRESHOLD) ? (
+          /* TTA consensus — teal badge, distinguishable from purple "best match" */
+          <span
+            className="text-xs font-bold px-3 py-1 rounded-full"
+            style={{
+              background: "rgba(20,184,166,0.16)",
+              color:      "#5eead4",
+              border:     "1px solid rgba(20,184,166,0.30)",
+            }}
+          >
+            CN {result.cnn.label} · TTA Consensus
+          </span>
         ) : (
+          /* Genuinely unidentified — muted "Best Match" badge */
           <Badge variant="muted">
             Best Match · CN {result.cnn.label}
           </Badge>
