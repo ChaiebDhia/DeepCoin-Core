@@ -61,6 +61,14 @@ interface DeepCoinState {
 
   /** Reset to idle state, clearing file + result + errors. */
   reset:             ()                             => void;
+
+  /**
+   * Stores the cancel callback registered by CoinUploader when a classify
+   * request is in flight.  AgentPipeline reads this so its X button can
+   * trigger the REAL abort (AbortController.abort) + reset, not just reset.
+   */
+  _cancelFn:         (() => void) | null;
+  setCancelFn:       (fn: (() => void) | null)      => void;
 }
 
 // ── Store implementation ──────────────────────────────────────────────────────
@@ -79,11 +87,14 @@ export const useDeepCoinStore = create<DeepCoinState>()((set) => ({
   setPhase:          (phase)    => set({ phase }),
   setResult:         (result)   => set({ result, phase: "done", errorMessage: null }),
   setError:          (message)  => set({ errorMessage: message, phase: "error" }),
+  _cancelFn:         null,
+  setCancelFn:       (fn)       => set({ _cancelFn: fn }),
   reset:             ()         => set({
     phase:           "idle",
     uploadProgress:  0,
     selectedFile:    null,
     result:          null,
     errorMessage:    null,
+    _cancelFn:       null,
   }),
 }));

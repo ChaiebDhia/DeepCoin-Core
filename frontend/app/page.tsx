@@ -19,7 +19,7 @@ import { AgentPipeline }            from "@/components/coin/AgentPipeline";
 import { useDeepCoinStore }          from "@/lib/store";
 
 export default function HomePage() {
-  const { phase, result } = useDeepCoinStore();
+  const { phase, result, _cancelFn } = useDeepCoinStore();
 
   const hasResult = phase === "done" && result != null;
   const isProcessing = phase === "processing";
@@ -67,7 +67,7 @@ export default function HomePage() {
 
       {/* AgentPipeline — fixed full-screen modal overlay during processing */}
       <AnimatePresence>
-        {isProcessing && <AgentPipeline key="pipeline" />}
+        {isProcessing && <AgentPipeline key="pipeline" onCancel={_cancelFn ?? undefined} />}
       </AnimatePresence>
 
       {/* Main grid */}

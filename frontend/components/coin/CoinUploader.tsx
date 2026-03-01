@@ -41,7 +41,7 @@ export function CoinUploader() {
     uploadProgress,
     selectedFile,
     errorMessage,
-    setSelectedFile, setUploadProgress, setPhase, setResult, setError, reset,
+    setSelectedFile, setUploadProgress, setPhase, setResult, setError, reset, setCancelFn,
   } = useDeepCoinStore();
 
   const [isDragging, setIsDragging] = useState(false);
@@ -137,6 +137,9 @@ export function CoinUploader() {
     abortRef.current = new AbortController();
     const { signal } = abortRef.current;
 
+    // Register the cancel callback so AgentPipeline's X button can trigger it
+    setCancelFn(handleCancel);
+
     try {
       setPhase("uploading");
       setUploadProgress(0);
@@ -162,6 +165,7 @@ export function CoinUploader() {
   function handleCancel() {
     abortRef.current?.abort();
     abortRef.current = null;
+    setCancelFn(null);
     reset();
     toast("Analysis cancelled.", { icon: "✋" });
   }

@@ -27,6 +27,7 @@
 
 import { useState, useEffect, useRef }   from "react";
 import { motion, AnimatePresence }        from "framer-motion";
+import { X }                              from "lucide-react";
 
 // ── Agent definitions ────────────────────────────────────────────────────────
 
@@ -112,7 +113,12 @@ type LogEntry = {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function AgentPipeline() {
+interface AgentPipelineProps {
+  /** Called when the user clicks the X button to cancel the analysis. */
+  onCancel?: () => void;
+}
+
+export function AgentPipeline({ onCancel }: AgentPipelineProps) {
   const startRef        = useRef(Date.now());
   const logIdRef        = useRef(0);
   const activeStageRef  = useRef(0);        // stale-closure-safe current stage
@@ -214,12 +220,38 @@ export function AgentPipeline() {
             DeepCoin Mission Control
           </span>
         </div>
-        <span
-          className="text-xs font-mono tabular-nums"
-          style={{ color: "var(--brand-gold)" }}
-        >
-          ⏱ {elapsedSec}s
-        </span>
+        <div className="flex items-center gap-3">
+          <span
+            className="text-xs font-mono tabular-nums"
+            style={{ color: "var(--brand-gold)" }}
+          >
+            ⏱ {elapsedSec}s
+          </span>
+          {onCancel && (
+            <button
+              onClick={onCancel}
+              title="Cancel analysis"
+              className="flex items-center justify-center w-6 h-6 rounded-md transition-colors"
+              style={{
+                color:           "var(--text-muted)",
+                background:      "rgba(255,255,255,0.05)",
+                border:          "1px solid rgba(255,255,255,0.08)",
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLButtonElement).style.color      = "#f87171";
+                (e.currentTarget as HTMLButtonElement).style.background = "rgba(239,68,68,0.15)";
+                (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(239,68,68,0.35)";
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLButtonElement).style.color      = "var(--text-muted)";
+                (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)";
+                (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.08)";
+              }}
+            >
+              <X size={13} strokeWidth={2.5} />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── Agent stations + connectors ──────────────────────────────── */}
