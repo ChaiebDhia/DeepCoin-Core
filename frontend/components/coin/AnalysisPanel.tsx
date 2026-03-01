@@ -408,7 +408,7 @@ export function AnalysisPanel({ result, showLink = false }: AnalysisPanelProps) 
       <div className="flex items-center gap-3 flex-wrap">
         {result.pdf_url && (
           <Button variant="gold" size="md" asChild>
-            <a href={pdfDownloadUrl(result.pdf_url)} download target="_blank" rel="noreferrer">
+            <a href={pdfDownloadUrl(result.pdf_url)} download target="_blank" rel="noopener noreferrer">
               <Download size={15} />
               Download PDF Report
             </a>

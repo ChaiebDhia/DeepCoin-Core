@@ -50,13 +50,15 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from src.api._store          import ensure_store
+from src.api._store          import ensure_store, count as history_count
+from src.api.auth            import require_api_key
 from src.api.limiter         import limiter
 from src.api.routes.classify import router as classify_router
 from src.api.routes.history  import router as history_router
@@ -152,6 +154,8 @@ async def lifespan(app: FastAPI):
 
 # ── app factory ────────────────────────────────────────────────────────────────
 
+_env = os.getenv("ENV", "development")
+
 app = FastAPI(
     title       = "DeepCoin API",
     description = (
@@ -162,8 +166,10 @@ app = FastAPI(
     ),
     version     = __version__,
     lifespan    = lifespan,
-    docs_url    = "/docs",
-    redoc_url   = "/redoc",
+    # P4 — disable interactive docs in production so internal API surface is
+    # not publicly browsable. Set ENV=production in your .env for deployment.
+    docs_url    = None if _env == "production" else "/docs",
+    redoc_url   = None if _env == "production" else "/redoc",
 )
 
 # \u2500\u2500 SlowAPI rate-limit exception handler \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -188,6 +194,11 @@ app.add_middleware(
     allow_methods     = ["GET", "POST"],
     allow_headers     = ["Content-Type", "Authorization", "X-API-Key"],
 )
+
+# P7 — GZip compress responses ≥ 500 bytes.
+# JSON responses from /api/history (lists of records) compress ~8× savings.
+# minimum_size=500 avoids overhead on tiny payloads (health, root).
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 
 # ── routers ────────────────────────────────────────────────────────────────────
@@ -298,6 +309,7 @@ async def health():
     tags=["System"],
     summary="Prometheus-compatible runtime metrics",
     response_class=PlainTextResponse,
+    dependencies=[Depends(require_api_key)],
 )
 async def metrics():
     """
@@ -313,12 +325,11 @@ async def metrics():
     """
     import asyncio
     import datetime
-    from src.api._store import load_all as _load_all
 
     uptime_s      = round(time.time() - _START_TIME, 1)
     reports_total = sum(1 for f in _REPORTS_DIR.iterdir() if f.suffix == ".pdf") if _REPORTS_DIR.exists() else 0
     uploads_total = sum(1 for _ in _UPLOADS_DIR.iterdir()) if _UPLOADS_DIR.exists() else 0
-    history_total = len(await asyncio.to_thread(_load_all))
+    history_total = await asyncio.to_thread(history_count)
     model_loaded  = 1 if (hasattr(app.state, "gk") and app.state.gk is not None) else 0
 
     lines = [

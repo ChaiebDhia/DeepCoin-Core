@@ -49,6 +49,17 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# ── Concurrency guard ────────────────────────────────────────────────────
+#
+# WHY Semaphore(1):
+#   The Gatekeeper loads EfficientNet-B3 into VRAM once.  Two simultaneous
+#   classify requests would run two forward passes concurrently on the GPU
+#   — possible OOM on a 4.3 GB RTX 3050 Ti.  Semaphore(1) queues the second
+#   request until the first finishes; the event loop remains free to serve
+#   health/history requests while waiting.
+#   Callers see slightly longer latency under contention, not a 500 error.
+_classify_sem = asyncio.Semaphore(1)
+
 # ── constants ─────────────────────────────────────────────────────────────────
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024   # 10 MB — coins photos are never larger
 
@@ -167,10 +178,17 @@ async def classify(
     #   loop free to handle other requests (health checks, history, etc.).
     gk = request.app.state.gk
     try:
-        result = await asyncio.to_thread(gk.analyze, str(save_path), tta)
+        async with _classify_sem:
+            result = await asyncio.to_thread(gk.analyze, str(save_path), tta)
     except Exception as exc:
         logger.error("Gatekeeper pipeline error: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Pipeline error: {exc}")
+    finally:
+        # P6 — delete upload immediately after pipeline completes (success or error).
+        # WHY: uploads accumulate quickly (500 KB avg × 10K runs = 5 GB).
+        # The startup 24-hour cleanup is a safety net; this is the primary delete.
+        save_path.unlink(missing_ok=True)
+        logger.debug("Deleted upload: %s", save_path.name)
 
     elapsed_s = time.perf_counter() - t_start
     state     = result.get("state", {})

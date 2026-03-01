@@ -203,3 +203,61 @@ def get_by_id(record_id: str) -> Optional[dict]:
         except Exception as exc:
             logger.error("History store get_by_id error for %s: %s", record_id, exc)
             return None
+
+
+def count() -> int:
+    """
+    Return the total number of classification records via SELECT COUNT(*).
+
+    WHY a dedicated function:
+        The /api/metrics and /api/history endpoints both need the total count.
+        Using len(load_all()) would deserialise every JSON payload row just
+        to count them — O(n) deserialization work when O(1) SQL count suffices.
+        SELECT COUNT(*) reads only the index, not the payload column.
+    """
+    with _lock:
+        try:
+            conn = _get_conn()
+            row  = conn.execute(
+                "SELECT COUNT(*) FROM classifications"
+            ).fetchone()
+            conn.close()
+            return row[0] if row else 0
+        except Exception as exc:
+            logger.error("History store count error: %s", exc)
+            return 0
+
+
+def load_page(skip: int = 0, limit: int = 20) -> list[dict]:
+    """
+    Return a paginated slice of records ordered newest-first.
+
+    WHY SQL LIMIT/OFFSET instead of Python slice:
+        The previous implementation called load_all() and sliced in Python.
+        For 10,000 records that means deserialising 10,000 JSON payloads to
+        return 20.  LIMIT/OFFSET reads only the requested rows from the
+        B-tree, so memory and CPU usage are O(limit) not O(total).
+
+    Args:
+        skip:  Number of records to skip (page offset).
+        limit: Maximum records to return.
+
+    Returns:
+        List of record dicts (already newest-first — no reversal needed).
+    """
+    with _lock:
+        try:
+            conn = _get_conn()
+            rows = conn.execute(
+                """
+                SELECT payload FROM classifications
+                ORDER BY timestamp DESC
+                LIMIT ? OFFSET ?
+                """,
+                (limit, skip),
+            ).fetchall()
+            conn.close()
+            return [json.loads(row["payload"]) for row in rows]
+        except Exception as exc:
+            logger.error("History store load_page error: %s", exc)
+            return []

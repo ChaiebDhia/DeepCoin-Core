@@ -31,7 +31,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
-from src.api._store  import get_by_id, load_all
+from src.api._store  import get_by_id, load_page, count as history_count
 from src.api.schemas import ClassifyResponse, CnnResult, Top5Item, HistoryListResponse, HistorySummary
 
 logger = logging.getLogger(__name__)
@@ -57,12 +57,8 @@ async def list_history(
     Each item is a HistorySummary — compact for table display.
     Use GET /api/history/{id} to retrieve the full record.
     """
-    records = await asyncio.to_thread(load_all)
-    # Newest first — the history file appends, so reverse it
-    records = list(reversed(records))
-
-    total   = len(records)
-    page    = records[skip : skip + limit]
+    total = await asyncio.to_thread(history_count)
+    page  = await asyncio.to_thread(load_page, skip, limit)
 
     items = []
     for r in page:

@@ -128,6 +128,7 @@ export function AgentPipeline({ onCancel }: AgentPipelineProps) {
   const [activeStage, setActiveStage] = useState(0);
   const [doneStages, setDoneStages]   = useState<Set<number>>(new Set());
   const [log, setLog]                 = useState<LogEntry[]>([]);
+  const [xHovered, setXHovered]       = useState(false);
 
   // Helper: emit the next message for the given agent stage
   const addMessageRef = useRef<(stageIdx: number) => void>(null!);
@@ -231,21 +232,14 @@ export function AgentPipeline({ onCancel }: AgentPipelineProps) {
             <button
               onClick={onCancel}
               title="Cancel analysis"
+              onMouseEnter={() => setXHovered(true)}
+              onMouseLeave={() => setXHovered(false)}
               className="flex items-center justify-center w-6 h-6 rounded-md transition-colors"
               style={{
-                color:           "var(--text-muted)",
-                background:      "rgba(255,255,255,0.05)",
-                border:          "1px solid rgba(255,255,255,0.08)",
-              }}
-              onMouseEnter={e => {
-                (e.currentTarget as HTMLButtonElement).style.color      = "#f87171";
-                (e.currentTarget as HTMLButtonElement).style.background = "rgba(239,68,68,0.15)";
-                (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(239,68,68,0.35)";
-              }}
-              onMouseLeave={e => {
-                (e.currentTarget as HTMLButtonElement).style.color      = "var(--text-muted)";
-                (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)";
-                (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.08)";
+                color:       xHovered ? "#f87171" : "var(--text-muted)",
+                background:  xHovered ? "rgba(239,68,68,0.15)" : "rgba(255,255,255,0.05)",
+                border:      `1px solid ${xHovered ? "rgba(239,68,68,0.35)" : "rgba(255,255,255,0.08)"}`,
+                transition:  "color 0.15s, background 0.15s, border-color 0.15s",
               }}
             >
               <X size={13} strokeWidth={2.5} />
