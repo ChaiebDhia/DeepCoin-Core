@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: March 2026 — Layer 5 complete (f61113f): Next.js 15 frontend, 22 files, 0 TS errors, prod build clean. Layer 6 (Docker) is next.
+# Last updated: March 2026 — Layer 5 v2 complete (91613c2): AgentPipeline mission control, Framer Motion, error boundaries, URL pagination. Layer 6 (Docker) is next.
 
 ---
 
@@ -903,14 +903,17 @@ All 5 agents fully upgraded. All 3 routes tested and passing.
 - Tests: **34/34 unit tests passing** in 1.31s
 - Server start: `uvicorn src.api.main:app --port 8000 --log-level info`
 
-### Layer 5 — Next.js Frontend ✅ COMPLETE (f61113f)
-Directory: `frontend/` (22 files, 9,603 lines, 0 TypeScript errors)
-Stack: Next.js 15 App Router, TypeScript 5, Tailwind CSS v4, CVA, TanStack Query 5, Zustand 5, Axios
-Pages: `/` (classify + hero), `/history` (paginated table), `/history/[id]` (full detail)
-Components: CoinUploader (drag-drop + TTA toggle), AnalysisPanel (CNN + all 3 routes + PDF), HistoryTable, HealthDot
+### Layer 5 — Next.js Frontend ✅ COMPLETE v2 (b0fa6da / 91613c2)
+Directory: `frontend/` (25 files, 0 TypeScript errors)
+Stack: Next.js 15 App Router, TypeScript 5, Tailwind CSS v4, CVA, TanStack Query 5, Zustand 5, Axios, Framer Motion 12, react-countup 6
+Pages: `/` (classify + hero), `/history` (paginated table, URL-synced), `/history/[id]` (full detail)
+Components: CoinUploader (drag-drop + TTA toggle), AgentPipeline (mission control), AnalysisPanel (animated bars + CountUp), HistoryTable, HealthDot
+Animations: Framer Motion AnimatePresence transitions, particle-beam connectors in AgentPipeline, CountUp confidence number, CSS cubic-bezier bar growth
+Error boundaries: `app/error.tsx`, `app/history/error.tsx`, `app/history/[id]/error.tsx`
+URL pagination: `history/page.tsx` uses `useSearchParams` + `useRouter` wrapped in `<Suspense>`
 Design: dark navy brand palette matching PDF report; shadcn-style CVA component system
 Backend proxy: `next.config.ts` rewrites `/api/*` → `http://localhost:8000/api/*`
-Prod build verified: `next build` clean in 4.8s, 5 routes compiled (4 static + 1 dynamic)
+Prod build verified: `next build` clean in 16.1s, 5 routes compiled (4 static + 1 dynamic)
 
 ### Layer 6 — Docker + Infrastructure 🔲 PENDING
 File: `docker-compose.yml` (skeleton exists)
@@ -1172,7 +1175,11 @@ pytest (9.0.2)      # unit testing (34 tests across 3 files)
 | `16e7835` | docs: enterprise README overhaul — RAG/DL explainers, scraping story, remove Wikipedia/Nomisma, Layer 4 ✅ |
 | `1b210ef` | feat: auth (X-API-Key), rate-limiting (slowapi), SQLite store (WAL), /api/metrics, 34 unit tests, pyproject.toml, Makefile, .env.example |
 | `4be8e56` | docs: Engineering Journal sections 27-30 + copilot-instructions Layer 0-1 updates |
-| `8354450` | fix: Layer 0-3 enterprise audit — 6 security & hardening fixes (weights_only×2, None guard, thread-safe RAG singleton, historian lock, Counter import, re import) ← LATEST |
+| `8354450` | fix: Layer 0-3 enterprise audit — 6 security & hardening fixes (weights_only×2, None guard, thread-safe RAG singleton, historian lock, Counter import, re import) |
+| `f61113f` | feat: Layer 5 v1 — Next.js 15 frontend, 22 files, 0 TS errors |
+| `c016996` | docs: Engineering Journal Section 32 |
+| `b0fa6da` | feat: Layer 5 v2 — AgentPipeline mission control, Framer Motion, CountUp, error boundaries, URL pagination |
+| `91613c2` | docs: Engineering Journal Section 33 — Layer 5 v2 ← LATEST |
 
 ---
 
@@ -1438,7 +1445,7 @@ Priority 4: Wikipedia API (last resort)
 2. Say: **"Start Layer 5 — Next.js frontend."** or **"What is the current status and what should we do next?"**
 3. Always activate venv first: `& C:\Users\Administrator\deepcoin\venv\Scripts\Activate.ps1`
 4. Iron rule still applies: **discuss plan first → wait for "go" → then build.**
-5. Layer 4 is complete. API is live at port 8000. Layer 5 (Next.js) is next.
+5. Layer 4 is complete. Layer 5 v2 is complete. Layer 6 (Docker) is next.
 
 ```powershell
 # Quick health check on resume
@@ -1538,21 +1545,22 @@ Write-Host "EXIT: $LASTEXITCODE"
 ✅ Unit tests                           36/36 pass at commit 8354450
 ```
 
-**Layer 5 Next.js frontend: COMPLETE (f61113f).**
+**Layer 5 Next.js frontend: COMPLETE v2 (b0fa6da).**
 
 ```
-✅ Next.js 15 App Router           22 files, 9,603 lines, 0 TS errors
-✅ Zustand 5 state machine         UploadPhase (idle→uploading→processing→done→error)
-✅ TanStack Query 5                history cache, health polling
-✅ Axios + X-API-Key               request interceptor, ApiError normalisation
-✅ CVA components                  Button (5 variants), Badge (route+conf), Card, Spinner
-✅ CoinUploader                    drag-drop, file validation, TTA toggle (default true), progress
-✅ AnalysisPanel                   CNN top-5, Historian/Validator/Investigator, PDF download
-✅ HistoryTable                    skeleton loading, pagination, confidence mini-bar
-✅ HealthDot                       live /api/health polling every 30s
-✅ Dark navy design system         CSS vars + Tailwind v4 @theme, matches PDF palette
-✅ Prod build verified             next build clean 4.8s, 5 routes (4 static + 1 dynamic)
-✅ ENGINEERING_JOURNAL.md          Section 32 added
+✅ Next.js 15 App Router           25 files, 0 TS errors (v2)
+✅ Framer Motion 12                AnimatePresence hero/result transitions
+✅ AgentPipeline.tsx               Mission Control — 4 stations, particle beams, chat log
+✅ CountUp confidence              counts 0 → 91.1% on result reveal
+✅ Animated confidence bars        0 → real value, 700ms cubic-bezier
+✅ Per-route colour coding         CNN=blue, historian=emerald, validator=amber, investigator=purple
+✅ CSS particle-flow keyframes     radial-gradient dot flows along connector rails
+✅ app/error.tsx                   Root error boundary
+✅ app/history/error.tsx           History list error boundary
+✅ app/history/[id]/error.tsx      Detail page error boundary
+✅ history/page.tsx URL pagination useSearchParams + Suspense wrapper
+✅ Prod build verified             16.1s, 5 routes (4 static + 1 dynamic)
+✅ ENGINEERING_JOURNAL.md          Section 33 added
 ```
 
 **NEXT: Layer 6 — Docker Compose Infrastructure.**
