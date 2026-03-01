@@ -903,7 +903,7 @@ All 5 agents fully upgraded. All 3 routes tested and passing.
 - Tests: **34/34 unit tests passing** in 1.31s
 - Server start: `uvicorn src.api.main:app --port 8000 --log-level info`
 
-### Layer 5 — Next.js Frontend ✅ COMPLETE v2 + Security Audit (8d6962a)
+### Layer 5 — Next.js Frontend ✅ COMPLETE v2 + Security Audit + Proxy Fix
 Directory: `frontend/` (25 files, 0 TypeScript errors)
 Stack: Next.js 15 App Router, TypeScript 5, Tailwind CSS v4, CVA, TanStack Query 5, Zustand 5, Axios, Framer Motion 12, react-countup 6
 Pages: `/` (classify + hero), `/history` (paginated table, URL-synced), `/history/[id]` (full detail)
@@ -913,8 +913,22 @@ Error boundaries: `app/error.tsx`, `app/history/error.tsx`, `app/history/[id]/er
 URL pagination: `history/page.tsx` uses `useSearchParams` + `useRouter` wrapped in `<Suspense>`
 Security: 6 HTTP headers (CSP with blob:, X-Frame-Options:DENY, nosniff, Referrer-Policy, Permissions-Policy), AbortController cancellation, blob URL lifecycle management
 Design: dark navy brand palette matching PDF report; shadcn-style CVA component system
-Backend proxy: `next.config.ts` rewrites `/api/*` → `http://localhost:8000/api/*`
-Prod build verified: `next build` clean in 10.4s, 5 routes compiled (4 static + 1 dynamic), tsc: 0 errors
+
+**Runtime proxy fixes (discovered during live testing):**
+
+**Fix A — IPv6 resolution (`ECONNREFUSED ::1:8000`):**
+- Cause: Node.js on Windows resolves `localhost` → IPv6 `::1`; Uvicorn binds IPv4 `127.0.0.1` only
+- Fix: `DEEPCOIN_API_URL=http://127.0.0.1:8000` in `.env.local` (explicit IPv4)
+
+**Fix B — Turbopack proxy timeout (`ECONNRESET`) on classify:**
+- Cause: Next.js Turbopack dev-server proxy has a hard ~30s socket timeout. Ollama LLM takes 15–60s → proxy kills connection mid-response.
+- Fix: Two-client architecture in `lib/api.ts`:
+  - `apiClient` (baseURL `/api`, 120s) — health, history — go through proxy as before
+  - `classifyApiClient` (baseURL `NEXT_PUBLIC_CLASSIFY_URL=http://127.0.0.1:8000`, 180s) — classify ONLY — calls FastAPI directly from the browser, bypasses proxy
+  - FastAPI's `ALLOWED_ORIGINS=http://localhost:3000` already permits CORS from the browser
+  - `.env.local: NEXT_PUBLIC_CLASSIFY_URL=http://127.0.0.1:8000`
+
+Prod build verified: `next build` clean, 5 routes compiled (4 static + 1 dynamic), tsc: 0 errors
 
 ### Layer 6 — Docker + Infrastructure 🔲 PENDING
 File: `docker-compose.yml` (skeleton exists)
@@ -1573,6 +1587,16 @@ Write-Host "EXIT: $LASTEXITCODE"
 ✅ blob URL lifecycle              URL.createObjectURL() in useMemo + cleanup useEffect (no leak)
 ✅ errorMessage selector           reactive Zustand selector replaces getState() anti-pattern
 tsc: 0 errors | build: clean (5 routes)
+```
+
+**Layer 5 runtime proxy fixes: COMPLETE (live testing session).**
+
+```
+✅ IPv6 fix (.env.local)           DEEPCOIN_API_URL=http://127.0.0.1:8000 (was localhost → ::1)
+✅ Turbopack timeout fix           classifyApiClient direct to FastAPI (NEXT_PUBLIC_CLASSIFY_URL)
+   lib/api.ts: two clients — apiClient (proxied, fast calls) + classifyApiClient (direct, 180s)
+   classify POST now: browser → http://127.0.0.1:8000/api/classify (CORS allowed)
+   health/history: still proxied via /api/* rewrite (unchanged)
 ```
 
 **NEXT: Layer 6 — Docker Compose Infrastructure.**
