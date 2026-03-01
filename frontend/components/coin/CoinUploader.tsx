@@ -19,7 +19,7 @@
  *   → classifyCoin() starts → phase: uploading → phase: processing → phase: done
  */
 
-import { useCallback, useRef, useState }      from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { UploadCloud, ImageIcon, XCircle }    from "lucide-react";
 import toast                                  from "react-hot-toast";
 
@@ -40,11 +40,49 @@ export function CoinUploader() {
     phase,
     uploadProgress,
     selectedFile,
+    errorMessage,
     setSelectedFile, setUploadProgress, setPhase, setResult, setError, reset,
   } = useDeepCoinStore();
 
   const [isDragging, setIsDragging] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef   = useRef<HTMLInputElement>(null);
+  /**
+   * AbortController ref for the in-flight classifyCoin Axios request.
+   *
+   * WHY a ref (not state): We don't need a re-render when the controller
+   * changes. We only need to call .abort() from the reset/unmount path.
+   *
+   * WHY abort on reset: Without this, clicking the X button mid-upload
+   * resets the UI to idle but leaves a 2-minute Axios POST running in the
+   * background. When it eventually resolves it calls setResult() on the
+   * already-cleared store, unexpectedly showing results for the cancelled
+   * file.
+   */
+  const abortRef = useRef<AbortController | null>(null);
+
+  /**
+   * Stable object-URL for the coin image preview.
+   *
+   * WHY useMemo + useEffect:
+   *   URL.createObjectURL() called inline in JSX creates a NEW blob URL on
+   *   EVERY render and never revokes the old ones. Over dozens of uploads
+   *   per numismatist session this leaks significant memory.
+   *   useMemo creates exactly one URL per selectedFile value;
+   *   the cleanup effect revokes it when selectedFile changes or the
+   *   component unmounts.
+   */
+  const previewUrl = useMemo(
+    () => (selectedFile ? URL.createObjectURL(selectedFile) : null),
+    [selectedFile],
+  );
+  useEffect(() => {
+    return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); };
+  }, [previewUrl]);
+
+  // Abort any in-flight request when the component unmounts
+  useEffect(() => {
+    return () => { abortRef.current?.abort(); };
+  }, []);
 
   // ── File validation ────────────────────────────────────────────────────────
 
@@ -94,6 +132,11 @@ export function CoinUploader() {
   async function handleAnalyse() {
     if (!selectedFile) return;
 
+    // Cancel any previous in-flight request before starting a new one
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+    const { signal } = abortRef.current;
+
     try {
       setPhase("uploading");
       setUploadProgress(0);
@@ -101,11 +144,14 @@ export function CoinUploader() {
       const result = await classifyCoin(selectedFile, tta, (pct) => {
         setUploadProgress(pct);
         if (pct === 100) setPhase("processing");
-      });
+      }, signal);
 
       setResult(result);
       toast.success(`Analysis complete — ${result.route_taken} route`);
     } catch (err: unknown) {
+      // Axios names the cancellation error "CanceledError" — ignore it
+      // (user intentionally cancelled; the UI already reset to idle)
+      if (err instanceof Error && err.name === "CanceledError") return;
       const msg = err instanceof Error ? err.message : "Classification failed";
       setError(msg);
       toast.error(msg);
@@ -150,9 +196,8 @@ export function CoinUploader() {
         {hasFile ? (
           <>
             {/* Thumbnail preview */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={URL.createObjectURL(selectedFile)}
+              src={previewUrl!}
               alt="Selected coin"
               className="max-h-40 max-w-full rounded-lg object-contain shadow-md"
             />
@@ -165,7 +210,7 @@ export function CoinUploader() {
             </p>
             {/* Remove button */}
             <button
-              onClick={(e) => { e.stopPropagation(); reset(); }}
+              onClick={(e) => { e.stopPropagation(); abortRef.current?.abort(); abortRef.current = null; reset(); }}
               className="absolute top-2 right-2 text-[var(--text-muted)] hover:text-red-400 transition-colors"
               aria-label="Remove file"
             >
@@ -261,7 +306,7 @@ export function CoinUploader() {
       {/* Error message */}
       {phase === "error" && (
         <p className="text-sm text-red-400 text-center">
-          {useDeepCoinStore.getState().errorMessage}
+          {errorMessage}
         </p>
       )}
     </div>
