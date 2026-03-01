@@ -86,9 +86,9 @@ const AGENTS = [
     bgActive: "rgba(212,168,83,0.14)",
     border:   "rgba(212,168,83,0.40)",
     messages: [
-      "Assembling report sections…",
-      "Rendering navy PDF layout…",
-      "Saving document to disk…",
+      "Compiling analysis results…",
+      "Assembling full report…",
+      "Generating downloadable PDF…",
     ],
   },
 ] as const satisfies Array<{
