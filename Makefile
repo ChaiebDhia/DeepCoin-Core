@@ -40,6 +40,7 @@ api:
 	$(UVICORN) src.api.main:app \
 	    --port 8000 \
 	    --log-level info \
+	    --timeout-keep-alive 600 \
 	    --reload
 
 # ── Tests ─────────────────────────────────────────────────────────────────────

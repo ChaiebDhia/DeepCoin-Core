@@ -124,17 +124,41 @@ def _get_llm(capability: str = "text"):
         # ── Priority 1: Local Ollama (preferred) ─────────────────────────────
         # Ollama exposes an OpenAI-compatible API at /v1.
         # api_key="ollama" is a required dummy value — Ollama ignores it.
-        from openai import OpenAI
-        base = ollama_host.rstrip("/")
-        client = OpenAI(base_url=f"{base}/v1", api_key="ollama")
-        if capability == "vision":
-            # qwen3-vl:4b — Vision-Language model, processes images + text
-            model = os.getenv("OLLAMA_VISION_MODEL", "qwen3-vl:4b")
-        else:
-            # gemma3:4b — text-only, fast, strong instruction following
-            model = os.getenv("OLLAMA_MODEL", "gemma3:4b")
+        #
+        # WHY we probe /api/tags before committing to this provider:
+        #   If the requested model is not downloaded, Ollama either auto-pulls
+        #   it (minutes) or stalls indefinitely.  The OpenAI client default
+        #   timeout is 600 s, so the except block in the caller never fires.
+        #   Probing with a 5 s timeout first is free when the model IS present;
+        #   when it is absent we fall through to the cloud provider in < 5 s
+        #   rather than hanging the whole pipeline for 10+ minutes.
+        target_model = os.getenv(
+            "OLLAMA_VISION_MODEL" if capability == "vision" else "OLLAMA_MODEL",
+            "qwen3-vl:4b"         if capability == "vision" else "gemma3:4b",
+        )
+        _ollama_available = False
+        try:
+            import urllib.request, json as _json
+            with urllib.request.urlopen(
+                f"{ollama_host.rstrip('/')}/api/tags", timeout=5
+            ) as _r:
+                _tags = _json.loads(_r.read())
+            _model_names = [m["name"] for m in _tags.get("models", [])]
+            # Model names may include tag (e.g. "gemma3:4b") or just base name
+            _ollama_available = any(
+                target_model == n or target_model.split(":")[0] == n.split(":")[0]
+                for n in _model_names
+            )
+        except Exception:
+            pass  # Ollama not running or probe failed — fall through to cloud
 
-    elif github_token:
+        if _ollama_available:
+            from openai import OpenAI
+            base   = ollama_host.rstrip("/")
+            client = OpenAI(base_url=f"{base}/v1", api_key="ollama")
+            model  = target_model
+
+    if client is None and github_token:
         # ── Priority 2: GitHub Models (cloud fallback) ────────────────────────
         from openai import OpenAI
         client = OpenAI(
@@ -143,7 +167,7 @@ def _get_llm(capability: str = "text"):
         )
         model = "gemini-2.5-flash"   # handles both text and vision
 
-    elif google_key:
+    if client is None and google_key:
         # ── Priority 3: Google AI Studio (secondary cloud fallback) ──────────
         from openai import OpenAI
         client = OpenAI(

@@ -60,7 +60,7 @@ export const apiClient = axios.create({
  */
 const classifyApiClient = axios.create({
   baseURL: process.env.NEXT_PUBLIC_CLASSIFY_URL ?? "/api",
-  timeout: 180_000,   // 3 minutes — enough for slowest Ollama responses
+  timeout: 600_000,   // 10 minutes — covers battery-throttled Ollama (gemma3:4b can take 5+ min on low power)
 });
 
 // ── Shared request interceptor (inject X-API-Key if configured) ───────────────
