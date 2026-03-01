@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: March 2026 — Layer 5 v2 complete (91613c2): AgentPipeline mission control, Framer Motion, error boundaries, URL pagination. Layer 6 (Docker) is next.
+# Last updated: March 2026 — Layer 5 v2 + security audit complete (8d6962a): CSP headers, AbortController, blob URL cleanup, reactive error selector. Layer 6 (Docker) is next.
 
 ---
 
@@ -903,17 +903,18 @@ All 5 agents fully upgraded. All 3 routes tested and passing.
 - Tests: **34/34 unit tests passing** in 1.31s
 - Server start: `uvicorn src.api.main:app --port 8000 --log-level info`
 
-### Layer 5 — Next.js Frontend ✅ COMPLETE v2 (b0fa6da / 91613c2)
+### Layer 5 — Next.js Frontend ✅ COMPLETE v2 + Security Audit (8d6962a)
 Directory: `frontend/` (25 files, 0 TypeScript errors)
 Stack: Next.js 15 App Router, TypeScript 5, Tailwind CSS v4, CVA, TanStack Query 5, Zustand 5, Axios, Framer Motion 12, react-countup 6
 Pages: `/` (classify + hero), `/history` (paginated table, URL-synced), `/history/[id]` (full detail)
-Components: CoinUploader (drag-drop + TTA toggle), AgentPipeline (mission control), AnalysisPanel (animated bars + CountUp), HistoryTable, HealthDot
+Components: CoinUploader (drag-drop + TTA toggle + AbortController), AgentPipeline (mission control), AnalysisPanel (animated bars + CountUp), HistoryTable, HealthDot
 Animations: Framer Motion AnimatePresence transitions, particle-beam connectors in AgentPipeline, CountUp confidence number, CSS cubic-bezier bar growth
 Error boundaries: `app/error.tsx`, `app/history/error.tsx`, `app/history/[id]/error.tsx`
 URL pagination: `history/page.tsx` uses `useSearchParams` + `useRouter` wrapped in `<Suspense>`
+Security: 6 HTTP headers (CSP with blob:, X-Frame-Options:DENY, nosniff, Referrer-Policy, Permissions-Policy), AbortController cancellation, blob URL lifecycle management
 Design: dark navy brand palette matching PDF report; shadcn-style CVA component system
 Backend proxy: `next.config.ts` rewrites `/api/*` → `http://localhost:8000/api/*`
-Prod build verified: `next build` clean in 16.1s, 5 routes compiled (4 static + 1 dynamic)
+Prod build verified: `next build` clean in 10.4s, 5 routes compiled (4 static + 1 dynamic), tsc: 0 errors
 
 ### Layer 6 — Docker + Infrastructure 🔲 PENDING
 File: `docker-compose.yml` (skeleton exists)
@@ -1179,7 +1180,8 @@ pytest (9.0.2)      # unit testing (34 tests across 3 files)
 | `f61113f` | feat: Layer 5 v1 — Next.js 15 frontend, 22 files, 0 TS errors |
 | `c016996` | docs: Engineering Journal Section 32 |
 | `b0fa6da` | feat: Layer 5 v2 — AgentPipeline mission control, Framer Motion, CountUp, error boundaries, URL pagination |
-| `91613c2` | docs: Engineering Journal Section 33 — Layer 5 v2 ← LATEST |
+| `91613c2` | docs: Engineering Journal Section 33 — Layer 5 v2 |
+| `8d6962a` | fix: Layer 5 security audit — CSP headers, AbortController, blob URL cleanup, getState() anti-pattern ← LATEST |
 
 ---
 
@@ -1561,6 +1563,16 @@ Write-Host "EXIT: $LASTEXITCODE"
 ✅ history/page.tsx URL pagination useSearchParams + Suspense wrapper
 ✅ Prod build verified             16.1s, 5 routes (4 static + 1 dynamic)
 ✅ ENGINEERING_JOURNAL.md          Section 33 added
+```
+
+**Layer 5 security audit: COMPLETE (8d6962a).**
+
+```
+✅ next.config.ts HTTP headers     CSP (blob: allowed), X-Frame-Options:DENY, nosniff, Referrer-Policy, Permissions-Policy
+✅ AbortController                 classifyCoin() accepts AbortSignal; reset + unmount cancel in-flight request
+✅ blob URL lifecycle              URL.createObjectURL() in useMemo + cleanup useEffect (no leak)
+✅ errorMessage selector           reactive Zustand selector replaces getState() anti-pattern
+tsc: 0 errors | build: clean (5 routes)
 ```
 
 **NEXT: Layer 6 — Docker Compose Infrastructure.**
