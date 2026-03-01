@@ -220,6 +220,9 @@ async def classify(
         ],
         inference_time_ms = cnn_raw.get("inference_time_ms", 0),
         tta_used          = cnn_raw.get("tta_used", tta),
+        vote_fraction     = cnn_raw.get("vote_fraction"),
+        tta_passes        = cnn_raw.get("tta_passes", 1),
+        temperature       = float(cnn_raw.get("temperature", 1.0)),
     )
 
     # PDF URL — served via GET /api/reports/{filename}

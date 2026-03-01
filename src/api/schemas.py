@@ -47,13 +47,33 @@ class CnnResult(BaseModel):
         how certain the CNN was BEFORE the agents processed the result.
         A 91% confidence with a rich historical narrative is a different level
         of trust than a 22% confidence with a VLM visual description.
+
+    Extra calibration fields:
+        vote_fraction  — fraction of TTA passes that independently agreed on
+                         the same top-1 class.  Complements temperature-scaled
+                         softmax: high vote_fraction = high agreement, not just
+                         high softmax magnitude.
+        tta_passes     — how many TTA forward passes were used (1 = single-pass)
+        temperature    — the T scalar applied before softmax; < 1 means the
+                         model was under-confident and the distribution was
+                         sharpened by calibration.
     """
-    class_id:          int           = Field(..., description="CNN sort-order index")
-    label:             str           = Field(..., description="CN type ID, e.g. '1015'")
-    confidence:        float         = Field(..., ge=0.0, le=1.0)
+    class_id:          int                = Field(..., description="CNN sort-order index")
+    label:             str                = Field(..., description="CN type ID, e.g. '1015'")
+    confidence:        float              = Field(..., ge=0.0, le=1.0)
     top5:              list[Top5Item]
-    inference_time_ms: int           = Field(..., ge=0)
+    inference_time_ms: int                = Field(..., ge=0)
     tta_used:          bool
+    vote_fraction:     Optional[float]    = Field(
+        None, ge=0.0, le=1.0,
+        description="Fraction of TTA passes agreeing on top-1 class (None = no TTA)",
+    )
+    tta_passes:        int                = Field(
+        1, ge=1, description="Number of TTA forward passes performed"
+    )
+    temperature:       float              = Field(
+        1.0, description="Calibration temperature T used in softmax(z/T)"
+    )
 
 
 # ── Main response model ────────────────────────────────────────────────────────

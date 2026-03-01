@@ -216,26 +216,57 @@ class Gatekeeper:
             t0 = time.perf_counter()
             result = inference.predict(state["image_path"], tta=state.get("use_tta", False))
             cnn = {
-                "class_id":   result["class_id"],
-                "label":      result["label"],
-                "confidence": result["confidence"],
-                "top5":       result["top5"],
-                "tta_used":   result["tta_used"],
+                "class_id":     result["class_id"],
+                "label":        result["label"],
+                "confidence":   result["confidence"],
+                "top5":         result["top5"],
+                "tta_used":     result["tta_used"],
+                "vote_fraction": result.get("vote_fraction"),
+                "tta_passes":   result.get("tta_passes", 1),
+                "temperature":  result.get("temperature", 1.0),
             }
-            conf = cnn["confidence"]
+            conf      = cnn["confidence"]
+            vote_frac = cnn["vote_fraction"]
+
+            # ── Vote-fraction routing override ───────────────────────────────
+            # WHAT: When TTA is used, vote_fraction tells us how many of the
+            #   N forward passes independently selected the same top-1 class.
+            # WHY this matters for routing:
+            #   A screenshot of a coin (coin = 30-50% of frame) produces a low
+            #   absolute softmax confidence — often 8-15% — because the model
+            #   sees more background than it was trained on.  But all 8 TTA
+            #   passes still agree on the correct class: vote_fraction = 1.0.
+            #   Without this override, the pipeline sends it to the Investigator
+            #   (generic VLM route) and never produces proper historical research.
+            #   With the override: high vote agreement → "I may not be confident
+            #   in this answer's magnitude, but all 8 of my views agree" →
+            #   route to Validator for a proper forensic + historical analysis.
+            # THRESHOLD: vote_fraction >= 0.75 means at least 6/8 passes agreed.
+            #   This is a deliberate conservative threshold: 5/8 can still happen
+            #   by chance on genuinely ambiguous coins.
+            if vote_frac is not None and vote_frac >= 0.75:
+                # Use Vote-corrected effective confidence ONLY for routing.
+                # The reported confidence in the response remains the real
+                # temperature-scaled softmax value (never mislead the user).
+                effective_conf = max(conf, 0.42)
+            else:
+                effective_conf = conf
+
             # Thresholds: >85% = high certainty (historian only)
             #            40-85% = medium (validate material + historian)
             #            <40%   = unknown  (visual investigator)
-            if conf > 0.85:
+            if effective_conf > 0.85:
                 route = "historian"
-            elif conf >= 0.40:
+            elif effective_conf >= 0.40:
                 route = "validator"
             else:
                 route = "investigator"
             elapsed = time.perf_counter() - t0
             logger.info(
-                "cnn_node: label=%s  conf=%.1f%%  route=%s  time=%.2fs",
-                cnn["label"], conf * 100, route, elapsed,
+                "cnn_node: label=%s  conf=%.1f%%  vote=%.0f%%  eff_conf=%.1f%%  route=%s  time=%.2fs",
+                cnn["label"], conf * 100,
+                (vote_frac * 100) if vote_frac is not None else float("nan"),
+                effective_conf * 100, route, elapsed,
             )
             timings = {**state.get("node_timings", {}), "cnn": elapsed}
             return {**state, "cnn_prediction": cnn, "route_taken": route, "node_timings": timings}
