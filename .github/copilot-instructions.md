@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: March 2026 — Layer 5 v2 + security audit complete (8d6962a): CSP headers, AbortController, blob URL cleanup, reactive error selector. Layer 6 (Docker) is next.
+# Last updated: March 2026 — Layer 5 v2 + security audit + live-testing UX fixes (47d3ef9): CLAHE train/inference mismatch fix, investigator UX, health dot, AgentPipeline modal, synthesis cycling, proxy/IPv6 fixes. Layer 6 (Docker) is next.
 
 ---
 
@@ -823,7 +823,7 @@ Status: EfficientNet-B3 trained, 80.03% TTA accuracy achieved.
 - **Audit fix (Layer 0-3 audit, commit 8354450):** `weights_only=True` added to both `torch.load()` calls in `train.py` (`--resume` checkpoint path + final best-model test eval) — prevents arbitrary code execution via malicious pickle; matches the same fix already applied to `inference.py` in Layer 4 audit
 - **Audit fix (Layer 0-3 audit, commit 8354450):** `None` guard added after `cv2.imread()` in `dataset.py` `__getitem__` — raises `ValueError` with the full file path on corrupt/empty/unsupported JPEG instead of propagating a cryptic `TypeError` mid-batch that kills the training job
 
-### Layer 1 — Inference Engine ✅ COMPLETE (security patch applied)
+### Layer 1 — Inference Engine ✅ COMPLETE (CLAHE fix applied)
 Files: `src/core/inference.py`, `scripts/predict.py`
 - `CoinInference`: loads model once, runs TTA, returns structured prediction dict
 - Device resolution: `"auto"` resolved to `"cuda"` or `"cpu"` before PyTorch sees it (Bug #2 fix)
@@ -831,6 +831,9 @@ Files: `src/core/inference.py`, `scripts/predict.py`
   - Prevents arbitrary code execution via malicious pickle in `.pth` files
   - Compatible with standard `torch.save(model.state_dict(), path)` outputs
 - TTA: 5 forward passes (original + HFlip + Rotate +10° + Rotate -10° + BrightnessShift), averaged softmax → +0.78% accuracy
+- **CLAHE fix (commit bc99423):** `_load_image()` now applies CLAHE before BGR→RGB conversion, exactly matching the `prep_engine.py` training pipeline
+  - Skipping CLAHE caused train/inference distribution mismatch → 5–15% confidence on raw photos even for known coin types
+  - Parameters: `clipLimit=2.0, tileGridSize=(8,8)` on L channel in LAB colourspace (identical to training)
 
 ### Layer 2 — Knowledge Base ✅ UPGRADED TO FULL CORPUS
 Files: `src/core/knowledge_base.py` (legacy fallback), `src/core/rag_engine.py` (production), `scripts/build_knowledge_base.py`, `scripts/rebuild_chroma.py`
@@ -1195,7 +1198,14 @@ pytest (9.0.2)      # unit testing (34 tests across 3 files)
 | `c016996` | docs: Engineering Journal Section 32 |
 | `b0fa6da` | feat: Layer 5 v2 — AgentPipeline mission control, Framer Motion, CountUp, error boundaries, URL pagination |
 | `91613c2` | docs: Engineering Journal Section 33 — Layer 5 v2 |
-| `8d6962a` | fix: Layer 5 security audit — CSP headers, AbortController, blob URL cleanup, getState() anti-pattern ← LATEST |
+| `8d6962a` | fix: Layer 5 security audit — CSP headers, AbortController, blob URL cleanup, getState() anti-pattern |
+| `f2c24ec` | docs: document proxy fixes (IPv6 + Turbopack timeout) in copilot-instructions |
+| `2f6c3f7` | fix: CSP connect-src for direct classify client + devIndicators:false + history 500 guard |
+| `cf3be7f` | fix: health dot "healthy" status + AgentPipeline fullscreen modal + asChild warning + synthesis cycling |
+| `a2e8e50` | fix: synthesis log idx guard (bail-out replaces Math.min cap) |
+| `d732767` | fix: synthesis stage messages — user-friendly wording |
+| `bc99423` | fix: CLAHE in inference._load_image() + investigator UX (purple badge, context banners) |
+| `47d3ef9` | fix: anchor lib/ gitignore to root; track frontend/lib/*.ts (api.ts, store.ts, utils.ts) ← LATEST |
 
 ---
 
@@ -1405,10 +1415,39 @@ records = [r for r in metadata if "error" not in r]
 
 ---
 
+#### Bug 16 — Train/inference CLAHE mismatch → low confidence on raw photos
+- **File:** `src/core/inference.py` — `_load_image()`
+- **When:** Any real-world photo submitted through the frontend (not preprocessed images from `data/processed/`)
+- **Symptom:** Confidence always 5–15% even for coin types with >10 training images; correctly classified coins go to investigator route instead of historian
+- **Root cause:** `prep_engine.py` saves training images after applying CLAHE (clipLimit=2.0, tileGridSize=(8,8)) on the L channel in LAB colourspace. `_load_image()` loaded raw BGR → converted to RGB with NO CLAHE preprocessing. The model's convolutional filters were calibrated to CLAHE-enhanced contrast levels; raw photos have lower effective contrast → weaker activations at every layer → softmax probability mass spreads flat → top-1 confidence collapses.
+- **Fix:** Insert the same CLAHE pipeline between `cv2.imread()` and `cv2.cvtColor(BGR2RGB)` in `_load_image()`:
+  ```python
+  lab        = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2LAB)
+  l, a, b    = cv2.split(lab)
+  clahe      = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+  l_eq       = clahe.apply(l)
+  lab_eq     = cv2.merge((l_eq, a, b))
+  img_bgr    = cv2.cvtColor(lab_eq, cv2.COLOR_LAB2BGR)
+  ```
+- **Commit:** `bc99423`
+
+---
+
+#### Bug 17 — `lib/` gitignore rule silently excluded `frontend/lib/`
+- **File:** `.gitignore` line 12
+- **When:** Attempting to stage `frontend/lib/utils.ts` after the CLAHE fix commit
+- **Symptom:** `git add frontend/lib/utils.ts` silently skipped the file; `git commit` reported "2 files changed" instead of 3; the investigator badge colour fix never reached the remote
+- **Root cause:** The Python stdlib rule `lib/` (no leading slash) matches **any** directory named `lib/` anywhere in the repo tree — including `frontend/lib/`. Git's gitignore spec: patterns without a leading `/` match in all subdirectories.
+- **Fix:** Changed `lib/` → `/lib/` (and `lib64/` → `/lib64/`) to anchor the pattern to the repo root only. Then staged and committed `frontend/lib/utils.ts`, `api.ts`, and `store.ts` (all three had been silently invisible to git).
+- **Commit:** `47d3ef9`
+
+---
+
 ### KNOWN ISSUES (all resolved)
 
 All Layer 3 enterprise upgrade items are COMPLETE.
 All PDF quality issues resolved through commits 509834f → 68a3c21.
+All Layer 5 live-testing UX issues resolved through d732767 → 47d3ef9.
 No remaining scheduled issues.
 See Section 7 Build Order for what was fixed and in which commit.
   → Structured fields scraped from corpus-nummorum.eu
@@ -1458,10 +1497,10 @@ Priority 4: Wikipedia API (last resort)
 ## 16. HOW TO RESUME IN ANY NEW CHAT
 
 1. **This file is already injected.** Copilot knows everything — no re-explaining needed.
-2. Say: **"Start Layer 5 — Next.js frontend."** or **"What is the current status and what should we do next?"**
+2. Say: **"Start Layer 6 — Docker."** or **"What is the current status and what should we do next?"**
 3. Always activate venv first: `& C:\Users\Administrator\deepcoin\venv\Scripts\Activate.ps1`
 4. Iron rule still applies: **discuss plan first → wait for "go" → then build.**
-5. Layer 4 is complete. Layer 5 v2 is complete. Layer 6 (Docker) is next.
+5. Layers 0–5 are complete and enterprise-grade. Layer 6 (Docker) is next.
 
 ```powershell
 # Quick health check on resume
@@ -1597,6 +1636,37 @@ tsc: 0 errors | build: clean (5 routes)
    lib/api.ts: two clients — apiClient (proxied, fast calls) + classifyApiClient (direct, 180s)
    classify POST now: browser → http://127.0.0.1:8000/api/classify (CORS allowed)
    health/history: still proxied via /api/* rewrite (unchanged)
+```
+
+**Layer 5 live-testing UX fixes: COMPLETE (bc99423 + d732767 + a2e8e50 + cf3be7f + 2f6c3f7).**
+
+```
+✅ Health dot stuck "Connecting…"   API returns "healthy"; code checked === "ok" → fixed type + logic
+✅ AgentPipeline inline → modal     Fixed fullscreen overlay with backdrop blur
+✅ Synthesis log cycling            idx >= length early-return guard (Math.min still re-emitted last msg)
+✅ Synthesis messages internal text User-friendly: Compiling / Assembling / Generating PDF
+✅ asChild DOM prop warning         button.tsx Radix Slot fix
+✅ History 500 on classify          try/except around history_append in classify route
+✅ CSP connect-src                  Added http://127.0.0.1:8000 (was blocking direct classify calls)
+✅ devIndicators: false             Removed Next.js dev overlay icons
+```
+
+**Layer 1 CLAHE fix: COMPLETE (bc99423).**
+
+```
+✅ inference._load_image()          CLAHE(clip=2.0, tile=8x8) on L channel in LAB before BGR→RGB
+   Root cause: raw photos lacked contrast enhancement applied during training
+   Symptom: 5–15% confidence on raw photos even for well-known coin types
+   Fix: identical CLAHE pipeline as prep_engine.py, inserted before cvtColor(BGR2RGB)
+```
+
+**Layer 5 investigator UX: COMPLETE (bc99423).**
+
+```
+✅ Route badge                      investigator: red → purple ("Visual Investigation")
+✅ CnnSection low-conf callout      conf<40%: explains 438/9716 constraint, sets expectations
+✅ InvestigatorSection banner       Opens with context: "low conf is expected, KB covers 9541 types"
+✅ frontend/lib/*.ts now tracked    .gitignore lib/→/lib/ anchors Python rule; api.ts+store.ts+utils.ts committed
 ```
 
 **NEXT: Layer 6 — Docker Compose Infrastructure.**
