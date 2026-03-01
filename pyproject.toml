@@ -42,6 +42,7 @@ dependencies = [
     "tqdm>=4.67.0",
     "requests>=2.32.0",
     "slowapi>=0.1.9",
+    "python-json-logger>=3.0.0",   # P11 — structured JSON logging
 ]
 
 [project.optional-dependencies]

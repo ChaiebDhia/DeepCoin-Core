@@ -34,6 +34,77 @@ import { Spinner }                            from "@/components/ui/spinner";
 const MAX_SIZE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_TYPES  = ["image/jpeg", "image/png"];
 
+// P16 — Canvas downsize target.
+// WHY 1024px: The server applies CLAHE then resizes to 299×299. Sending an
+// 8MP phone photo (4032×1960, ~4 MB) wastes bandwidth and server memory.
+// 1024×1024 is ≥10× more detail than the model needs, encodes at ~150 KB,
+// and cuts upload time proportionally. The CLAHE preprocessing still works
+// correctly on 1024px — clip limit and tile size are relative to image size.
+const DOWNSIZE_MAX_PX = 1024;
+
+/**
+ * Downscale a coin image client-side using an offscreen Canvas.
+ *
+ * WHAT: If the image exceeds DOWNSIZE_MAX_PX in either dimension, draws it
+ *   onto a canvas at the reduced size (aspect-preserved) and re-exports as
+ *   JPEG quality 0.85. Returns the original File unchanged if it is already
+ *   small enough, or if canvas is unavailable (SSR guard).
+ *
+ * WHY quality=0.85: Visually lossless for photographic coin images.
+ *   Quality 1.0 produces bloated files; 0.7 introduces visible artefacts
+ *   on fine details (inscription serifs, mint marks).
+ *
+ * @param file   Original image file from the file input or drag-drop.
+ * @param maxPx  Maximum pixel dimension for width or height. Default 1024.
+ */
+async function downsizeImage(file: File, maxPx: number = DOWNSIZE_MAX_PX): Promise<File> {
+  // SSR guard — canvas is browser-only
+  if (typeof window === "undefined" || typeof document === "undefined") return file;
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+
+      const { width, height } = img;
+      // Already within limits — skip resizing entirely
+      if (width <= maxPx && height <= maxPx) {
+        resolve(file);
+        return;
+      }
+
+      // Aspect-preserving scale factor
+      const scale  = maxPx / Math.max(width, height);
+      const dstW   = Math.round(width  * scale);
+      const dstH   = Math.round(height * scale);
+
+      const canvas = document.createElement("canvas");
+      canvas.width  = dstW;
+      canvas.height = dstH;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { resolve(file); return; }
+
+      ctx.drawImage(img, 0, 0, dstW, dstH);
+
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) { resolve(file); return; }
+          // Preserve original filename but change extension to .jpg
+          const resizedName = file.name.replace(/\.[^.]+$/, "") + "_resized.jpg";
+          resolve(new File([blob], resizedName, { type: "image/jpeg" }));
+        },
+        "image/jpeg",
+        0.85,
+      );
+    };
+
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
+
 export function CoinUploader() {
   const {
     tta, setTta,
@@ -144,7 +215,12 @@ export function CoinUploader() {
       setPhase("uploading");
       setUploadProgress(0);
 
-      const result = await classifyCoin(selectedFile, tta, (pct) => {
+      // P16 — downscale large photos client-side before upload.
+      // Reduces upload payload from ~4 MB (phone photo) to ~150 KB (1024px JPEG).
+      // The server still applies CLAHE + 299×299 resize, so quality is unaffected.
+      const fileToSend = await downsizeImage(selectedFile);
+
+      const result = await classifyCoin(fileToSend, tta, (pct) => {
         setUploadProgress(pct);
         if (pct === 100) setPhase("processing");
       }, signal);

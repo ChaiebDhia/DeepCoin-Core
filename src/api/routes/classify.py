@@ -246,17 +246,19 @@ async def classify(
     )
 
     # ── 7. Persist to history ──────────────────────────────────────────────────
-    # Run in thread pool to avoid blocking event loop on file I/O
-    # WHY try/except: a history write failure must NEVER cause a 500 for the
-    # caller. The analysis completed successfully — losing a history record
-    # is acceptable; returning 500 after full pipeline completion is not.
+    # P14 — call history_append synchronously (no asyncio.to_thread).
+    # WHY: The SQLite WAL insert takes ~1–2 ms and happens AFTER the 15–60s
+    # pipeline. Wrapping it in to_thread spawns a thread for a sub-millisecond
+    # operation, adding more overhead than it saves. Calling it inline in the
+    # thread that already ran gk.analyze() (via asyncio.to_thread) is correct.
+    # The event loop is already free at this point — pipeline is done.
     history_record = {
         **response.model_dump(),
-        "cnn": response.cnn.model_dump(),   # flatten sub-model for JSON storage
-        "image_path": str(save_path),       # full disk path (not in response)
+        "cnn": response.cnn.model_dump(),
+        "image_path": str(save_path),
     }
     try:
-        await asyncio.to_thread(history_append, history_record)
+        history_append(history_record)
     except Exception as hist_exc:
         logger.error("history_append failed (non-fatal): %s", hist_exc, exc_info=True)
 

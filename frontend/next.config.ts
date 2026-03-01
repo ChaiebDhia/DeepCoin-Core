@@ -24,19 +24,24 @@ import type { NextConfig } from "next";
  */
 
 // Security header definitions — applied to every response
+const isDev = process.env.NODE_ENV !== "production";
+
 const securityHeaders = [
   { key: "X-DNS-Prefetch-Control",   value: "on" },
   { key: "X-Frame-Options",          value: "DENY" },
   { key: "X-Content-Type-Options",   value: "nosniff" },
   { key: "Referrer-Policy",          value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy",       value: "camera=(), microphone=(), geolocation=(), payment=()" },
+  // P10 — HSTS: tell browsers to ONLY connect over HTTPS for the next 2 years.
+  // max-age=63072000 (2 years) is the preload requirement. Ignored on HTTP (dev).
+  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
   {
     key:   "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      // Next.js requires unsafe-inline + unsafe-eval in dev; in prod builds
-      // next/script inlines a small bootstrap — unsafe-inline is unavoidable
-      "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+      // P13 — unsafe-eval is needed by Next.js HMR in dev only.
+      // Production builds do NOT use eval — removing it closes a real XSS vector.
+      `script-src 'self'${isDev ? " 'unsafe-eval'" : ""} 'unsafe-inline'`,
       "style-src 'self' 'unsafe-inline'",
       // blob: required for URL.createObjectURL() coin image preview
       // data: required for base64 inline images

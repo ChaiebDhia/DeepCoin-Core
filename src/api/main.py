@@ -60,6 +60,7 @@ from slowapi.errors import RateLimitExceeded
 from src.api._store          import ensure_store, count as history_count
 from src.api.auth            import require_api_key
 from src.api.limiter         import limiter
+from src.api.logging_config  import configure_logging
 from src.api.routes.classify import router as classify_router
 from src.api.routes.history  import router as history_router
 
@@ -133,6 +134,10 @@ async def lifespan(app: FastAPI):
     """
     logger.info("DeepCoin API v%s starting up...", __version__)
 
+    # P11 — Configure structured logging first so all subsequent log lines
+    # are formatted correctly (JSON in prod, human-readable text in dev).
+    configure_logging()
+
     # Ensure directories and history store exist before any request arrives
     _REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     _UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
@@ -199,6 +204,19 @@ app.add_middleware(
 # JSON responses from /api/history (lists of records) compress ~8× savings.
 # minimum_size=500 avoids overhead on tiny payloads (health, root).
 app.add_middleware(GZipMiddleware, minimum_size=500)
+
+# P15 — X-Request-ID middleware.
+# WHAT: Reads the incoming X-Request-ID header (set by load balancer or client);
+#       generates a UUID4 if absent. Echoes the ID in every response header.
+# WHY:  Lets you correlate a front-end error report ("request id: abc-123") with
+#       the exact log line in Loki/Datadog without grepping through timestamps.
+@app.middleware("http")
+async def add_request_id(request, call_next):
+    import uuid as _uuid
+    req_id   = request.headers.get("X-Request-ID") or str(_uuid.uuid4())
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = req_id
+    return response
 
 
 # ── routers ────────────────────────────────────────────────────────────────────

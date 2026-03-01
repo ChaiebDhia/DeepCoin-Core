@@ -458,7 +458,13 @@ class RAGEngine:
         if chroma_ranked:
             merged = _rrf_merge([bm25_ranked, chroma_ranked])
         else:
-            # BM25-only fallback when ChromaDB is empty
+            # P12 — log a warning so operators know ChromaDB is empty / skipped.
+            # This surfaces misconfiguration (forgot to run rebuild_chroma.py)
+            # instead of silently degrading to BM25-only with no indication.
+            logger.warning(
+                "RAGEngine.search: ChromaDB returned no results — "
+                "using BM25-only. Run scripts/rebuild_chroma.py if this is unexpected."
+            )
             merged = [
                 (cid, 1.0 / (60 + i + 1))
                 for i, cid in enumerate(bm25_ranked)
