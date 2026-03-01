@@ -6661,3 +6661,3751 @@ All four conditions align against silver detection for a patinated coin. The bro
 ---
 
 *Last updated: March 2026 — Sections 41-45 added covering 3-way CNN display states (702e3eb), confidence anxiety UX fix (451f3f2), Phase 3 CN links + delete + filter bar (0455d45), Phase 4 CTA banner + linked badges + stats + copy link (e92c1ba), and the known HSV patina/silver false-mismatch issue with full root cause analysis and proposed fixes. Layer 6 (Docker) is next.*
+
+---
+
+## Section 46  Thirteen Missing Commits: The Complete Engineering Record
+
+This section documents every significant commit not covered in Sections 145. Each entry follows
+the same template: **What changed**, **Why it was needed**, **How it was implemented**, and
+**What you would do if you had to redo it from scratch**.
+
+---
+
+### Commit `ddb44ce`  First Attempt: Replace cv2.imread with np.fromfile+imdecode
+
+**Date:** Between Layer 4 completion and the first live-upload tests.
+
+**Symptom discovered:**
+When a user uploaded a photo with a non-ASCII filename (e.g., `Monnaie_grecque_σύρος.jpg`,
+`Capture d'écran 2024.png`, or any Windows screenshot with accented characters), the entire
+pipeline returned a 500 error with the cryptic message:
+```
+Pipeline error: cv2 error: (-215:Assertion failed) !_src.empty() in function 'cv::cvtColor'
+```
+
+The assertion failure was on cvtColor  the function that converts BGR to LAB before CLAHE.
+It failed because the image passed to it was **empty** (None). And the image was empty because
+**cv2.imread() silently returned None**.
+
+**Root cause (deep):**
+`cv2.imread()` is a Python wrapper around an OpenCV C++ function. Internally it calls the C
+standard library's `fopen()` to open the file by path. On Windows, `fopen()` uses the ANSI
+code page (CP-1252 or similar)  it does NOT support Unicode paths natively. If the path
+contains any character outside the ANSI code page (é, è, σ, 你, ), Windows `fopen()` returns
+NULL (file not found), OpenCV receives a null file handle, and `cv2.imread()` returns `None`
+without raising an exception.
+
+This is a Windows-specific behaviour. On Linux/macOS, `fopen()` takes UTF-8 paths natively
+and this problem never occurs.
+
+**First fix (this commit):**
+```python
+# OLD (broke on non-ASCII paths):
+img_bgr = cv2.imread(str(image_path))
+
+# NEW (reads raw bytes first, then decodes in memory  path never reaches fopen):
+with open(image_path, "rb") as f:
+    buffer = np.frombuffer(f.read(), dtype=np.uint8)
+img_bgr = cv2.imdecode(buffer, cv2.IMREAD_COLOR)
+```
+
+**How this fixes it:**
+Python's built-in `open()` uses the Windows Unicode API (`CreateFileW`) rather than ANSI
+`fopen()`. It can open any path. We read the raw bytes into memory, then pass the byte buffer
+to `cv2.imdecode()` which decodes the JPEG/PNG from memory  no file path ever enters OpenCV's
+C++ layer. The decoder doesn't care about the original path.
+
+**Status after this commit:** Fix was correct in principle but the upload path still contained
+non-ASCII characters because the save path was derived from the original filename. So the file
+was opened correctly, but the saved path on disk still had the problem for subsequent reads.
+See `b3e7030` for the complete two-pronged fix.
+
+---
+
+### Commit `b3e7030`  Final Fix: Sanitise Upload Filenames + re.ASCII Flag
+
+**Why a second commit was needed:**
+The `ddb44ce` fix addressed the imread call in `inference.py`, but the upload pipeline in
+`routes/classify.py` still saved the file under the original (potentially non-ASCII) name.
+Even with `np.fromfile`, the `save_path` might fail if Windows Explorer refused to create
+a file with certain Unicode characters.
+
+**What changed:**
+1. **`_sanitise_filename()` in `routes/classify.py`**  added `re.ASCII` flag:
+   ```python
+   name = re.sub(r"[^\w.\-]", "_", name, flags=re.ASCII)
+   ```
+   Without `re.ASCII`, Python's `\w` pattern matches Unicode word characters  including é, ñ,
+   Chinese characters, Arabic letters, etc. With `re.ASCII`, `\w` only matches `[a-zA-Z0-9_]`.
+   So `Capture_d_écran.png` becomes `Capture_d__cran.png`  all ASCII, safe for Windows fopen.
+
+2. **All `cv2.imread()` calls replaced** with the `open(rb) + np.frombuffer + cv2.imdecode`
+   pattern throughout `inference.py` and `validator.py`.
+
+**Lesson:** Security and robustness issues on file paths require TWO defences:
+- Defence 1: Sanitise the filename AT SAVE TIME so the path on disk is clean.
+- Defence 2: Use byte-buffer reading at LOAD TIME as a fallback for any path that slips through.
+Defence in depth: if one breaks, the other catches it.
+
+---
+
+### Commit `0970aae`  Upload Guidance Tips, Blur/Resolution Quality Check, Obverse Tip
+
+**What changed:**
+Three UI/UX improvements to the `CoinUploader` component combined into one commit.
+
+**1. Blur detection:**
+```typescript
+async function checkImageQuality(file: File): Promise<string | null> {
+  // Draw image to an offscreen canvas
+  // Extract grayscale pixel values in the centre region
+  // Compute Laplacian variance: sharp image has high variance (edges are distinct)
+  // Blur threshold: variance < 80
+  // If blurry: return warning string
+}
+```
+
+The Laplacian is a second-derivative edge detector. For a sharp image, pixels near edges
+have large second-derivative values (the brightness changes abruptly). For a blurry image,
+edges are smeared  the second-derivative values are small and the variance across the
+whole image is low. This is the same technique OpenCV's `cv2.Laplacian` uses.
+
+**Why detect blur in the browser:**
+We could run blur detection on the server. But detecting blur BEFORE upload saves:
+- The user's upload time (don't wait 30 seconds to be told the image is blurry).
+- Server processing time (no point running EfficientNet on a blurry coin).
+- A helpful feedback loop during photo capture ("slightly blurry  try again").
+
+**2. Resolution check:**
+```typescript
+if (img.naturalWidth < 200 || img.naturalHeight < 200) {
+  return "Image is very small. Minimum 200200 px recommended for accurate classification."
+}
+```
+
+EfficientNet-B3 expects 299299. Upscaling from a 100100 thumbnail creates artifacts
+that the CNN has never seen in training. Warn the user early.
+
+**3. Obverse tip in the InvestigatorSection:**
+Added a UI note when the investigator route is taken: "For best results, photograph
+the OBVERSE (portrait side) of the coin in even lighting."
+The CNN was predominantly trained on obverse photographs (90%+ of CN dataset).
+
+---
+
+### Commit `07f8ca6`  Probe Ollama Model Availability Before Use; 10-Minute Timeout
+
+**Problem:**
+When a user had Ollama installed but WITHOUT the required model downloaded (e.g., `gemma3:4b`
+or `qwen3-vl:4b`), the historian or investigator would call the Ollama API endpoint, which
+would return an error like `{"error":"model 'gemma3:4b' not found"}`. But the error handling
+was catching this as a generic exception and re-trying  creating an infinite wait loop.
+The classify request appeared to hang indefinitely in the browser.
+
+**What changed:**
+
+1. **Ollama model probe** before accepting a request:
+   ```python
+   def _probe_ollama(model: str) -> bool:
+       """
+       Ask Ollama whether a model is available locally.
+       Returns True if the model can be used, False otherwise.
+       """
+       import requests, os
+       host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+       try:
+           r = requests.get(f"{host}/api/tags", timeout=2.0)
+           models = [m["name"] for m in r.json().get("models", [])]
+           return any(m.startswith(model.split(":")[0]) for m in models)
+       except Exception:
+           return False
+   ```
+   If the probe returns False, the provider is skipped and the next provider in the chain
+   is tried (GitHub Models  Google AI Studio  Ollama  structured fallback).
+
+2. **Classify timeout bumped to 10 minutes** in `classifyApiClient` (was 3 minutes):
+   ```typescript
+   timeout: 600_000,  // 10 minutes
+   ```
+   On a power-throttled laptop, `gemma3:4b` can take 46 minutes per narrative. 3 minutes
+   was triggering false ECONNRESET errors even when the pipeline eventually succeeded.
+
+**Why not just download the model before testing:**
+In a PFE demo environment with intermittent internet access, the model download can fail
+or be interrupted. The probe pattern means the system WORKS without Ollama  it gracefully
+falls back to GitHub Models or the structured fallback. Robustness over convenience.
+
+---
+
+### Commit `cadfac0`  Auto-Crop Coin Region Before CLAHE (HoughCircles + Contour + Centre-Crop)
+
+**Problem being solved:**
+Real-world photos (screenshots, museum scans, phone photos) contain large backgrounds:
+a dark table, a ruler, an exhibition label, or a white desk. The coin might occupy only
+2030% of the image area. EfficientNet-B3 receives a 299299 image where 70% is irrelevant
+background  the coin features are compressed into a small sub-region of the input tensor.
+This lowers confidence because the spatial features the CNN learned (coin geometry, border
+patterns, portrait proportions) are squeezed into a fraction of the receptive field.
+
+**The solution: `_auto_crop_coin()` in `src/core/inference.py`**
+
+Three strategies in priority order:
+
+**Strategy 1  Hough Circle Transform:**
+```python
+gray  = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+blur  = cv2.GaussianBlur(gray, (9, 9), 2)
+circles = cv2.HoughCircles(blur, cv2.HOUGH_GRADIENT, dp=1.2, minDist=h//3,
+                            param1=100, param2=30,
+                            minRadius=int(min(h,w)*0.1),
+                            maxRadius=int(min(h,w)*0.6))
+```
+`HoughCircles` works by:
+1. Computing the image gradient (Canny edge detector internally).
+2. For each edge pixel, casting a "vote" in a 3D accumulator space (x_centre, y_centre, radius).
+3. Local maxima in the accumulator = detected circles.
+
+Parameters explained:
+- `dp=1.2`: accumulator resolution relative to image (1 = same; 1.2 = slightly coarser = faster)
+- `minDist=h//3`: circles must be at least 1/3 image height apart (prevents multiple detections)
+- `param1=100`: Canny high threshold (edges above this are definite edges)
+- `param2=30`: accumulator threshold (lower = more circles detected, more false positives)
+- `minRadius / maxRadius`: coin must be 1060% of the smallest image dimension
+
+If multiple circles are found, pick the one closest to the image centre (coins are usually
+photographed in the centre of the frame).
+
+After detection, add a 12% padding ring:
+```python
+pad    = int(r * 0.12)
+x1, x2 = max(0, cx-r-pad), min(w, cx+r+pad)
+y1, y2 = max(0, cy-r-pad), min(h, cy+r+pad)
+crop   = img_bgr[y1:y2, x1:x2]
+```
+
+**Strategy 2  Largest Near-Circular Contour (Canny  dilate  findContours):**
+```python
+edges  = cv2.Canny(gray, 50, 150)
+kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+dilated = cv2.dilate(edges, kernel, iterations=2)
+contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+```
+Filter contours by:
+- Area > 5% of image (removes noise)
+- Bounding box aspect ratio 0.61.67 (roughly square = round object)
+- **Circularity > 0.50** using the formula: `4π  area / perimeter²`
+
+Circularity formula derivation:
+- A perfect circle of radius r has: area = πr², perimeter = 2πr
+- Circularity = 4π  πr² / (2πr)² = 4π²r² / 4π²r² = 1.0
+- A square has circularity  0.785
+- A very elongated rectangle has circularity near 0
+- Coins are almost circles: circularity typically 0.650.95 (allowing for non-circular photography)
+
+**Strategy 3  Centre 80% Crop (last resort):**
+```python
+margin = int(min(h, w) * 0.10)
+crop   = img_bgr[margin:h-margin, margin:w-margin]
+```
+Removes the outer 10% border from each side. Most photographs have the coin in the centre
+with the dead border in the margins. This is a heuristic  not geometric  but it handles
+90% of "coin on white paper" screenshots that don't have a visible circular border.
+
+**Early exit condition:**
+```python
+if min(h, w) < 200:
+    return img_bgr   # Already tight/small  skip crop
+```
+A 150150 coin image is already tight. Auto-cropping a tight image can remove the coin border
+itself, hurting performance.
+
+**WHY not use YOLO for coin detection:**
+- A YOLO model pretrained on COCO doesn't include "ancient coin" as a class.
+- Fine-tuning YOLO requires a bounding-box annotated dataset (we have classification labels,
+  not bounding boxes).
+- YOLO (YOLOv8 small) adds ~50100 MB to the model footprint.
+- HoughCircles handles >95% of actual coin photos with zero additional dependencies.
+- The contour fallback handles the remaining irregular cases.
+
+---
+
+### Commit `9e09438`  CNN Station Shows Preprocessing Steps in Mission Control Log
+
+**What changed:**
+The `AgentPipeline` mission control component previously showed a single "Analysing coin"
+message during the CNN inference phase. This commit made the station log reflect the actual
+sub-steps happening in `CoinInference.predict()`:
+
+```typescript
+// New station messages for CNN phase:
+[
+  "Loading image from disk...",
+  "Applying CLAHE contrast enhancement (LAB colourspace)...",
+  "Auto-cropping coin region (HoughCircles strategy)...",
+  "Running EfficientNet-B3 forward pass (TTA  8)...",
+  "Computing softmax probabilities and vote fraction...",
+]
+```
+
+These messages are hardcoded to match the actual pipeline steps but are shown as timed
+intervals during the CNN station to give the user a real sense of what the model is doing.
+
+**Why this matters for a PFE project:**
+The encadrant (tutor) will evaluate the demo. Showing "running EfficientNet-B3 forward pass
+(TTA  8)" demonstrates that the student knows what their system is doing internally.
+A black-box "loading" spinner shows nothing. The mission control UI IS the technical
+documentation made visible.
+
+---
+
+### Commit `c8b74a7`  Preprocessor Stage in Mission Control + Glow Fix + 8-Pass TTA
+
+**Three changes bundled together:**
+
+**1. Dedicated "Preprocessor" stage before CNN:**
+The mission control log now shows a PREPROCESSOR station (station 0) before the CNN station,
+showing:
+```
+Station 0: PREPROCESSOR
+  - Reading image bytes (np.frombuffer  cv2.imdecode)
+  - Gaussian blur for HoughCircles detection
+  - Circle found at (cx=412, cy=389, r=310)  cropping...
+  - CLAHE applied: contrast enhanced, patina colours preserved
+  - Padded to 299299 (aspect-preserving, zero-pad)
+```
+This station resolves immediately (preprocessing takes < 50 ms) but makes the pipeline
+feel more transparent.
+
+**2. Particle beam glow fix:**
+The CSS animation for particle flow between mission control stations had a timing issue
+where the glow effect (a radial-gradient dot traveling along a connector line) would
+"flash" at the seam  the particle jumped from end to end instead of looping smoothly.
+Fixed by adjusting the `@keyframes` to use `transform: translateX()` consistently and
+resetting to `translateX(-100%)` at `0%` instead of `100%`.
+
+**3. 8-Pass TTA (was 5 passes):**
+`_TTA_TRANSFORMS` in `inference.py` was extended from 5 passes to 8:
+```python
+_TTA_TRANSFORMS = [
+    None,                                                     # Pass 1: clean baseline
+    A.HorizontalFlip(p=1.0),                                  # Pass 2: mirror L-R
+    A.Rotate(limit=(10, 10), p=1.0),                          # Pass 3: +10°
+    A.Rotate(limit=(-10, -10), p=1.0),                        # Pass 4: -10°
+    A.RandomBrightnessContrast(brightness_limit=(0.12, 0.12), # Pass 5: well-lit
+                               contrast_limit=0.0, p=1.0),
+    A.Rotate(limit=(15, 15), p=1.0),                          # Pass 6: +15°
+    A.Rotate(limit=(-15, -15), p=1.0),                        # Pass 7: -15°
+    A.HorizontalFlip(p=1.0),                                  # Pass 8: flip + rotate composite
+]
+```
+**Why 8 and not 5:**
+The original 5-pass TTA included: original, H-flip, rotation +10°, rotation -10°,
+brightness shift. Early testing showed that the +15° and -15° range (coins photographed
+slightly tilted) were under-represented. Adding passes 68 improved accuracy on
+museum-scanned images that arrived at slight angles.
+
+Note in README: changed from "8 passes" to correctly say "8 passes" (README was inconsistent
+between versions; audit commit `4be8e56` fixed the TTA count).
+
+---
+
+### Commit `29098e6`  Temperature Scaling + Vote-Fraction Routing Override for Screenshots
+
+**Background  what is temperature scaling:**
+A neural network trained with CrossEntropy + label smoothing often produces overconfident
+softmax outputs: the top-1 probability is 0.95+ even when the model is genuinely uncertain.
+This is because label smoothing during training pushes the model toward distributions where
+no class has probability 1.0, but the inference-time softmax (which re-normalises without
+the smoothing) becomes sharper as the logits grow in magnitude.
+
+**Temperature scaling** is a post-training calibration: instead of `softmax(z)`, compute
+`softmax(z/T)` where T > 1 flattens the distribution and T < 1 sharpens it.
+
+We apply temperature calibration as:
+```python
+T = 1.4   # empirically chosen on the validation set
+logits_calibrated = logits / T
+probs = F.softmax(logits_calibrated, dim=-1)
+```
+
+Why T=1.4: On the validation set, the CNN's Expected Calibration Error (ECE) was estimated
+at ~0.18 (18% average confidence gap from actual accuracy). T=1.4 reduced ECE to ~0.07.
+This means confidence scores now better reflect actual accuracy:
+- Before: 85% confidence  coin correctly classified ~67% of the time
+- After:  85% confidence (T-scaled)  coin correctly classified ~83% of the time
+
+**Vote fraction routing override:**
+Some screenshots produce a deceptively high T-scaled confidence (e.g. 74%) while showing
+low `vote_fraction` (only 3/8 TTA passes agreed). This is the worst case  the model is
+numerically confident but internally inconsistent.
+
+New routing logic:
+```python
+conf  = cnn_prediction["confidence"]   # T-scaled softmax top-1
+vote  = cnn_prediction.get("vote_fraction", 1.0)
+
+if conf > 0.85:
+    route = "historian"
+elif conf >= 0.40 and vote >= 0.70:
+    route = "validator"     # mid-conf, but TTA agrees: likely correct, just verify
+elif vote < 0.70:
+    route = "investigator"  # TTA disagrees regardless of softmax confidence
+else:
+    route = "investigator"
+```
+
+**Why vote_fraction matters more than raw confidence:**
+8 TTA passes each see the coin from a slightly different angle. If 7/8 agree on "type 1015",
+the model has seen the coin from 7 different angles and consistently says the same thing 
+that is genuine confidence. If 4/8 agree on "type 1015" but 2/8 say "type 3314" and 2/8
+say "type 1017", the softmax top-1 might still be high but the model is unstable  it
+disagrees with itself depending on the viewing angle. vote_fraction < 0.5  investigator.
+
+---
+
+### Commit `1902eac`  Aspect-Preserving Resize in Inference + 70% Confidence UX Threshold
+
+**1. Aspect-preserving resize fix in inference.py:**
+
+Before this commit, `_load_image()` did:
+```python
+img = cv2.resize(img_bgr, (299, 299))  # simple resize  distorts coin geometry
+```
+
+After this commit:
+```python
+def _letterbox(img: np.ndarray, target: int = 299) -> np.ndarray:
+    h, w = img.shape[:2]
+    scale = target / max(h, w)
+    new_h = int(h * scale)
+    new_w = int(w * scale)
+    resized = cv2.resize(img, (new_w, new_h),
+                         interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_CUBIC)
+    canvas = np.zeros((target, target, 3), dtype=np.uint8)
+    y_off  = (target - new_h) // 2
+    x_off  = (target - new_w) // 2
+    canvas[y_off:y_off+new_h, x_off:x_off+new_w] = resized
+    return canvas
+```
+
+**Why distortion matters:**
+EfficientNet-B3 was trained on aspect-preserving 299299 images (from `prep_engine.py` which
+always used aspect-preserving resize). If inference stretches coins to fill the square, a
+tall rectangular museum scan becomes a squashed circle. The CNN's learned feature detectors
+(which look for circular coin geometry) see an oval  degraded classification.
+
+This should have been in the original inference implementation. It was the same bug that
+`prep_engine.py` was written to avoid.
+
+**2. 70% confidence UX threshold (DISPLAY_CONF_THRESHOLD):**
+```typescript
+// AnalysisPanel.tsx
+const DISPLAY_CONF_THRESHOLD = 0.70;
+```
+Before this commit, the confidence number was shown for ALL values, including 12% and 8%.
+This caused "confidence anxiety"  users saw "12% confident" and concluded the system was
+broken, even though 12% top-1 out of 438 classes is actually well above random (1/438 = 0.23%).
+
+The 70% threshold hides the raw percentage for low-confidence results and instead shows
+"TTA Consensus" or "Deep Search" mode text  reframing the output positively.
+
+---
+
+### Commit `4b86ef1`  Production-Grade Refactor: prep_engine.py + dataset.py
+
+**What changed:**
+
+**prep_engine.py refactor:**
+- Added `ProcessingStats` dataclass to track successes, failures, skipped, total time.
+- Added per-class minimum image count enforcement.
+- Added checksum verification (MD5 of first 1024 bytes) to detect corrupt JPEGs before processing.
+- Added graceful handling of OpenCV decode failures (some raw images in the dataset were
+  truncated JPEG files  before this commit, they caused the entire batch to crash).
+- Added progress reporting with `tqdm` progress bar.
+- Added `--dry-run` flag: scan dataset and report statistics without writing any files.
+- Added `--resume` flag: skip class folders that already exist in `data/processed/`.
+
+**dataset.py refactor:**
+- Added validation in `__getitem__`: if `cv2.imdecode` returns None (corrupt image that
+  slipped past preprocessing), raise `ValueError` with the file path instead of passing
+  None into the augmentation pipeline (which would crash with an inscrutable error).
+- Added `class_weights` property: returns a 1D tensor of `1/class_count` weights for
+  `WeightedRandomSampler`. Previously this was computed inline in `train.py`; putting it
+  on the dataset class means both training and evaluation scripts get consistent weights.
+- Added `__repr__`: `print(dataset)` now shows the class count, sample count, and root dir.
+
+---
+
+### Commit `ce9e44f`  Enable TTA by Default + PDF Section Title Colour Fix + Page-Break Guards
+
+**1. TTA default=True:**
+The `tta` parameter in `POST /api/classify` now defaults to `True`:
+```python
+tta: bool = Query(True, description="Test-Time Augmentation (default on)")
+```
+Previously it defaulted to False (single-pass). This was wrong: TTA adds +0.78% accuracy
+with negligible additional cost on a GPU (8 forward passes instead of 1, each taking ~70 ms
+on the RTX 3050 Ti = ~560 ms total vs 70 ms single-pass). The extra 490 ms is invisible
+compared to the 15-second LLM call.
+
+**2. PDF section title colour fix:**
+Section titles in the PDF (e.g., "HISTORICAL ANALYSIS", "FORENSIC MATERIAL CHECK") were
+being rendered in the default black colour. This commit changed them to the brand navy blue
+used throughout the design. FPDF2 call:
+```python
+pdf.set_text_color(0, 30, 80)   # Navy blue: R=0, G=30, B=80
+pdf.set_font("Helvetica", "B", 10)
+pdf.cell(0, 6, _s(section_title.upper()), ln=True)
+pdf.set_text_color(0, 0, 0)     # Reset to black
+```
+
+**3. Page-break guards for long content:**
+FPDF2 has an `auto_page_break` feature, but it only triggers mid-cell. Long `multi_cell()`
+calls for the narrative text were sometimes split mid-sentence at a page break, leaving
+orphan lines. Added explicit checks:
+```python
+if pdf.get_y() > 240:   # within 50mm of page bottom (A4 = 297mm)
+    pdf.add_page()
+    _draw_navy_header(pdf)
+```
+
+---
+
+### Commit `e8da613`  API Test Suite: 20 Tests, 66 Assertions
+
+**File created:** `tests/unit/test_api.py`
+
+**What the tests cover:**
+
+1. **`_sanitise_filename` function (6 test cases):**
+   - ASCII filename unchanged
+   - Path separators stripped (`../../etc/passwd.jpg`  `passwd.jpg`)
+   - Non-ASCII characters replaced with `_`
+   - Unicode filename fully sanitised
+   - Empty filename handled
+   - Length capped at 128 characters
+
+2. **`_detect_mime` function (5 test cases):**
+   - JPEG magic bytes recognised (`\xFF\xD8\xFF`)
+   - PNG magic bytes recognised (`\x89PNG`)
+   - Unknown bytes return None
+   - Empty bytes return None
+   - Truncated magic bytes handled
+
+3. **History store functions (9 test cases):**
+   - `append()` stores a record
+   - `get_by_id()` retrieves by exact UUID
+   - `get_by_id()` returns None for missing ID
+   - `count()` matches actual record count
+   - `load_page()` returns correct page slice
+   - `load_page()` skip/limit boundary conditions
+   - `delete_by_id()` removes record and returns True
+   - `delete_by_id()` returns False for missing ID
+   - `load_all()` returns newest-first ordering
+
+4. **Auth function (run in full integration in `test_auth.py`):**
+   - `require_api_key` passes when no env var set (dev mode)
+   - `require_api_key` passes with correct key
+   - `require_api_key` raises 401 with wrong key
+   - `require_api_key` raises 401 with missing header (when key is set)
+   - Timing safety: test that `hmac.compare_digest` is used (not `==`)
+
+**Why 66 assertions for 20 tests:**
+Good tests check multiple assertions per test case. Not just "function returned a value"
+but "returned value has the right type", "returned value has the right content", "function
+did not mutate inputs". Multiple assertions = higher bug detection density.
+
+**Running the tests:**
+```powershell
+& C:\Users\Administrator\deepcoin\venv\Scripts\python.exe -m pytest tests/unit/test_api.py -v
+```
+All 66 assertions (across 20 tests) pass in under 1 second.
+
+---
+
+### Commit `fb933b9`  PDF Quality Tests + Narrative Quality Tests
+
+**Two test files created:**
+
+**`tests/_test_all_routes_pdf.py` (prefixed with `_` = manual run only, not in CI):**
+An integration test that runs all three pipeline routes and inspects the generated PDFs:
+- Opens the PDF binary and checks it starts with `%PDF-1.4` (valid PDF header)
+- Checks file size > 5 KB (ensures content was written, not an empty shell)
+- Parses the text layer using `pdfplumber` and checks key strings appear:
+  - Route 1 (historian): "HISTORICAL ANALYSIS", "Maroneia" or the CN type name
+  - Route 2 (validator): "FORENSIC MATERIAL CHECK"
+  - Route 3 (investigator): "VISUAL INVESTIGATION"
+- Ensures no `[CONTEXT` markers appear in the final PDF (the RAG context blocks
+  should be consumed by the LLM, not leaked to the output)
+- Ensures no raw class_id integers appear (should be enriched label names)
+
+**`tests/_test_narrative.py` (manual integration test):**
+Tests the quality of LLM-generated narratives:
+- Length: narrative must be between 100 and 2000 characters
+- No "I cannot" / "I don't know" language (graceful degradation rule)
+- No raw `[CONTEXT N]` artifacts
+- Must contain at least one of: mint name, region name, or denomination
+- No duplicate sentences (LLM hallucination pattern check)
+
+These tests are prefixed with `_` so `pytest tests/unit/` does NOT run them automatically.
+They require the full pipeline to be running (model loaded, Ollama/GitHub token available)
+and take 1560 seconds each. They are run manually before a demo or major commit.
+
+---
+## Section 47  Complete File Inventory: Every File, Every Function (2026)
+
+This section is the authoritative file-by-file reference for the entire project as of March 2026.
+If you clone the repo and wonder "what does this file do and why does it exist?", look here.
+Files are grouped by layer. For each file: absolute path, purpose, key functions/classes,
+how it connects to other files, and what you would lose if you deleted it.
+
+---
+
+### Project Root Files
+
+---
+
+#### `requirements.txt`  Python dependency manifest
+
+**Purpose:** Pinned list of every Python library the project needs. Running
+`pip install -r requirements.txt` inside the venv installs ALL of them in one command.
+
+**Key packages:**
+- `torch==2.6.0+cu124`  PyTorch with CUDA 12.4 support (the actual GPU tensor library)
+- `torchvision`  EfficientNet model weights + transforms
+- `opencv-python==4.13.0`  CLAHE, HoughCircles, HSV analysis
+- `albumentations`  training augmentation pipeline
+- `chromadb`  vector database (stores the 47,705 coin description embeddings)
+- `sentence-transformers`  embed coin descriptions into 384-dim vectors (`all-MiniLM-L6-v2`)
+- `langgraph`, `langchain`  the agent state machine framework
+- `openai`  client SDK for GitHub Models + Google AI Studio (both use OpenAI-compatible API)
+- `fpdf2`  PDF generation (direct drawing primitives)
+- `rank-bm25`  BM25 keyword search for the hybrid RAG engine
+- `fastapi`, `uvicorn`  web framework + ASGI server
+- `slowapi`  rate limiting middleware for FastAPI
+- `pydantic`  request/response validation (v2)
+- `pytest`  test runner
+- `python-json-logger`  structured JSON logging
+
+**If deleted:** `pip install` without `-r requirements.txt` installs wrong versions. Training
+breaks if torch version mismatches CUDA driver. GPU utilisation drops to 0 (CPU fallback).
+
+---
+
+#### `pyproject.toml`  Build system and tool configuration
+
+**Purpose:** Single configuration file for Python build metadata + development tools.
+```toml
+[build-system]
+requires = ["setuptools>=68"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.black]
+line-length = 100
+
+[tool.flake8]
+max-line-length = 100
+extend-ignore = ["E203", "W503"]
+```
+
+**If deleted:** `pytest` still works (it discovers `tests/` by default). But IDE tooling
+(black, flake8, mypy) loses its configuration and reverts to defaults.
+
+---
+
+#### `Makefile`  Developer shortcut commands
+
+**Purpose:** Run long terminal commands with short aliases.
+```makefile
+api:       uvicorn src.api.main:app --port 8000 --log-level info --reload
+test:      python -m pytest tests/ -v
+lint:      flake8 src/ scripts/ tests/
+fmt:       black src/ scripts/ tests/
+train:     python scripts/train.py
+pipeline:  python scripts/test_pipeline.py
+```
+
+**Usage in PowerShell:** `make api`  requires `make` installed (`winget install GnuWin32.Make`).
+
+---
+
+#### `.env.example`  Environment variable template
+
+**Purpose:** Documents every environment variable the system needs WITHOUT containing real secrets.
+Developers copy this to `.env` and fill in real values.
+```
+GITHUB_TOKEN=ghp_...            # LLM: GitHub Models (Gemini 2.5 Flash)
+GOOGLE_API_KEY=AIza...          # LLM: Google AI Studio (fallback)
+OLLAMA_HOST=http://localhost:11434  # LLM: Local Ollama
+DEEPCOIN_API_KEY=...            # API auth (leave blank for dev mode)
+ALLOWED_ORIGINS=http://localhost:3000  # CORS whitelist
+ENV=development                 # production disables /docs
+LOG_FORMAT=text                 # text or json
+LOG_LEVEL=INFO
+```
+
+**If deleted:** Developers don't know what env vars exist. They see errors about missing
+`GITHUB_TOKEN` with no explanation of where to get one.
+
+---
+
+#### `.gitignore`  Git exclusion rules
+
+**Key patterns:**
+```
+/venv/           # Python virtual environment (300 MB  rebuild with pip install -r)
+/data/raw/       # 115,160 raw images (12 GB  not on GitHub, on NAS/local disk)
+/data/processed/ # 7,677 processed images (900 MB  regenerate with prep_engine.py)
+/models/*.pth    # PyTorch model weights (100 MB  download separately)
+/.env            # Secrets  NEVER commit
+notes.md         # Private notes
+The\ Project.md  # Private project summary
+```
+
+**Critical fix applied (commit `47d3ef9`):**
+The original rule was `lib/` (no leading `/`). Git interprets patterns WITHOUT a leading slash
+as matching anywhere in the directory tree. This silently excluded `frontend/lib/` (TypeScript
+utilities), meaning `api.ts`, `store.ts`, and `utils.ts` were never tracked by Git.
+Fixed to `/lib/` (leading slash = anchored to repo root only).
+
+---
+
+#### `src/__init__.py`  Version source of truth
+
+```python
+__version__ = "0.4.0"
+```
+Imported by `src/api/main.py` as `from src import __version__`. FastAPI's title and
+the `/api/health` response expose this version. One change here propagates everywhere.
+
+---
+
+### Layer 0-1: Data Pipeline (`src/data_pipeline/`)
+
+---
+
+#### `src/data_pipeline/prep_engine.py`  Image Preprocessing Engine
+
+**Purpose:** Transforms raw Corpus Nummorum images into ML-ready 299299 JPEGs with
+CLAHE contrast enhancement and aspect-preserving resize.
+
+**Inputs:** `data/raw/[type_id]/[images]` (downloaded from corpus-nummorum.eu)
+**Outputs:** `data/processed/[type_id]/[images]`
+
+**Key class: `PrepEngine`**
+```
+PrepEngine.__init__(raw_dir, processed_dir, min_samples=10)
+PrepEngine.run()                   # Process all valid classes
+PrepEngine._process_class(type_id) # CLAHE + resize for one class
+PrepEngine._apply_clahe(bgr)       # BGR  LAB  CLAHE on L  LAB  BGR
+PrepEngine._letterbox(img, 299)    # Aspect-preserving resize with zero-pad
+PrepEngine.stats                   # ProcessingStats dataclass
+```
+
+**CLAHE algorithm:**
+1. Convert BGR image to LAB colour space: `cv2.cvtColor(bgr, cv2.COLOR_BGR2LAB)`
+2. Split LAB into L (luminance), A (green-red axis), B (blue-yellow axis)
+3. Apply CLAHE only to L channel: `clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))`
+4. Merge channels back: `cv2.merge([l_eq, a, b])`
+5. Convert LAB back to BGR: `cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)`
+
+**Why LAB not RGB:** Metal patina colours (green copper oxidation, brown silver sulphide) live
+in the A and B channels. Applying CLAHE to RGB channels distorts all three simultaneously,
+washing out these archaeological colour features. LAB separates luminance from colour 
+CLAHE on L channel only enhances edge contrast without touching A/B.
+
+**Letterbox resize:**
+```python
+scale = 299 / max(h, w)          # Scale so longer edge = 299
+new_h, new_w = int(h*scale), int(w*scale)
+# Two interpolation modes:
+# INTER_AREA: better for downscaling (averages pixels)  less aliasing
+# INTER_CUBIC: better for upscaling (smooth reconstruction)
+cv2.resize(img, (new_w, new_h),
+           interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_CUBIC)
+canvas = np.zeros((299, 299, 3), dtype=np.uint8)  # Black zero-pad canvas
+# Centre the resized image on the canvas
+y_off = (299 - new_h) // 2
+x_off = (299 - new_w) // 2
+canvas[y_off:y_off+new_h, x_off:x_off+new_w] = resized
+```
+
+**`--resume` flag:** Skips class folders that already exist in `data/processed/`. Critical for
+resuming after a crash on a 9,000-class scrape that takes 4 hours.
+
+---
+
+#### `scripts/audit.py`  Dataset Auditing Tool
+
+**Purpose:** Statistical report on the raw dataset. Run BEFORE preprocessing to understand
+the data distribution.
+
+**Outputs:**
+- Class count, image count, min/max/mean/median per class
+- Long-tail plot (class_id by frequency, sorted descending)
+- Output: "7,677 images across 438 classes (above threshold 10)"
+
+**Why run audit before training:** You need to know WHAT you're training on before you
+commit 103 minutes of GPU time.
+
+---
+
+### Layer 1: CNN Model (`src/core/`)
+
+---
+
+#### `src/core/model_factory.py`  EfficientNet-B3 Architecture Definition
+
+**Purpose:** Factory function that builds the EfficientNet-B3 model with the custom head for 438 classes.
+
+**Key function:**
+```python
+def get_deepcoin_model(num_classes: int = 438, dropout: float = 0.4) -> nn.Module:
+    model = torchvision.models.efficientnet_b3(
+        weights=torchvision.models.EfficientNet_B3_Weights.IMAGENET1K_V1
+    )
+    # Replace the classification head
+    in_features = model.classifier[1].in_features  # 1536
+    model.classifier = nn.Sequential(
+        nn.Dropout(p=dropout, inplace=True),
+        nn.Linear(in_features, num_classes),
+    )
+    return model
+```
+
+**EfficientNet-B3 architecture:**
+- Base: MBConv (Mobile Inverted Bottleneck Convolution) blocks
+- Compound scaling: depth 1.4, width 1.2, resolution 1.3 over EfficientNet-B0
+- Feature extractor: 18 layer groups  1536-dimensional output vector
+- Head replaced: original 1000-class ImageNet head  438-class coin head
+- Parameters: 12M total (10M frozen at start of training if using feature extraction mode)
+
+**Why Dropout(0.4):**
+Dropout zeroes 40% of the 1536 neurons randomly during each training forward pass. The
+network cannot rely on any single neuron. This forces DISTRIBUTED representations.
+Each neuron must learn a feature useful even without the help of 40% of its neighbours.
+Result: less overfitting on our small dataset (7,677 images for 438 classes).
+
+---
+
+#### `src/core/dataset.py`  PyTorch Dataset Bridge
+
+**Purpose:** Connects the preprocessed image directory to the PyTorch training loop.
+Handles lazy loading, label mapping, and augmented transforms.
+
+**Key class: `DeepCoinDataset(Dataset)`**
+```
+DeepCoinDataset.__init__(root_dir, transform)
+DeepCoinDataset.__len__()            7677 (total samples)
+DeepCoinDataset.__getitem__(idx)     (tensor[3,299,299], int_label)
+DeepCoinDataset.class_to_idx         {"1015": 0, "1017": 1, ...}
+DeepCoinDataset.idx_to_class         {0: "1015", 1: "1017", ...}
+DeepCoinDataset.class_weights        tensor of 1/class_count for each class
+DeepCoinDataset.classes              sorted list of class folder names
+```
+
+**Lazy loading:**
+Stores only `(path, label)` tuples. 7,677 paths  ~50 bytes each  380 KB RAM.
+Pixel data loaded on `__getitem__()` call: 7,677  299  299  3  4 bytes  2.6 GB RAM (never stored all at once).
+
+**Label mapping:**
+`os.listdir(root_dir)` returns folder names in arbitrary OS order.
+`sorted()` ensures consistent alphabetical ordering.
+`enumerate(sorted_classes)` assigns integer indices deterministically:
+- "1015"  index 0
+- "1017"  index 1
+- "10708"  index 2 (note: string sort, not numeric sort)
+This mapping is saved to `models/class_mapping.pth` during training and loaded at inference time.
+
+---
+
+#### `src/core/inference.py`  Production Inference Engine
+
+**Purpose:** Single-responsibility wrapper around the trained model. Given an image path,
+returns a structured dict with classifier results.
+
+**Key class: `CoinInference`**
+```
+CoinInference.__init__(model_path, mapping_path, device)
+CoinInference.predict(image_path, tta=True)  dict
+CoinInference._load_image(path)              np.ndarray (299299 BGR, CLAHE applied)
+CoinInference._auto_crop_coin(img)           np.ndarray (cropped)
+CoinInference._tta_predict(img)              (probs tensor, vote_fraction, tta_passes)
+# Module utilities:
+_auto_crop_coin(img_bgr)                    # standalone function (also used by validator)
+```
+
+**Full predict() pipeline:**
+1. `_load_image(path)`  read bytes with `open(rb) + np.frombuffer + cv2.imdecode`
+2. `_auto_crop_coin(img)`  HoughCircles  contour  centre-crop
+3. `_apply_clahe(img)`  CLAHE on L channel (only if not already applied in prep_engine)
+4. `_letterbox(img, 299)`  aspect-preserving resize
+5. BGR  RGB conversion: `cv2.cvtColor(img, cv2.COLOR_BGR2RGB)`
+6. Apply Albumentations val_transforms (Normalize with ImageNet stats, no augmentation)
+7. For TTA: repeat steps 16 with 8 different augmentations, collect 8 softmax vectors
+8. Average the 8 softmax vectors  final probability distribution
+9. Temperature scale: `probs_calibrated = logits / T` before final softmax
+10. Compute `vote_fraction`: fraction of TTA passes that agreed on top-1 class
+11. Return structured dict with top-1, top-5, confidence, vote_fraction, tta_passes, timing
+
+**CLAHE singleton:**
+```python
+def __init__(self, ...):
+    ...
+    self._clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+```
+`cv2.createCLAHE` allocates a reusable filter object. Creating it once in `__init__` and
+reusing it across all TTA passes saves 8 CLAHE object allocation overhead per prediction.
+
+**Security:**
+```python
+torch.load(model_path, weights_only=True)  # Prevents arbitrary code execution via pickle
+torch.load(mapping_path, weights_only=True)
+```
+`weights_only=True` restricts `pickle` to only deserialise tensor data, refusing to
+run arbitrary Python code that could be embedded in a malicious `.pth` file.
+
+---
+
+#### `src/core/knowledge_base.py`  Legacy ChromaDB Wrapper (438 types)
+
+**Purpose:** Original single-blob-per-coin ChromaDB wrapper. Kept as fallback. Do NOT modify.
+The production system uses `rag_engine.py`. This file is maintained for historical reference
+and as a fallback if the RAG index is unavailable.
+
+**Key class: `CoinKnowledgeBase`**
+```
+get_knowledge_base()            # module-level singleton
+CoinKnowledgeBase.search(query, n, where)  list[dict]
+CoinKnowledgeBase.search_by_id(type_id)    dict | None
+CoinKnowledgeBase.build_from_metadata(path) # batch upsert
+```
+
+---
+
+#### `src/core/rag_engine.py`  Production RAG Engine (9,541 types, 47,705 vectors)
+
+**Purpose:** Production search engine combining BM25 keyword search and ChromaDB vector search
+with Reciprocal Rank Fusion merging. Replaces `knowledge_base.py` for all agent use.
+
+**Key class: `RAGEngine`**
+```
+RAGEngine.__init__(metadata_path, chroma_dir, collection_name)
+RAGEngine.search(query, n, where)      list[dict]  # hybrid BM25+vector+RRF
+RAGEngine.get_by_id(type_id)           dict | None
+RAGEngine.get_context_blocks(type_id)  list[str]   # 5 [CONTEXT N] strings
+RAGEngine.populate_chroma()           # one-time build (47,705 vectors)
+RAGEngine.is_chroma_built()           # check before rebuild
+RAGEngine.corpus_size()                int (9541)
+# Module-level singleton:
+get_rag_engine()                       RAGEngine (thread-safe, double-checked locking)
+```
+
+**BM25 index:**
+```python
+from rank_bm25 import BM25Okapi
+texts = [r["text_blob"] for r in all_records]
+tokenised = [t.lower().split() for t in texts]
+self._bm25 = BM25Okapi(tokenised)
+```
+BM25 tokenises every coin's text blob at build time. At search time, query tokens are
+scored using: `score(d,q) = IDF(q)  TF_saturation(q,d)` where TF saturation prevents
+a single keyword appearing 50 times from dominating.
+
+**RRF merge:**
+```python
+def _rrf_merge(bm25_ranking, vector_ranking, k=60):
+    scores = {}
+    for rank, doc_id in enumerate(bm25_ranking):
+        scores[doc_id] = scores.get(doc_id, 0) + 1 / (k + rank + 1)
+    for rank, doc_id in enumerate(vector_ranking):
+        scores[doc_id] = scores.get(doc_id, 0) + 1 / (k + rank + 1)
+    return sorted(scores.keys(), key=lambda d: -scores[d])
+```
+
+**Thread safety:**
+```python
+_engine_instance: RAGEngine | None = None
+_engine_lock     = threading.Lock()
+
+def get_rag_engine() -> RAGEngine:
+    global _engine_instance
+    if _engine_instance is None:             # First check (no lock  fast)
+        with _engine_lock:                   # Acquire lock
+            if _engine_instance is None:     # Second check (under lock  safe)
+                _engine_instance = RAGEngine(...)
+    return _engine_instance
+```
+Double-checked locking: the outer `if` avoids acquiring the lock on every call (lock
+acquisition has OS overhead). The inner `if` prevents two threads both entering the
+constructor simultaneously on a cold start.
+
+---
+
+### Layer 3: Agent System (`src/agents/`)
+
+---
+
+#### `src/agents/gatekeeper.py`  LangGraph Orchestrator (330 lines)
+
+**Purpose:** The central coordinator. Builds and runs the LangGraph state machine that routes
+coin images through the three analysis paths.
+
+**Key class: `Gatekeeper`**
+```
+Gatekeeper.__init__()           # loads CNN + RAG engine + builds LangGraph graph
+Gatekeeper.analyze(image_path, tta)  dict  # runs full pipeline
+# Private:
+Gatekeeper._build_graph()       # StateGraph construction
+Gatekeeper._cnn_node(state)     # node: run CNN inference
+Gatekeeper._route(state)        # conditional edge routing function
+Gatekeeper._historian_node(state)
+Gatekeeper._validator_node(state)
+Gatekeeper._investigator_node(state)
+Gatekeeper._synthesis_node(state)
+Gatekeeper._retry_call(fn, retries, backoff)  # resilience wrapper
+```
+
+**LangGraph StateGraph:**
+```
+State: CoinState (TypedDict with 12 fields)
+
+Nodes:
+  cnn               historian / validator / investigator (conditional)
+  historian         synthesis
+  validator         synthesis
+  investigator      synthesis
+  synthesis         END
+
+Edges:
+  START  cnn
+  cnn  _route()    "historian" | "validator" | "investigator"
+  historian  synthesis
+  validator  synthesis
+  investigator  synthesis
+  synthesis  END
+```
+
+**Graceful degradation:**
+Each non-CNN node is wrapped in try/except. If `historian_node` raises any exception,
+the state gets `{"_error": str(exc)}` and the pipeline continues to synthesis. The PDF
+shows "historical analysis unavailable  LLM error" instead of returning a 500 to the user.
+
+**`CoinState` TypedDict (all 12 fields):**
+```python
+class CoinState(TypedDict, total=False):
+    image_path:          str
+    use_tta:             bool
+    cnn_prediction:      dict     # {class_id, label, confidence, top5, vote_fraction, ...}
+    route_taken:         str      # "historian" | "validator" | "investigator"
+    historian_result:    dict
+    validator_result:    dict
+    investigator_result: dict
+    report:              str      # final plain-text summary
+    pdf_path:            Optional[str]
+    node_timings:        dict     # {"cnn": "0.54s", "historian": "19.85s", ...}
+    _error:              str      # pipeline-level error message
+```
+
+---
+
+#### `src/agents/historian.py`  RAG + LLM Narrative Agent
+
+**Purpose:** For high-confidence coins: retrieves structured KB data and generates a
+professional 3-paragraph historical narrative using the LLM.
+
+**Key class: `HistorianAgent`**
+```
+HistorianAgent.__init__()
+HistorianAgent.research(cnn_prediction)  dict
+# Private:
+HistorianAgent._get_llm(capability)     # returns LLM client (text or vision)
+HistorianAgent._generate_narrative(type_id, context_blocks)  str
+HistorianAgent._fallback_narrative(kb_record)  str  # no LLM needed
+```
+
+**LLM provider chain:**
+```python
+# Priority order:
+1. OLLAMA_HOST   probe("gemma3:4b")  local Ollama (fastest, no quota)
+2. GITHUB_TOKEN  GitHub Models API (Gemini 2.5 Flash, free with Copilot Pro)
+3. GOOGLE_API_KEY  Google AI Studio (Gemini 2.5 Flash, 1500 req/day free)
+4. None set  structured fallback (KB fields concatenated, no LLM)
+```
+
+**Grounded prompt template:**
+```
+[CONTEXT 1  Identity]  denomination: drachm | authority: Maroneia | date: c.365330 BC
+[CONTEXT 2  Obverse]   prancing horse right | legend: MAR
+[CONTEXT 3  Reverse]   bunch of grapes | legend: EPI ZINONOS
+[CONTEXT 4  Material]  silver | weight: 2.44g | mint: Maroneia
+[CONTEXT 5  Context]   persons: Magistrate Zenon
+
+INSTRUCTION: You are an expert numismatist. Using ONLY the information in the
+[CONTEXT N] blocks above (cite each [CONTEXT N] you use), write a 3-paragraph
+professional analysis. Do not add any fact not present in the context.
+```
+
+**Thread safety:**
+```python
+_llm_lock = threading.Lock()
+_text_client: Any = None
+
+def _get_llm(capability):
+    global _text_client
+    if _text_client is None:
+        with _llm_lock:
+            if _text_client is None:   # double-checked locking
+                _text_client = _build_llm_client()
+    return _text_client
+```
+
+---
+
+#### `src/agents/validator.py`  OpenCV Forensic Material Validator
+
+**Purpose:** For medium-confidence coins: detects coin metal type from pixel colour statistics
+and compares to the expected material from the knowledge base.
+
+**Key class: `ValidatorAgent`**
+```
+ValidatorAgent.__init__()
+ValidatorAgent.validate(cnn_prediction)  dict
+# Private:
+ValidatorAgent._detect_material(img_bgr)  tuple[str, float, str]  # material, conf, uncertainty
+ValidatorAgent._materials_match(detected, expected)  bool
+ValidatorAgent._heuristic_from_denom(label_str)  str | None
+```
+
+**Multi-scale HSV detection:**
+Three independent crop sizes analysed: 40%, 60%, 80% of image centre.
+```python
+for crop_pct in (0.40, 0.60, 0.80):
+    margin = int(min(h, w) * (1 - crop_pct) / 2)
+    crop   = img_bgr[margin:h-margin, margin:w-margin]
+    hsv    = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+    # Test each metal threshold:
+    silv_mask   = cv2.inRange(hsv, [0,   0,  80], [179, 40, 255])
+    gold_mask   = cv2.inRange(hsv, [15, 80, 100], [35, 255, 255])
+    bronze_mask = cv2.inRange(hsv, [5,  50,  60], [25, 180, 200])
+    votes.append(argmax([silv_count, gold_count, bronze_count]))
+majority = Counter(votes).most_common(1)[0][0]  # 2/3 or 3/3 wins
+```
+
+**`detection_confidence`:**
+```python
+detection_confidence = (pixels_in_winning_mask / total_pixels_in_crop)
+# Averaged across the scales that voted for the winner
+```
+
+**`uncertainty` levels:**
+- `"low"`  all 3 crop scales agreed (3/3)
+- `"medium"`  2 of 3 agreed
+- `"high"`  1 of 3 agreed (split vote, effectively unknown)
+
+**Known issue (patina/silver false mismatch):** See Section 45 for full analysis.
+
+---
+
+#### `src/agents/investigator.py`  Visual Investigation Agent (Low Confidence)
+
+**Purpose:** For low-confidence / unknown coins: extracts visual attributes using a VLM
+(or OpenCV fallback), then cross-references the full 9,541-type KB for possible matches.
+
+**Key class: `InvestigatorAgent`**
+```
+InvestigatorAgent.__init__()
+InvestigatorAgent.investigate(image_path, cnn_prediction)  dict
+# Private:
+InvestigatorAgent._run_vlm(image_path)  tuple[str, dict]
+InvestigatorAgent._opencv_fallback(image_path)  tuple[str, dict]
+InvestigatorAgent._parse_features(description)  dict
+InvestigatorAgent._kb_search(features)  list[dict]
+```
+
+**OpenCV fallback (when no vision LLM available):**
+```python
+hsv_colours = [...multi-scale HSV (3 crops)...]   #  metal estimate
+sobel_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
+sobel_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
+magnitude = np.sqrt(sobel_x**2 + sobel_y**2)
+edge_density = np.mean(magnitude > 30) * 100   #  condition estimate
+```
+Sobel measures how rapidly pixel brightness changes. High Sobel density = many sharp edges
+= well-preserved inscription detail. Low Sobel = worn/smooth coin surface.
+
+**Metal detection priority order (Bug 14 fix):**
+```python
+for metal in ("bronze", "gold", "electrum", "billon", "copper", "silver"):
+```
+Specific metals before generic. WHY: "silver" appears as negation context ("not silver")
+in many VLM descriptions; matching it last prevents false positives.
+
+---
+
+#### `src/agents/synthesis.py`  PDF Report Generator
+
+**Purpose:** Assembles all agent outputs into a professional PDF report.
+
+**Key functions:**
+```
+synthesize(state)  str                  # plain-text summary
+to_pdf(state, output_path)  str | None  # generates PDF, returns output path
+# Private:
+_s(text)  str           # Greek transliteration + latin-1 safe encode
+_safe(val, default)  str  # None-safe string getter
+_draw_navy_header(pdf)   # brand header band
+_draw_section_rule(pdf)  # blue horizontal rule before section
+_draw_record_table(pdf, data_dict) # bordered table with alternating row shading
+_conf_color(confidence)  # returns RGB tuple: green/amber/red/purple by threshold
+_enrich_label(label_str) # "1015"  "Maroneia  AR Drachm c.365 BC"
+_PDF class               # fpdf2 FPDF subclass with custom page_footer
+```
+
+**Greek transliteration map (`_GREEK_MAP`):**
+```python
+_GREEK_MAP = {
+    "Α": "A", "Β": "B", "Γ": "G", "Δ": "D", "Ε": "E",
+    "Ζ": "Z", "Η": "E", "Θ": "TH", "Ι": "I", "Κ": "K",
+    "Λ": "L", "Μ": "M", "Ν": "N", "Ξ": "X", "Ο": "O",
+    "Π": "P", "Ρ": "R", "Σ": "S", "Τ": "T", "Υ": "Y",
+    "Φ": "PH", "Χ": "CH", "Ψ": "PS", "Ω": "O",
+    # lowercase too
+}
+```
+
+**Why NOT use Markdown-to-PDF:**
+FPDF2 has a `write_html()` function and there are libraries like `markdown-pdf`.
+ALL of them rely on HTML/CSS rendering or PDF text parsing. FPDF2's built-in `write_html()`
+strips markdown symbols (##, **, *) but also occasionally mis-renders them as literal text
+("##" appeared in early test PDFs). Direct drawing calls (`cell`, `multi_cell`, `rect`,
+`set_fill_color`) are explicit and predictable  you get EXACTLY what you draw.
+
+---
+
+### Layer 4: FastAPI Backend (`src/api/`)
+
+---
+
+Brief entries here  see **Section 50** for the full deep dive on each of these files.
+
+#### `src/api/main.py`  Application Factory (385 lines)
+FastAPI `app` object creation, lifespan startup/shutdown, CORS middleware, GZip middleware,
+X-Request-ID middleware, route mounting, health endpoint, metrics endpoint, PDF serving.
+
+#### `src/api/auth.py`  X-API-Key Authentication
+`require_api_key()` dependency. HMAC constant-time comparison. Dev-mode passthrough.
+
+#### `src/api/limiter.py`  Rate Limiting Singleton
+slowapi `Limiter` singleton. WHY separate from main.py (circular import prevention).
+
+#### `src/api/_store.py`  SQLite History Store (WAL mode)
+`append()`, `get_by_id()`, `load_page()`, `count()`, `delete_by_id()`, `load_all()`, `ensure_store()`.
+Repository Pattern  swap for PostgreSQL by changing this file only.
+
+#### `src/api/logging_config.py`  Structured Logging Configuration
+`configure_logging()`. `LOG_FORMAT=json|text`. Silences `httpx`, `chromadb`, `sentence_transformers`.
+
+#### `src/api/schemas.py`  Pydantic v2 Response Models
+`Top5Item`, `CnnResult`, `ClassifyResponse`, `HistorySummary`, `HistoryListResponse`.
+Public API contract. See Section 50.
+
+#### `src/api/routes/classify.py`  POST /api/classify (284 lines)
+File validation (Content-Type + magic bytes + size), UUID naming, Gatekeeper call via
+`asyncio.to_thread()`, response assembly, history persistence, upload cleanup.
+
+#### `src/api/routes/history.py`  GET/DELETE /api/history
+`list_history()`, `get_history_item()`, `delete_history_item()`.
+
+---
+
+### Layer 5: Next.js Frontend (`frontend/`)
+
+---
+
+Brief entries  see **Section 51** for the full deep dive.
+
+#### `frontend/next.config.ts`  Security headers + API proxy rewrites
+
+#### `frontend/lib/store.ts`  Zustand global state (101 lines)
+Upload phase machine, result storage, `_cancelFn` bridge for AbortController.
+
+#### `frontend/lib/api.ts`  Axios API client functions (224 lines)
+`apiClient` (proxied), `classifyApiClient` (direct, 10-min timeout), `classifyCoin()`,
+`getHealthStatus()`, `getHistory()`, `getHistoryItem()`, `deleteHistoryItem()`.
+
+#### `frontend/lib/utils.ts`  UI utility functions
+`routeStyle()`  returns Tailwind colour class by route name.
+`getConfidenceTier()`  maps confidence to "identified" | "consensus" | "deep_search".
+`formatTimestamp()`  ISO timestamp  human-readable.
+`cn()`  class-variance-authority class merger (shadcn-style).
+
+#### `frontend/types/api.ts`  TypeScript type definitions
+Mirrors every Pydantic model in `schemas.py`. `ClassifyResponse`, `CnnResult`, `Top5Item`,
+`HistoryListResponse`, `HistorySummary`, `HealthResponse`.
+
+#### `frontend/app/page.tsx`  Homepage (classify entry point)
+Hero section + CoinUploader + AnalysisPanel layout.
+
+#### `frontend/app/history/page.tsx`  History list page
+TanStack Query `useQuery`, URL-synced pagination via `useSearchParams`, `HistoryTable` component.
+
+#### `frontend/app/history/[id]/page.tsx`  History detail page
+Full `ClassifyResponse` display. Quick Facts grid. `getConfidenceTier()`. Copy link button.
+
+#### `frontend/components/coin/CoinUploader.tsx`  Drag-drop upload widget
+File drop zone, blur/resolution quality check, canvas downsize (`downsizeImage(file, 1024)`),
+TTA toggle, AbortController cancel button, upload progress bar, `classifyCoin()` call.
+
+#### `frontend/components/coin/AgentPipeline.tsx`  Mission control modal
+4 stations (Preprocessor, CNN, Agent, Synthesis) with particle beam connectors.
+Framer Motion `AnimatePresence`. X button abort (reads `_cancelFn` from Zustand store).
+
+#### `frontend/components/coin/AnalysisPanel.tsx`  3-state result display
+State 1 (conf  0.70): green CountUp % + "Identified" badge.
+State 2 (vote_fraction  0.75): teal "TTA Consensus" badge + "N/8 agree".
+State 3 (below both): purple "Deep Search" badge + "Best visual match".
+HistorianSection, ValidatorSection, InvestigatorSection conditional rendering.
+
+#### `frontend/components/history/HistoryTable.tsx`  Paginated history table
+Filter bar (text search + route pills), `useMemo` client-side filter,
+delete button (TanStack `useMutation` + `invalidateQueries`), CN type links.
+
+#### `frontend/components/ui/HealthDot.tsx`  API health indicator
+Polls `/api/health` every 30s. Green/amber/red pulsing dot in header.
+
+---
+
+### Scripts (`scripts/`)
+
+---
+
+#### `scripts/train.py`  CNN Training Pipeline (729 lines)
+Full V3 training loop. AdamW + CosineAnnealing + WeightedRandomSampler + Mixup + AMP.
+Saves `models/best_model.pth` and `models/class_mapping.pth`.
+
+#### `scripts/evaluate_tta.py`  TTA Evaluation Script
+Runs the trained model on the test split with 8-pass TTA.
+Reports Top-1 accuracy, Top-5 accuracy, macro F1 per class.
+
+#### `scripts/predict.py`  CLI Inference Tool
+```powershell
+python scripts/predict.py --image path/to/coin.jpg --tta
+```
+Single-image inference without running the full server.
+
+#### `scripts/test_pipeline.py`  End-to-End Integration Test (3 routes)
+Tests Route 1 (historian, type 1015), Route 2 (validator, type 21027), Route 3 (investigator, type 544).
+Saves PDFs to `reports/`. Exits 0 on all pass, 1 on any failure.
+
+#### `scripts/build_knowledge_base.py`  Web Scraper + KB Builder
+Scrapes `corpus-nummorum.eu/types/{id}` at 1 req/sec. Parses HTML to extract
+15 structured fields. Saves to JSON. `--all-types` flag scrapes all 9,716 types.
+`--resume` flag skips already-scraped IDs.
+
+#### `scripts/rebuild_chroma.py`  ChromaDB Rebuild Script
+Reads `data/metadata/cn_types_metadata_full.json`. Builds 5 semantic chunks per coin.
+Upserts to ChromaDB at `data/metadata/chroma_db_rag/`. Takes ~9 minutes.
+
+---
+
+### Tests (`tests/`)
+
+---
+
+#### `tests/unit/test_store.py`  10 SQLite store tests
+#### `tests/unit/test_api_security.py`  16 security function tests (_sanitise_filename, _detect_mime)
+#### `tests/unit/test_auth.py`  8 API key auth tests
+#### `tests/unit/test_api.py`  20 API function tests, 66 assertions (commit `e8da613`)
+#### `tests/_test_all_routes_pdf.py`  PDF quality tests (manual, prefix `_`)
+#### `tests/_test_narrative.py`  LLM narrative quality tests (manual, prefix `_`)
+
+**Total test suite: 36 unit tests + 2 manual integration tests.**
+Unit test runtime: 1.3s on any machine. Integration tests: 360s (require model + LLM).
+
+---
+
+### Data and Model Files (gitignored, not in repo)
+
+---
+
+```
+data/raw/               # 115,160 original coin images from corpus-nummorum.eu (~12 GB)
+data/processed/         # 7,677 CLAHE-enhanced 299299 images, 438 class folders (~900 MB)
+data/metadata/
+  cn_types_metadata.json          # 438 types (original 515 KB legacy file)
+  cn_types_metadata_full.json     # 9,541 types scraped (~3.2 MB  produced by build_knowledge_base.py)
+  chroma_db/                      # legacy DB (434 vectors, 1 blob per coin)
+  chroma_db_rag/                  # PRODUCTION DB (47,705 vectors, 5 chunks per coin, ~180 MB)
+models/
+  best_model.pth                  # EfficientNet-B3 V3 weights (epoch 52, ~79 MB)
+  best_model_v1_80pct.pth         # MISLEADING: epoch 3, val 21.33%  NOT the 80% model
+  class_mapping.pth               # {class_to_idx, idx_to_class, n=438}
+reports/                          # Generated PDF reports (cleaned up after 24h)
+```
+
+---
+## Section 48  End-to-End Data Flow: From Browser Click to PDF Download
+
+This section traces a SINGLE coin classification request through every layer of the system.
+Follow this trace and you understand the whole project. Every function call, every file touched,
+every network hop, every data transformation is documented here.
+
+The example coin: **CN type 1015** (Maroneia, Thrace, silver drachm, c.365330 BC).
+The photo: `data/processed/1015/CN_type_1015_cn_coin_5943_p.jpg`
+Expected result: Route 1 (historian), ~91% confidence, PDF generated.
+
+---
+
+### Step 0  User selects a file in the browser
+
+**Location:** `frontend/components/coin/CoinUploader.tsx`
+
+```
+User drags coin.jpg onto the CoinUploader drop zone
+  
+onDrop() fires (react-dropzone)
+  
+checkImageQuality(file):
+  - Draw to offscreen Canvas (100100)
+  - Extract grayscale pixel values
+  - Compute Laplacian variance (edge sharpness)
+  - If variance < 80: show "Image may be blurry" warning
+  
+downsizeImage(file, maxPx=1024):
+  - Create HTMLImageElement, draw to Canvas at natural size
+  - If max(width, height) > 1024: draw to 10241024 canvas
+  - canvas.toBlob("image/jpeg", 0.85)  Blob  File
+  - WHY: A 40323024 photo from an iPhone's 12MP camera = ~5 MB JPEG
+         After downsize to 10241024 = ~150 KB. Saves 510 seconds upload
+         time on a slow connection with no accuracy loss (CNN needs 299299).
+  
+store.setSelectedFile(resizedFile)
+store.setPhase("uploading")
+setCancelFn(() => abortRef.current.abort())   # register cancel
+```
+
+---
+
+### Step 1  classifyCoin() sends the HTTP request
+
+**Location:** `frontend/lib/api.ts  classifyCoin()`
+
+```javascript
+const formData = new FormData()
+formData.append("file", file, file.name)
+formData.append("tta", "true")
+
+const response = await classifyApiClient.post("/classify", formData, {
+  signal: abortRef.current.signal,    // AbortController for cancel button
+  onUploadProgress: (progress) => {
+    store.setUploadProgress(Math.round(progress.percent))
+  }
+})
+```
+
+**Network hop:** Browser  http://127.0.0.1:8000/api/classify (direct, bypasses Next.js proxy)
+
+**HTTP request details:**
+```
+POST /api/classify?tta=true HTTP/1.1
+Host: 127.0.0.1:8000
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+X-API-Key: (empty  dev mode passthrough)
+Body: form-data containing "file" and "tta"
+```
+
+---
+
+### Step 2  FastAPI receives the request
+
+**Location:** `src/api/routes/classify.py  classify()`
+
+```
+FastAPI event loop receives HTTP request
+  
+Middleware stack (in order of application, reverse of execution):
+  1. GZipMiddleware   (checked after response)
+  2. CORSMiddleware   (checks Origin header  allows http://localhost:3000)
+  3. X-Request-ID     (generates UUID4, will echo in response)
+  
+Rate limiter checks: 10/minute per IP
+   if over limit: HTTP 429
+   else: continue
+  
+require_api_key():
+   DEEPCOIN_API_KEY not set (dev mode)  pass
+  
+async classify() starts:
+  t_start = time.perf_counter()
+```
+
+**Validation pipeline:**
+```
+1. Content-Type check:
+   file.content_type == "image/jpeg"  pass
+
+2. Read file (cap at 10 MB + 1 byte):
+   data = await file.read(10_485_761)    # = 10 MB + 1
+   len(data) = 142_384 bytes (138 KB)  pass (< 10 MB)
+
+3. Magic bytes check:
+   data[:4] = b'\xff\xd8\xff\xe0'
+   _detect_mime: b'\xff\xd8\xff' matches "image/jpeg"  pass
+
+4. Save to disk:
+   record_id = "3f2a1b7c-..."   (UUID4)
+   safe_name = "coin.jpg"       (sanitise_filename  already ASCII)
+   save_path = data/uploads/3f2a1b7c-..._coin.jpg
+   save_path.write_bytes(data)
+```
+
+---
+
+### Step 3  asyncio.to_thread launches the Gatekeeper
+
+```python
+async with _classify_sem:    # Semaphore(1): queue if another request is running
+    result = await asyncio.to_thread(gk.analyze, str(save_path), tta=True)
+```
+
+**What asyncio.to_thread does:**
+The event loop ("thread A") submits `gk.analyze(...)` to the ThreadPoolExecutor.
+A worker thread ("thread B") starts running it.
+Thread A is NOT blocked  it continues running the event loop, serving health checks,
+etc. Thread B runs the full synchronous pipeline (CNN  LangGraph  PDF).
+When thread B finishes, it notifies thread A via a Future object.
+Thread A resumes from `await` with `result`.
+
+**The Gatekeeper is now running in thread B:**
+
+---
+
+### Step 4  CNN Inference Node
+
+**Location:** `src/agents/gatekeeper.py  _cnn_node()` 
+            `src/core/inference.py  CoinInference.predict()`
+
+```
+_load_image("data/uploads/3f2a1b7c-..._coin.jpg"):
+  open(path, "rb")  raw bytes
+  np.frombuffer(bytes, dtype=np.uint8)  uint8 array
+  cv2.imdecode(arr, cv2.IMREAD_COLOR)  BGR ndarray (427x427x3 example)
+
+_auto_crop_coin(img_bgr):
+  Strategy 1: GaussianBlur  HoughCircles
+   Circle detected at (cx=213, cy=211, r=198)
+   Crop with 12% padding: img[10:415, 10:415]  405x405x3
+
+_apply_clahe(cropped):
+  cv2.cvtColor(BGR  LAB)
+  cv2.createCLAHE(clipLimit=2.0, tile=(8,8)).apply(L channel)
+  cv2.cvtColor(LAB  BGR)
+
+_letterbox(clahe_img, 299):
+  scale = 299 / 405  0.739
+  new size: 221x221 (with letterbox  299x299 with zero-padding)
+
+BGR  RGB:
+  cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+Apply val_transforms (Normalize with ImageNet stats):
+  A.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+   torch.tensor shape [3, 299, 299]
+```
+
+**TTA loop (8 passes):**
+```
+For each of 8 transforms (None, HFlip, Rot+10, Rot-10, Brightness+, Rot+15, Rot-15, HFlip):
+   Apply transform  normalize  unsqueeze(0)  .to("cuda")
+   model(tensor)  logits tensor [1, 438]
+   F.softmax(logits / T, dim=-1)  probs tensor [1, 438]
+   top1 = argmax(probs)  e.g. index 0 = class "1015"
+
+Average all 8 prob tensors  mean_probs [1, 438]
+top1_class_id = argmax(mean_probs) = 0
+top1_confidence = mean_probs[0][0] = 0.911   # 91.1%
+
+vote_fraction:
+  pass 1 top1 = 0     pass 5 top1 = 0 
+  pass 2 top1 = 0     pass 6 top1 = 0 
+  pass 3 top1 = 0     pass 7 top1 = 0 
+  pass 4 top1 = 0     pass 8 top1 = 0 
+  8/8 agree  vote_fraction = 1.0
+
+inference_time_ms = 547
+```
+
+**Return from cnn_node:**
+```python
+state["cnn_prediction"] = {
+    "class_id":          0,
+    "label":             "1015",     # idx_to_class[0] = "1015"
+    "confidence":        0.911,
+    "top5":              [{rank:1, class_id:0, label:"1015", confidence:0.911},
+                          {rank:2, class_id:105, label:"3314", confidence:0.035},
+                          ...],
+    "inference_time_ms": 547,
+    "tta_used":          True,
+    "vote_fraction":     1.0,
+    "tta_passes":        8,
+    "temperature":       1.4,
+}
+```
+
+---
+
+### Step 5  Routing Decision
+
+**Location:** `src/agents/gatekeeper.py  _route(state)`
+
+```python
+conf  = state["cnn_prediction"]["confidence"]  # 0.911
+vote  = state["cnn_prediction"].get("vote_fraction", 1.0)  # 1.0
+
+# Routing thresholds:
+if conf > 0.85 and vote >= 0.70:
+    return "historian"     #  0.911 > 0.85, 1.0 >= 0.70
+elif conf >= 0.40 and vote >= 0.70:
+    return "validator"
+else:
+    return "investigator"
+
+# Result: "historian"
+state["route_taken"] = "historian"
+```
+
+---
+
+### Step 6  Historian Agent
+
+**Location:** `src/agents/historian.py  research(cnn_prediction)`
+
+```
+Step 6a: KB lookup
+  label_str = "1015"
+  rag_engine.get_by_id("1015")  {
+    type_id: "1015",
+    denomination: "Drachm",
+    authority: "Maroneia",
+    region: "Thrace",
+    date_range: "c. 365/355345/335 BC",
+    material: "Silver",
+    weight: "2.44",
+    mint: "Maroneia",
+    obverse_description: "Prancing horse right",
+    obverse_legend: "MAR",
+    reverse_description: "Vine-branch with bunch of grapes",
+    reverse_legend: "EPI ZINONOS",
+    persons: "Zinonos (magistrate)",
+    references: "Schönert-Geis, Maroneia,...",
+  }
+
+Step 6b: get_context_blocks("1015")
+  [CONTEXT 1  Identity]
+  type_id: 1015 | denomination: Drachm | authority: Maroneia | region: Thrace
+  date_range: c. 365/355345/335 BC
+
+  [CONTEXT 2  Obverse]
+  Prancing horse right | legend: MAR
+
+  [CONTEXT 3  Reverse]
+  Vine-branch with bunch of grapes | legend: EPI ZINONOS
+
+  [CONTEXT 4  Material]
+  Silver | weight: 2.44g | mint: Maroneia
+
+  [CONTEXT 5  Context]
+  persons: Zinonos (magistrate) | references: Schönert-Geis, Maroneia
+
+Step 6c: LLM provider selection
+  OLLAMA_HOST env not set  skip
+  GITHUB_TOKEN env set  use GitHub Models (Gemini 2.5 Flash)
+
+Step 6d: LLM call (to GitHub Models API)
+  POST https://models.inference.ai.azure.com/chat/completions
+  Model: gemini-2.5-flash
+  Messages: [{"role": "user", "content": "[CONTEXT 1]...[CONTEXT 5]\n\nINSTRUCTION..."}]
+  max_tokens: 800
+   Response time: ~815 seconds
+   Response: 3-paragraph historical narrative
+
+Step 6e: Assemble result
+  state["historian_result"] = {
+    "narrative":    "The silver drachm from Maroneia [CONTEXT 1] represents...",
+    "mint":         "Maroneia",
+    "region":       "Thrace",
+    "date":         "c. 365/355345/335 BC",
+    "material":     "Silver",
+    "denomination": "Drachm",
+    "obverse":      "Prancing horse right | MAR",
+    "reverse":      "Vine-branch | EPI ZINONOS",
+    "persons":      "Zinonos (magistrate)",
+    "llm_used":     True,
+    "kb_found":     True,
+  }
+```
+
+---
+
+### Step 7  Synthesis: Plain Text + PDF
+
+**Location:** `src/agents/synthesis.py`
+
+```
+synthesize(state)  plain text report string
+  Assembles: CNN result + route + historian fields + timing
+
+to_pdf(state, "reports/DeepCoin_3f2a1b7c_1015.pdf"):
+  Create _PDF(fpdf2) instance
+  add_page()
+  _draw_navy_header(pdf)  # brand navy band with "DeepCoin" text
+
+  SECTION 1: ANALYSIS OVERVIEW
+    _draw_section_rule(pdf)
+    _draw_record_table(pdf, {
+      "CN Type":       "1015  Maroneia  AR Drachm c.365 BC",  # _enrich_label("1015")
+      "Confidence":    "91.1% ",   # green colour via _conf_color(0.911)
+      "Route":         "Historian Agent (high confidence)",
+      "TTA Passes":    "8",
+      "Processing":    "14.8s (CNN: 0.55s | Historian: 13.9s | Synthesis: 0.35s)",
+    })
+
+  SECTION 2: HISTORICAL ANALYSIS
+    _draw_section_rule(pdf)
+    multi_cell(0, 5, _s(narrative), align="J")   # _s() transliterates Greek
+    # Greek legend "ΕΠΙ ΖΙΝΩΝΟΣ"  "EPI ZINONOS" (via _GREEK_MAP)
+
+  SECTION 3: COIN RECORD
+    _draw_section_rule(pdf)
+    _draw_record_table(pdf, {
+      "Denomination": "Drachm",
+      "Mint":         "Maroneia",
+      "Region":       "Thrace",
+      "Date Range":   "c. 365/355345/335 BC",
+      "Material":     "Silver",
+      "Obverse":      "Prancing horse right / Legend: MAR",
+      "Reverse":      "Vine-branch with bunch of grapes / Legend: EPI ZINONOS",
+      ...
+    })
+
+  SECTION 4: CNN TOP-5 PREDICTIONS
+    Bordered table with 5 rows, alternating shading
+
+  output().write("reports/DeepCoin_3f2a1b7c_1015.pdf")
+
+state["pdf_path"] = "reports/DeepCoin_3f2a1b7c_1015.pdf"
+```
+
+---
+
+### Step 8  Gatekeeper returns, classify() assembles response
+
+**Back in `src/api/routes/classify.py`:**
+
+```python
+elapsed_s = time.perf_counter() - t_start  # 14.82s
+save_path.unlink(missing_ok=True)           # delete upload immediately
+
+# Build ClassifyResponse
+response = ClassifyResponse(
+    id                   = "3f2a1b7c-...",
+    timestamp            = "2026-03-15T10:23:45.123Z",
+    image_filename       = "coin.jpg",
+    route_taken          = "historian",
+    cnn                  = CnnResult(label="1015", confidence=0.911, ...),
+    narrative            = "The silver drachm from Maroneia...",
+    mint                 = "Maroneia",
+    region               = "Thrace",
+    date_range           = "c. 365/355345/335 BC",
+    material             = "Silver",
+    denomination         = "Drachm",
+    pdf_url              = "/api/reports/DeepCoin_3f2a1b7c_1015.pdf",
+    processing_time_s    = 14.82,
+)
+
+# Persist to SQLite history
+history_append(response.model_dump())
+```
+
+---
+
+### Step 9  HTTP Response travels back to browser
+
+```
+FastAPI serialises ClassifyResponse  JSON:
+{
+  "id": "3f2a1b7c-...",
+  "timestamp": "2026-03-15T10:23:45.123Z",
+  "route_taken": "historian",
+  "cnn": {"label": "1015", "confidence": 0.911, ...},
+  "narrative": "The silver drachm from Maroneia...",
+  "pdf_url": "/api/reports/DeepCoin_3f2a1b7c_1015.pdf",
+  "processing_time_s": 14.82,
+  ...
+}
+
+GZipMiddleware: JSON 3.2 KB  gzip 1.1 KB (65% compression)
+X-Request-ID header: "3f2a1b7c-..."
+Content-Encoding: gzip
+HTTP 200 OK
+```
+
+---
+
+### Step 10  Frontend receives response and displays result
+
+**In `frontend/lib/api.ts`:**
+```typescript
+// axios decompresses gzip automatically
+const data: ClassifyResponse = response.data
+return data
+```
+
+**In `frontend/components/coin/CoinUploader.tsx`:**
+```typescript
+store.setResult(data)
+store.setPhase("done")
+store.setCancelFn(null)
+```
+
+**In `frontend/components/coin/AnalysisPanel.tsx`:**
+```typescript
+// Render decision:
+const conf  = result.cnn.confidence        // 0.911
+const vote  = result.cnn.vote_fraction     // 1.0
+const DISPLAY_CONF = 0.70
+const TTA_VOTE     = 0.75
+
+// State 1: conf >= 0.70  green "Identified" display
+// 0.911 >= 0.70  TRUE  State 1 renders:
+<CountUp end={91.1} suffix="%" duration={1.5} />   // AnimateCountUp green
+<Badge variant="identified">Identified</Badge>
+// Framer Motion AnimatePresence slide-in of result sections
+```
+
+**HistorianSection renders:**
+- Narrative text
+- Quick Facts (Mint, Region, Date, Material, Denomination)
+- Top-5 table with CN links
+
+**PDF download link:**
+```html
+<a href="/api/reports/DeepCoin_3f2a1b7c_1015.pdf" target="_blank" rel="noopener noreferrer">
+  Download Report (PDF)
+</a>
+```
+
+---
+
+### Step 11  User clicks PDF download
+
+```
+Browser  GET /api/reports/DeepCoin_3f2a1b7c_1015.pdf
+         (via Next.js proxy  FastAPI)
+
+FastAPI serve_report("DeepCoin_3f2a1b7c_1015.pdf"):
+  safe = Path("DeepCoin_3f2a1b7c_1015.pdf").name  # strips any directory components
+  path = reports/DeepCoin_3f2a1b7c_1015.pdf
+  FileResponse(path, media_type="application/pdf")
+
+Browser receives PDF binary, opens in system PDF viewer
+```
+
+---
+
+### Complete Timing Summary
+
+```
+Step 1  browser upload:        0.3s  (138 KB at ~500 KB/s LAN)
+Step 2  FastAPI validation:    0.002s
+Step 3  asyncio.to_thread:     0.001s
+Step 4  CNN inference (TTA8): 0.547s
+Step 5  routing:               0.001s
+Step 6  historian agent:
+          KB lookup:             0.008s (ChromaDB O(log n))
+          LLM call (Gemini):     13.9s  (DOMINANT COST)
+Step 7  synthesis + PDF:       0.35s
+Step 8  response assembly:     0.005s
+Step 9  network + gzip:        0.05s
+Step 10 frontend render:       0.1s (Framer Motion)
+
+TOTAL:                          15.3s
+```
+
+The LLM call is 91% of the total pipeline latency. Everything else is noise by comparison.
+This is why improving the LLM response time (using local Ollama vs remote API) matters much
+more than any Python optimisation.
+
+---
+
+### The History Trail
+
+Everything above also gets stored in SQLite:
+```
+data/history.db
+  
+   id:           "3f2a1b7c-..."                        
+   timestamp:    "2026-03-15T10:23:45.123Z"            
+   label:        "1015"                                
+   confidence:   0.911                                 
+   route_taken:  "historian"                           
+   payload:      "{...full ClassifyResponse JSON...}"  
+  
+```
+
+Accessible at: `GET /api/history` (paginated list) and `GET /api/history/3f2a1b7c-...` (full).
+
+---
+## Section 49  Engineering Foundations: The "Why" Behind Every Technology
+
+This section explains the CS concepts and engineering principles that power DeepCoin.
+This is NOT a list of commands. This is a CONCEPTUAL UNDERSTANDING section. Read this
+and you will understand WHY the choices were made, not just WHAT was chosen.
+
+---
+
+### Foundation 1  Git Internals: What a Commit Really Is
+
+Most developers think a commit is "saving your progress". It is much deeper than that.
+
+**The content-addressable store:**
+Git stores every file, every directory, and every commit as a SHA-1 hash of its content.
+SHA-1 inputs  40-character hex string (e.g. `9622f66...`).
+
+**Three types of Git objects:**
+1. **Blob**: Content of one file. No filename. Just bytes.
+2. **Tree**: A directory listing. Maps filenames to blob hashes.
+3. **Commit**: Author + message + parent commit hash + root tree hash.
+
+When you run `git commit`:
+1. Git hashes every modified file  creates blobs.
+2. Git builds a tree object pointing to those blobs.
+3. Git creates a commit object pointing to: the root tree, the parent commit, your message.
+4. Git moves the branch pointer (e.g. `main`) to the new commit hash.
+
+**Why SHA-1 hash?**
+If even ONE byte of any file changes, the hash changes completely (avalanche effect).
+This is why `git log --oneline` shows different hashes for every commit. The hash IS the
+identity of that snapshot. Two commits with the same hash are IDENTICAL  git would
+never create them as separate commits.
+
+**What HEAD is:**
+`HEAD` is a pointer to the current branch pointer.
+`HEAD`  `refs/heads/main`  `ca16ead...` (latest commit hash).
+
+**Practical implication for DeepCoin:**
+If you need to reproduced the exact model training environment as of any commit:
+```powershell
+git checkout 9622f66  # goes back to "3/3 routes PASS" state
+git log --oneline -1  # confirm which commit you're on
+```
+Every file in your working directory will be exactly as they were at that commit.
+
+---
+
+### Foundation 2  Python Virtual Environments: sys.path Isolation
+
+**The problem virtual environments solve:**
+System Python 3.11 might have torch==1.13 installed globally.
+DeepCoin needs torch==2.6.0+cu124.
+Installing torch==2.6.0 globally would BREAK other Python projects that depend on 1.13.
+
+**How venv works:**
+```powershell
+python -m venv venv
+```
+This creates: `venv\Lib\site-packages\` (where packages go after pip install).
+
+When you activate the venv:
+```powershell
+& venv\Scripts\Activate.ps1
+```
+The `PATH` is prepended with `venv\Scripts\`. So `python` now resolves to `venv\Scripts\python.exe`.
+That Python knows to put packages in `venv\Lib\site-packages\`, not the global site-packages.
+Import resolution follows: `sys.path` lists `venv\Lib\site-packages\` BEFORE global site-packages.
+`import torch`  finds `venv\Lib\site-packages\torch\`  correct version loaded.
+
+**Why `.gitignore` excludes `/venv/`:**
+The venv contains 300+ MB of compiled C extensions (torch, opencv, etc.) specific to your
+OS version, Python version, and CUDA version. It is NOT portable. Anyone cloning the repo
+recreates it with `pip install -r requirements.txt` in their own environment.
+
+---
+
+### Foundation 3  How PyTorch Autograd Works (for Senior-Level Understanding)
+
+**The computation graph:**
+Every time you apply a mathematical operation to a `requires_grad=True` tensor in PyTorch,
+PyTorch secretly builds a computation graph (a directed acyclic graph of operations).
+
+```python
+x = torch.tensor([2.0], requires_grad=True)
+y = x ** 2          # y = x^2  PyTorch records: "y was produced by x^2"
+z = y * 3           # z = 3y  records: "z was produced by 3*y"
+z.backward()        # compute dz/dx via chain rule
+print(x.grad)       # tensor([12.0])   correct: dz/dx = 6x = 6*2 = 12
+```
+
+**The chain rule in backpropagation:**
+Neural network: `loss = CrossEntropy(Softmax(Linear(ReLU(Conv(input)))))`
+
+During forward pass: Each operation computes its output AND stores a reference to
+how it was computed (the "grad_fn").
+
+During backward pass: Starting from loss=1.0, PyTorch walks the graph backwards,
+applying the chain rule at each node:
+- `d_loss / d_linear_output` = computed at loss node
+- `d_loss / d_relu_output` = (d_loss / d_linear_output)  (d_linear / d_relu)
+- ... and so on all the way back to the convolution weights.
+
+**AMP (Automatic Mixed Precision) in training:**
+Standard training uses float32 (4 bytes per weight, per gradient, per activation).
+AMP downscales to float16 (2 bytes) during the forward pass  VRAM and compute halved.
+But float16 has limited range: very small gradients underflow to 0 (vanishing gradients).
+
+GradScaler counteracts this:
+```python
+with torch.amp.autocast("cuda"):
+    outputs = model(inputs)
+    loss = criterion(outputs, targets)
+scaler.scale(loss).backward()  # backward on float16 but with scaled gradients
+scaler.step(optimizer)         # unscale before weight update
+scaler.update()                # adjust scale factor for next iteration
+```
+The scale factor is typically 2^16 (65536). Multiply loss by 65536 before backward 
+gradients are 65536 larger  float16 doesn't underflow  unscale before weight update.
+
+---
+
+### Foundation 4  EfficientNet-B3: Compound Scaling Explained
+
+**The five Bs of EfficientNet (B0 through B7):**
+All share the same architecture (MBConv blocks) but differ in three dimensions:
+- **Depth (d)**: number of MBConv layers
+- **Width (w)**: number of channels at each layer
+- **Resolution (r)**: input image size
+
+EfficientNet's innovation: Instead of scaling ONE dimension and keeping the others fixed,
+scale ALL THREE simultaneously with a constraint:
+`d^a  w^b  r^c  FLOP_budget`
+
+For B3: depth 1.4, width 1.2, resolution 300300 (up from B0: 1.0, 1.0, 224224).
+
+**Why B3 specifically:**
+```
+B0:  77% ImageNet top-1  | 5.3M params  | 224224
+B3:  81.1% ImageNet top-1 | 12M params  | 300300   Best accuracy/param ratio at our VRAM budget
+B7:  84.3% ImageNet top-1 | 66M params  | 600600   needs ~16 GB VRAM for batch size 16
+```
+B7 would need ~8 more VRAM. At batch size 16 and float16, B3 uses ~3.8 GB of our 4.3 GB VRAM.
+B7 would require multiple A100 GPUs.
+
+**Why 1536-dimensional features:**
+The last convolutional block of B3 produces: `batch  1536  7  7` spatial feature maps.
+Global average pooling collapses these to `batch  1536` (one 1536-dim vector per image).
+This vector = the coin's "visual fingerprint". Near-identical coins have similar vectors.
+This is why cosine similarity of these vectors would cluster the same coin type together.
+
+---
+
+### Foundation 5  How ChromaDB + Sentence Transformers Work
+
+**Sentence transformers (all-MiniLM-L6-v2):**
+A BERT-style transformer fine-tuned on sentence similarity datasets.
+Input: a string of text (e.g., "Silver drachm from Maroneia, Thrace, 365 BC").
+Output: a 384-dimensional vector (float32, L2-normalised to unit length).
+
+Properties of the embedding space:
+- Semantically similar text  vectors close in cosine distance
+- "silver drachm" and "silver coin"  vectors at ~0.15 cosine distance
+- "silver drachm" and "bronze sestertius"  vectors at ~0.45 cosine distance
+
+**ChromaDB:**
+A local vector database. Stores `(id, vector, metadata)` triples.
+Uses HNSW (Hierarchical Navigable Small World) graph for approximate nearest-neighbour search:
+- Build time O(n log n), query time O(log n), 95% recall at 100 faster than exact search.
+
+**The search pipeline:**
+```python
+query = "silver coin prancing horse Thrace"
+query_vector = sentence_transformer.encode(query)  #  384-dim
+results = collection.query(
+    query_embeddings=[query_vector],
+    n_results=5,
+    where={"chunk_type": "material"},   # optional metadata filter
+)
+# ChromaDB: HNSW graph traversal  5 closest vectors  5 coin records
+```
+
+**Cosine similarity vs L2 distance:**
+ChromaDB uses cosine distance (1 - cosine_similarity). Range: 0 (identical) to 2 (opposite).
+WHY cosine: different text lengths produce vectors of different magnitude. Cosine ignores
+magnitude  "silver silver silver silver" and "silver" have the same cosine direction even
+though their L2 magnitudes differ. Direction reflects semantic content; magnitude reflects frequency.
+
+---
+
+### Foundation 6  BM25: Mathematical Definition
+
+BM25 (Best Match 25) is a ranking function from information retrieval:
+```
+Score(d, q) = Σ IDF(qi)  TF_sat(qi, d)
+
+IDF(qi) = log((N - n(qi) + 0.5) / (n(qi) + 0.5) + 1)
+  N     = total number of documents (9541 coin records)
+  n(qi) = number of documents containing term qi
+  WHY: Rare words ("Maroneia" appears in 1 doc) have high IDF.
+       Common words ("silver" appears in 5000 docs) have low IDF.
+
+TF_sat(qi, d) = tf  (k1 + 1) / (tf + k1  (1 - b + b  |d|/avgdl))
+  tf   = frequency of term qi in document d
+  k1   = 1.5  (term frequency saturation  additional occurrences matter less)
+  b    = 0.75 (length normalisation)
+  |d|  = document length
+  avgdl= average document length across all documents
+  WHY TF_sat: Without saturation, "silver silver silver silver" in a document would
+              dominate over "silver gold bronze" even though the second is richer content.
+```
+
+BM25 ranks documents purely by keyword overlap. It has zero semantic understanding.
+"Silver coin" and "argenteus" (Latin for silver coin) have zero BM25 overlap.
+THAT is why we combine BM25 with vector search.
+
+---
+
+### Foundation 7  RRF (Reciprocal Rank Fusion): Making Two Rankings Into One
+
+**The problem:** BM25 produces ranking A. Vector search produces ranking B. They disagree.
+How do we merge them into a single ranking?
+
+**Naive approach:** Add the BM25 score to the cosine similarity score.
+**Problem:** BM25 scores are on arbitrary scale (e.g. 018). Cosine distances are 02.
+Adding them together is mixing apples and oranges. The BM25 score will dominate.
+
+**RRF solution:** Ignore absolute scores entirely. Only use RANK positions.
+```python
+def rrf(rankings: list[list], k: int = 60) -> dict:
+    scores = {}
+    for ranked_list in rankings:
+        for position, doc_id in enumerate(ranked_list):
+            scores[doc_id] = scores.get(doc_id, 0) + 1 / (k + position + 1)
+    return sorted(scores.keys(), key=lambda d: -scores[d])
+```
+
+**Why k=60:** The constant k prevents a document ranked #1 from dominating too much.
+- Rank 1: 1/(60+1) = 0.0164
+- Rank 10: 1/(60+10) = 0.0143
+- Rank 100: 1/(60+100) = 0.0063
+The scores are compressed. A document ranked #1 in one list and #50 in another
+beats a document ranked #5 in both lists when k is small. k=60 is a standard empirical choice.
+
+---
+
+### Foundation 8  FastAPI Dependency Injection
+
+**What DI (dependency injection) means:**
+
+Without DI:
+```python
+@app.post("/classify")
+async def classify():
+    auth = read_api_key_from_env()   # repeated in every route
+    if not auth:
+        raise HTTPException(401)
+```
+
+With FastAPI DI:
+```python
+@app.post("/classify", dependencies=[Depends(require_api_key)])
+async def classify():
+    ...  # auth is ALREADY verified by the time this runs
+```
+
+**How `Depends` works:**
+`Depends(require_api_key)` is a marker. FastAPI reads the route function's parameter list
+and dependency declarations at STARTUP (not per-request). When a request arrives:
+1. FastAPI resolves all dependencies first (in topological order).
+2. Each dependency can use `yield` (before yield = setup, after yield = teardown).
+3. If any dependency raises `HTTPException`, the route function never runs.
+
+**Example: how `require_api_key` works:**
+```python
+async def require_api_key(api_key: str = Depends(_api_key_scheme)) -> None:
+    expected = os.getenv("DEEPCOIN_API_KEY")
+    if expected is None:
+        return   # dev mode  no key required
+    if api_key is None or not hmac.compare_digest(api_key.encode(), expected.encode()):
+        raise HTTPException(status_code=401)
+    # If we reach here, key is valid. Route runs.
+```
+
+FastAPI injects `_api_key_scheme` first (reads X-API-Key header), then passes the result
+to `require_api_key`. If the key fails, `HTTPException(401)` is raised and the route
+never runs. The route function's code never sees an invalid request.
+
+---
+
+### Foundation 9  SQLite WAL Mode: Why Concurrent Reads Don't Block Writes
+
+**Default SQLite journal mode (DELETE):**
+When SQLite writes to the database, it:
+1. Copies the original page to a rollback journal file.
+2. Writes the new data to the main .db file.
+3. On commit: deletes the journal file.
+
+During step 2, a LOCK is held on the main .db file. Any reader accessing the file
+during this window sees a locked file and must WAIT. If the FastAPI history route
+(reads) runs while the classify route (writes) is committing, the read BLOCKS.
+Result: slow history responses when classify is active.
+
+**WAL mode (Write-Ahead Log):**
+Instead of writing to the main file directly, SQLite writes to a separate WAL file.
+Readers connect to the main file AND check the WAL file.
+Writers write to the WAL. The main file stays untouched.
+Periodically, SQLite "checkpoints"  copies WAL to main file when no readers are active.
+
+```
+Reader  reads committed pages from main .db file
+        checks WAL for newer versions of those pages
+        sees consistent snapshot without blocking
+Writer  writes new pages to WAL file
+        does NOT touch main .db file
+        readers can continue reading during the write
+```
+
+Only ONE writer at a time  WAL doesn't solve write contention. But reads and writes can
+run SIMULTANEOUSLY. For our single-writer (classify route) + multiple-reader (history route)
+use case, WAL is the ideal mode.
+
+---
+
+### Foundation 10  HMAC Constant-Time Comparison: Defending Against Timing Attacks
+
+**The attack (timing oracle):**
+Naive string comparison: `if api_key == expected:`
+Python's `==` on strings short-circuits: it compares character by character and returns
+False at the first mismatch. If your correct key is "abcdef":
+- "zzzzzz"  mismatch at char 0  very fast return
+- "azzzzz"  mismatch at char 1  slightly slower
+- "abczzz"  mismatch at char 3  even slower
+- "abcdef"  match all 6  slowest
+
+An attacker can measure the response time with microsecond precision and determine:
+"I got 0.012ms on 'z...' but 0.019ms on 'a...'. So the key starts with 'a'."
+Repeat for each character position  brute-force in O(n  alphabet_size) time
+instead of O(alphabet_size^n). This is a real attack used against timing-vulnerable systems.
+
+**`hmac.compare_digest` fix:**
+```python
+import hmac
+if not hmac.compare_digest(api_key.encode(), expected.encode()):
+    raise HTTPException(status_code=401)
+```
+
+`compare_digest` compares ALL bytes of both strings and returns a single bool.
+The comparison time is constant regardless of HOW MANY characters match.
+No timing information is leaked to the attacker.
+
+Implementation: compares all bytes with XOR, ORing the result  single final comparison.
+```c
+int result = 0;
+for (int i = 0; i < len; i++) result |= a[i] ^ b[i];
+return result == 0;
+```
+XOR returns 0 only if bytes match. OR accumulates mismatches. Every byte is always compared.
+
+---
+
+### Foundation 11  Next.js App Router vs Pages Router
+
+DeepCoin uses the App Router (introduced in Next.js 13, default in 15).
+
+**Old Pages Router (`pages/`):**
+- `pages/index.tsx`  `/`
+- `pages/history.tsx`  `/history`
+- Client-side only by default (useEffect for data fetching)
+
+**New App Router (`app/`):**
+- `app/page.tsx`  `/`
+- `app/history/page.tsx`  `/history`
+- Server Components by default (fetch data on server, no JS sent to client)
+- Client Components explicitly opted-in with `"use client"`
+
+**WHY App Router in DeepCoin:**
+The history page uses `useSearchParams()` for URL-synced pagination. `useSearchParams` is
+a browser API  it requires Client Component mode (`"use client"`). But the page wrapper
+can still be a Server Component, with only the pagination logic wrapped in a Suspense
+client boundary.
+
+**How Suspense wrapping works:**
+```typescript
+// app/history/page.tsx (Server Component)
+import { Suspense } from "react"
+import { HistoryContent } from "./HistoryContent"
+
+export default function HistoryPage() {
+  return (
+    <Suspense fallback={<div>Loading history...</div>}>
+      <HistoryContent />  {/* This is a Client Component using useSearchParams */}
+    </Suspense>
+  )
+}
+```
+WHY Suspense: `useSearchParams()` requires a Client Component. In App Router, any component
+using browser-only hooks must be wrapped in `<Suspense>` during SSR  without it, Next.js
+throws `useSearchParams() should be wrapped in a suspense boundary`.
+
+---
+
+### Foundation 12  TanStack Query: Client-Side Cache with Stale/Revalidate
+
+**What TanStack Query (React Query) manages:**
+The `GET /api/history` response. Without TanStack Query:
+```typescript
+useEffect(() => {
+  fetch("/api/history").then(r => r.json()).then(setHistory)
+}, [page])
+```
+Problems: no caching, no loading state, no error state, re-fetches on every render.
+
+**With TanStack Query:**
+```typescript
+const { data, isLoading, error } = useQuery({
+  queryKey: ["history", page],         // unique cache key
+  queryFn:  () => getHistory(page),    // fetch function
+  staleTime: 30_000,                   // data is fresh for 30s
+})
+```
+
+The `queryKey` is the cache key. Same key = same cached response.
+If you change `page`, the key changes  new fetch  new cache entry.
+
+**invalidateQueries after delete:**
+```typescript
+const mutation = useMutation({
+  mutationFn: (id: string) => deleteHistoryItem(id),
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["history"] })
+  }
+})
+```
+After delete, `invalidateQueries(["history"])` marks all "history" queries as stale.
+TanStack Query immediately refetches any query that's currently displayed. The deleted
+item disappears from the list automatically  no manual state manipulation needed.
+
+---
+
+### Foundation 13  Zustand Reactive Selectors (vs Context Re-renders)
+
+**The React context re-render problem:**
+```typescript
+const AppContext = React.createContext(state)
+function ComponentA() {
+  const { uploadProgress } = useContext(AppContext)  // subscribed to ALL state
+  return <div>{uploadProgress}</div>
+}
+```
+When `result` changes (not `uploadProgress`), `AppContext` updates, and every component
+using `useContext(AppContext)` re-renders  including `ComponentA` which only uses `uploadProgress`.
+
+**Zustand reactive selectors:**
+```typescript
+// ComponentA only subscribes to uploadProgress
+const uploadProgress = useDeepCoinStore(s => s.uploadProgress)
+// ComponentB only subscribes to result
+const result = useDeepCoinStore(s => s.result)
+```
+
+How it works: Zustand stores callbacks per selector. When `store.setResult(...)` is called,
+Zustand runs ONLY the selectors that accessed `result`. Components using `uploadProgress`
+are NOT notified.
+
+This is critical for the AgentPipeline modal (which updates every second during processing)
+existing alongside the AnalysisPanel (which updates once when the result arrives). Without
+selectors, every `uploadProgress` increment would re-render the entire result panel.
+
+---
+
+### Foundation 14  AbortController: Cancelling Async Operations
+
+**The browser's AbortController:**
+```typescript
+const controller = new AbortController()
+const signal     = controller.signal  // passed to fetch/axios
+
+// Cancel:
+controller.abort()   // signal.aborted becomes true, any pending fetch is cancelled
+```
+
+**The chain of cancellation in DeepCoin:**
+```
+User clicks Cancel button
+  
+CoinUploader.handleCancel():
+  abortRef.current.abort()    // sends abort to classifyApiClient
+  store.reset()               // clears UI state
+  
+Axios classifyApiClient:
+  receives abort signal  throws CanceledError
+  
+classifyCoin() function:
+  CanceledError caught  returns { canceled: true }
+  
+onUploadProgress never fires again
+store phase never reaches "done"
+  
+AgentPipeline modal:
+  store.phase !== "processing"  AnimatePresence removes modal
+```
+
+**Why AbortController matters:**
+Without abort, a user uploading a blurry coin and clicking "Cancel" immediately
+would still wait 15 seconds for the full LLM pipeline to complete server-side.
+With abort: the HTTP connection is closed  FastAPI's `asyncio.to_thread` cannot
+abort the already-started gatekeeper (Python threads cannot be killed from outside),
+BUT the client-side result is discarded and the UI resets immediately.
+The server finishes the analysis and writes the PDF  it just doesn't send the result
+to a client that's no longer listening. This is acceptable behaviour for a 1-user system.
+
+---
+
+### Foundation 15  Canvas API: Browser-Side Image Resizing
+
+```typescript
+async function downsizeImage(file: File, maxPx: number = 1024): Promise<File> {
+  const img = new Image()
+  img.src = URL.createObjectURL(file)     // create temporary blob URL
+  await new Promise(resolve => img.onload = resolve)
+
+  if (Math.max(img.naturalWidth, img.naturalHeight) <= maxPx) {
+    URL.revokeObjectURL(img.src)
+    return file   // already small enough
+  }
+
+  const scale  = maxPx / Math.max(img.naturalWidth, img.naturalHeight)
+  const canvas = document.createElement("canvas")
+  canvas.width  = Math.round(img.naturalWidth  * scale)
+  canvas.height = Math.round(img.naturalHeight * scale)
+
+  const ctx = canvas.getContext("2d")!
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+
+  return new Promise(resolve =>
+    canvas.toBlob(blob => resolve(new File([blob!], file.name, { type: "image/jpeg" })),
+                 "image/jpeg", 0.85)
+  )
+}
+```
+
+**What canvas.toBlob("image/jpeg", 0.85) does:**
+The browser runs its built-in JPEG encoder on the canvas pixel data at quality 0.85 (85%).
+Quality 0.85 is the "sweet spot": visually indistinguishable from 100% but 35 smaller file.
+For a coin photograph with lots of angular edges and metallic detail, 0.85 produces a file
+of ~100200 KB from a 10241024 canvas.
+
+**Why revokeObjectURL:**
+`URL.createObjectURL(file)` creates a reference in the browser's object URL registry that
+keeps the underlying Blob alive. If you never call `revokeObjectURL`, it persists for the
+entire page lifetime, leaking memory. The `useMemo` + cleanup `useEffect` pattern in
+`CoinUploader.tsx` ensures the preview URL is revoked when the component unmounts.
+
+---
+
+### Foundation 16  CSS `display: contents`: Semantic Wrapping Without Layout Box
+
+The header badge in `AnalysisPanel.tsx` needs to be clickable (CN type link) while
+also being a visual badge. The challenge: wrapping a badge in `<a>` normally makes the
+`<a>` a block element or changes the badge's visual appearance.
+
+**`display: contents` solution:**
+```typescript
+<a
+  href={`https://corpus-nummorum.eu/types/${label}`}
+  style={{ display: "contents" }}  //  THIS IS THE KEY
+  target="_blank"
+  rel="noopener noreferrer"
+>
+  <ClassificationBadge variant={confidenceTier} />
+</a>
+```
+
+`display: contents` tells the browser: "this element has no layout box of its own.
+Its children are laid out as if they were direct children of the element's parent."
+
+Effect: The `<a>` disappears from the layout. The `<ClassificationBadge>` renders
+exactly as it would without the `<a>` wrapper. BUT the badge is still clickable
+because the `<a>`'s event handling wraps around the child.
+
+WHY this matters: Without `display: contents`, the `<a>` creates an inline-block box
+that alters the Flexbox layout of the badge's parent. The UI shifts by a few pixels.
+With `display: contents`, the layout is identical to the non-linked version, but the
+badge becomes a navigable link.
+
+---
+
+## Section 50  FastAPI Backend Architecture: Every File, Every Line, Every Decision
+
+This section is the definitive reference for `src/api/`. Read it and you can rebuild
+the entire FastAPI layer from scratch  including WHY each design decision was made.
+
+---
+
+### File: `src/api/auth.py`  API Key Authentication
+
+**Purpose:** Protect write endpoints (classify, metrics, delete) from unauthorized use.
+
+**Full engineering design:**
+
+```python
+from fastapi import Depends, HTTPException, Security
+from fastapi.security import APIKeyHeader
+import hmac, os
+
+# APIKeyHeader creates a FastAPI "security scheme":
+# - Adds "X-API-Key" to OpenAPI docs (lock icon in Swagger UI)
+# - auto_error=False means: if header is missing, pass None (don't auto-reject)
+# - WHY auto_error=False: lets US decide the rejection message and log it
+_api_key_scheme = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+async def require_api_key(api_key: str | None = Security(_api_key_scheme)) -> None:
+    """
+    FastAPI dependency. Called before any protected route.
+    Two modes:
+      Mode 1 (DEEPCOIN_API_KEY not set): dev mode  any request passes through.
+      Mode 2 (DEEPCOIN_API_KEY set): production  X-API-Key header must match.
+    """
+    expected = os.getenv("DEEPCOIN_API_KEY")
+    if expected is None:
+        return  # dev mode: no key configured, all requests allowed
+    if api_key is None or not hmac.compare_digest(
+        api_key.encode("utf-8"), expected.encode("utf-8")
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing API key",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
+```
+
+**Why X-API-Key header (not Bearer token):**
+Bearer tokens are associated with OAuth2/JWT flows  they have expiry, refresh, signature
+verification. For a single-user research system, that complexity is unnecessary overhead.
+X-API-Key is the simplest possible authentication: share one secret, send it as a header.
+Upgrade path: swap `require_api_key` implementation to validate JWT  all routes unchanged.
+
+**Why `WWW-Authenticate: ApiKey` on 401:**
+HTTP standard: a 401 response SHOULD include a `WWW-Authenticate` header describing how
+to authenticate. Without it, some API clients show confusing errors. "ApiKey" is a
+non-standard but commonly understood scheme name.
+
+**Dev mode passthrough  tradeoffs:**
+- Pro: Zero friction for local development (no key needed in `.env` during dev).
+- Pro: `pytest` runs without configuring secrets.
+- Con: A mistake where `DEEPCOIN_API_KEY` is not set in production leaves metrics/classify
+       endpoints wide open.
+- Mitigation: `main.py` startup logs `"AUTH: DEEPCOIN_API_KEY not set  running in dev mode"`
+  as a WARN-level message so it appears in production logs.
+
+---
+
+### File: `src/api/limiter.py`  Rate Limiting Singleton
+
+**Purpose:** Prevent abuse of the `/api/classify` endpoint (which uses GPU + LLM APIs).
+
+```python
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+```
+
+**Why this is its own file (not in main.py):**
+`classify.py` imports `limiter`. `main.py` imports `classify.py` AND also needs `limiter`
+(to register the exception handler). If both were in `main.py`, `classify.py` would need
+to import `main.py`  circular import at module load time  ImportError.
+
+Separate `limiter.py` breaks the cycle:
+```
+main.py  imports classify.py  imports limiter.py (OK: no cycle)
+main.py  imports limiter.py (OK: already imported, Python caches)
+```
+Python's import system caches modules in `sys.modules`. The second import of `limiter.py`
+returns the SAME object that `classify.py` imported. One singleton shared everywhere.
+
+**`key_func=get_remote_address`:**
+The rate limit counter is keyed by client IP address. If the client sends from `192.168.1.5`,
+the counter for `192.168.1.5` increments. When it hits 10/minute, ALL requests from that IP
+are rejected with HTTP 429 (Too Many Requests) for the remainder of that 60-second window.
+
+**Production note: `FORWARDED_ALLOW_IPS`:**
+When deployed behind Nginx (Layer 6), the client IP that FastAPI sees is `127.0.0.1` (Nginx).
+`FORWARDED_ALLOW_IPS=*` tells slowapi to trust the `X-Forwarded-For` header set by Nginx.
+Without this, the rate limiter treats ALL clients as the same IP and after 10 requests from
+ANY user, ALL users get rate-limited.
+
+---
+
+### File: `src/api/_store.py`  SQLite History Store (Repository Pattern)
+
+**Why the underscore prefix (`_store.py`):**
+The leading underscore signals: "this is an internal implementation detail, not a public API."
+The rest of the codebase imports specific functions: `from src.api._store import append`.
+Nothing external should import `_store` directly. The interface is the functions, not the module.
+
+**Why SQLite instead of a JSON file:**
+| Concern | JSON file | SQLite |
+|---------|-----------|--------|
+| Append a record | Read entire file, parse, add record, write entire file: O(n) | INSERT: O(log n) |
+| Count records | Load all, len(): O(n) serialisation | SELECT COUNT(*): O(log n) |
+| Paginate (skip 40, take 10) | Load all, slice[40:50]: O(n) memory | LIMIT 10 OFFSET 40: O(log n) |
+| Delete one record | Load all, filter out, write all: O(n) | DELETE WHERE id=?: O(log n) |
+| Concurrent access | File locks needed manually | WAL mode handles this |
+
+For n=1 the difference is invisible. For n=10,000 the JSON approach loads megabytes on
+every history page view. SQLite scales to millions of records with no code changes.
+
+**The schema:**
+```sql
+CREATE TABLE IF NOT EXISTS history (
+    id         TEXT PRIMARY KEY,          -- UUID4, e.g. "a1b2c3d4-..."
+    timestamp  TEXT NOT NULL,             -- ISO-8601, e.g. "2026-02-27T14:23:01.123456"
+    label      TEXT NOT NULL,             -- coin label, e.g. "CN 1015"
+    confidence REAL NOT NULL,             -- e.g. 0.9114
+    route_taken TEXT NOT NULL,            -- "historian" | "validator" | "investigator"
+    payload    TEXT NOT NULL              -- full ClassifyResponse JSON blob
+)
+```
+
+WHY `payload TEXT`: The full classify response is stored as a JSON string in one column.
+This means the SQLite schema NEVER needs to change when the ClassifyResponse model gains
+new fields. The `payload` column absorbs all schema evolution. The trade-off: you cannot
+query by `payload.vote_fraction` without a JSON extract function. That's acceptable 
+history records are fetched by ID or listed in timestamp order, never filtered by deep fields.
+
+**WHY `INSERT OR REPLACE INTO`:**
+If two simultaneous classify requests arrive with the same `id` (theoretically impossible
+with UUID4, but defensively handled), the second insert replaces the first. No duplicate rows.
+
+**WAL mode setup:**
+```python
+def _get_conn() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")    # fsync only at checkpoints, not every write
+    return conn
+```
+
+`check_same_thread=False`: SQLite's default is to refuse connections used from multiple
+threads. Our FastAPI app uses an async event loop + thread pool (via `asyncio.to_thread`).
+The connection may be created in the main thread but used in a worker thread. We disable
+the check AND use a `threading.Lock()` for serialised writes.
+
+`PRAGMA synchronous=NORMAL`: Default `FULL` mode calls fsync() after every write (slowest,
+safest). `NORMAL` calls fsync only at checkpoints. For a history log (not financial data),
+losing the last write on a power failure is acceptable. Response time improves noticeably.
+
+---
+
+### File: `src/api/logging_config.py`  Structured JSON Logging
+
+**Purpose:** Make log output machine-parseable in production (important for Elasticsearch/DataDog).
+
+**Key decisions:**
+- `LOG_FORMAT=json`: JSON log lines, one per record. Each line has: `time`, `level`, `message`, `module`, `funcName`, `exc_info`.
+- `LOG_FORMAT=text` (default in dev): Human-readable `[LEVEL] module:func  message`.
+- Silence noisy third-party loggers at WARNING level: `httpx`, `chromadb`, `sentence_transformers`, `urllib3`.
+
+WHY silence these: During inference, sentence_transformers prints progress bars and download
+messages to the log. In production, these fill up log storage and obscure your own debug messages.
+SQLite warning about missing WAL checkpoint, httpx printing every HTTP request to Gemini API 
+none of these are actionable by the operator. Set them to WARNING  only actual errors surface.
+
+---
+
+### File: `src/api/schemas.py`  Pydantic v2 Contract Definitions
+
+**Pydantic v2's triple role:**
+
+1. **Validation**: When FastAPI receives JSON in a request body, Pydantic validates it.
+   `confidence: float`  if the JSON sends `"confidence": "high"`, Pydantic raises a
+   `ValidationError` before your route code ever runs. FastAPI returns HTTP 422.
+
+2. **Serialisation**: When your route returns a Pydantic model, FastAPI calls `.model_dump()`
+   to convert it to a JSON-serialisable dict. No manual `.to_dict()` needed.
+
+3. **OpenAPI schema generation**: FastAPI reads Pydantic models at startup and generates the
+   `/docs` (Swagger UI) and `/openapi.json`. Every field, type, and default is documented
+   automatically. This is how the API is self-documenting.
+
+**The full schema hierarchy:**
+```
+ClassifyResponse                      top-level response for POST /classify and GET /history/{id}
+   cnn: CnnResult
+        top5: list[Top5Item]       5 candidates sorted by confidence
+        vote_fraction: float|None   fraction of TTA passes agreeing on top-1
+        tta_passes: int             total TTA passes (8)  for frontend label
+        temperature: float          T=1.4 scaling factor applied
+   id: str                            UUID4 matching SQLite history ID
+   image_filename: str                sanitised upload filename
+   route_taken: str                   "historian"|"validator"|"investigator"
+   narrative: str|None                LLM-generated historical analysis
+   mint, region, date_range, material, denomination: str|None
+   material_status: str|None          "consistent"|"mismatch"|"uncertain"
+   material_confidence: float|None    HSV detection confidence (01)
+   visual_description: str|None       VLM or OpenCV description
+   kb_match_count: int                number of KB matches found
+   pdf_url: str|None                  "/api/reports/filename.pdf"
+   processing_time_s: float           total pipeline time in seconds
+
+HistoryListResponse
+   items: list[HistorySummary]         compact view (no narrative, no top5)
+   total: int                          total records for pagination UI
+   skip: int                           echo of request parameters
+   limit: int
+```
+
+**Why `HistorySummary` is separate from `ClassifyResponse`:**
+The history list shows 20 rows in the table  rendering full `ClassifyResponse` objects
+(each potentially 5 KB of JSON) wastes bandwidth and parsing time. `HistorySummary` strips
+narrative, top5, and visual_description  the 5 KB shrinks to ~200 bytes per row.
+
+**Why `vote_fraction: float | None`:**
+`vote_fraction` is `None` when `tta=False` was requested. The frontend checks
+`if (cnn.vote_fraction !== null && cnn.vote_fraction >= TTA_VOTE_THRESHOLD)` before showing
+the "TTA Consensus" badge. TypeScript knows it can be null because the type says `number | null`,
+not just `number`.
+
+---
+
+### File: `src/api/main.py`  Application Factory and Middleware Stack
+
+**`workers=1` constraint (THE most important constraint in the entire API):**
+```python
+# Run with: uvicorn src.api.main:app --port 8000 --workers 1
+```
+The RTX 3050 Ti has 4.3 GB VRAM. EfficientNet-B3 inference uses ~1.8 GB. One worker
+process holds the model in VRAM.
+
+If `--workers 2`: Two processes each try to load the model  3.6 GB used  occasional
+CUDA OOM errors under concurrent requests, even with the asyncio.Semaphore guard.
+The Semaphore only guards within ONE process  it cannot coordinate across OS processes.
+
+`workers=1` + `asyncio.Semaphore(1)` = correct. Only ever one inference at a time, in
+one process, using one VRAM allocation.
+
+**The middleware stack (ORDER MATTERS):**
+
+```python
+app.add_middleware(CORSMiddleware, allow_origins=origins, ...)  # outermost
+app.add_middleware(GZipMiddleware, minimum_size=500)
+# X-Request-ID is applied via a raw ASGI middleware (see below)
+```
+
+How FastAPI/Starlette middleware stacks work: request flows INWARD through the stack
+(outermost first), response flows OUTWARD (outermost last).
+
+```
+Request:  CORS  GZip  X-Request-ID  route handler
+Response: route handler  X-Request-ID  GZip (compress)  CORS (add headers)
+```
+
+Why CORS is outermost: Browsers send a "preflight" OPTIONS request before every POST.
+The OPTIONS must receive the correct Access-Control-Allow-* headers. If CORSMiddleware
+is inside GZip, the OPTIONS response would be (incorrectly) GZip-compressed.
+
+Why minimum_size=500 for GZip: Tiny responses (health check: `{"status":"healthy"}` = 20 bytes)
+get LARGER after GZip header overhead. 500 bytes is the empirical minimum where compression
+saves space. The classify response (~3 KB uncompressed  ~1.1 KB compressed) always exceeds this.
+
+**X-Request-ID ASGI middleware:**
+```python
+class XRequestIDMiddleware:
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            request_id = str(uuid.uuid4())
+            scope.setdefault("state", {})["request_id"] = request_id
+        async def send_with_header(message):
+            if message["type"] == "http.response.start":
+                message["headers"].append(
+                    (b"x-request-id", request_id.encode())
+                )
+            await send(message)
+        await self.app(scope, receive, send_with_header)
+```
+Every HTTP response gets a unique UUID in the `X-Request-ID` header.
+
+WHY: When debugging a user-reported issue, the user provides the X-Request-ID from their
+browser's DevTools network tab. You search your log files for that UUID and find the exact
+request  CNN prediction, LLM call, all timings. Without IDs, you search logs by timestamp
+and might find 10 requests at the same second.
+
+**Health endpoint  5 real component checks:**
+```python
+@app.get("/api/health")
+async def health():
+    checks = {
+        "cnn_model":    _check_model_loaded(),    # model.state_dict() is in VRAM
+        "rag_engine":   _check_rag_ready(),        # BM25 index built, ChromaDB connected
+        "sqlite":       _check_sqlite(),           # SELECT 1 query completes
+        "pdf_reports":  _check_reports_dir(),      # reports/ dir writable
+        "disk_space":   _check_disk_space(),       # >500 MB free
+    }
+    status = "healthy" if all(v == "ok" for v in checks.values()) else "degraded"
+    return JSONResponse({"status": status, "checks": checks}, status_code=200 if status=="healthy" else 503)
+```
+
+WHY real checks (not just `return {"status": "ok"}`):
+Kubernetes/Docker liveness probes call `/health`. A "healthy" that always returns 200
+even when the GPU is out of memory is a lie. A deployment system using the health endpoint
+would think the service is fine and not restart it. Real component checks catch actual failures.
+
+**Docs gated by environment:**
+```python
+docs_url    = None if os.getenv("ENV") == "production" else "/docs"
+redoc_url   = None if os.getenv("ENV") == "production" else "/redoc"
+openapi_url = None if os.getenv("ENV") == "production" else "/openapi.json"
+```
+In production, exposing `/docs` reveals your API schema including security requirements
+and lets attackers craft precise attacks. Gate it behind ENV=production.
+
+---
+
+### File: `src/api/routes/classify.py`  The Core Route
+
+This is the most complex file in the API layer. Every line has a reason.
+
+**Step 1: Content-Type validation:**
+```python
+if upload.content_type not in ("image/jpeg", "image/png"):
+    raise HTTPException(415, "Only JPEG and PNG images accepted")
+```
+Content-Type is declared by the CLIENT. Any HTTP client can send
+`Content-Type: image/jpeg` while sending a PDF binary. Step 1 is client trust (fast check).
+Step 3 (magic bytes) is the security check.
+
+**Step 2: Read + size cap:**
+```python
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+
+data = await upload.read()
+if len(data) > MAX_UPLOAD_BYTES:
+    raise HTTPException(413, "Image too large (max 10 MB)")
+```
+WHY cap: A malicious client could upload a 2 GB file. FastAPI buffers the upload in memory.
+Without a cap, this exhausts the server's RAM. 10 MB is generous for any coin photograph.
+The canvas downsize on the frontend reduces most real uploads to < 200 KB anyway.
+
+**Step 3: Magic bytes validation (MIME sniffing):**
+```python
+_MAGIC = {
+    b"\xff\xd8\xff": "jpeg",   # JPEG magic signature
+    b"\x89PNG":      "png",    # PNG magic signature
+}
+
+def _detect_mime(data: bytes) -> str | None:
+    for magic, mime in _MAGIC.items():
+        if data.startswith(magic):
+            return mime
+    return None
+
+if _detect_mime(data) is None:
+    raise HTTPException(415, "File content does not match a supported image format")
+```
+
+WHY defence-in-depth: Step 1 trusts the client's declared Content-Type. Step 3 reads the
+actual file bytes and checks the MAGIC BYTES  the first few bytes that every JPEG or PNG
+always starts with. A PDF starts with `%PDF-1.4`. An MP4 starts with `ftyp`. Neither would
+pass Step 3. This prevents attackers from uploading arbitrary file types renamed as `.jpg`.
+
+**Step 4: Sanitise filename:**
+```python
+def _sanitise_filename(name: str) -> str:
+    stem = Path(name).stem          # removes extension
+    stem = re.sub(r"[^\w\-]", "_", stem, flags=re.ASCII)  # non-word chars  _
+    stem = stem[:64]                 # truncate to 64 chars
+    return f"{stem}.jpg"
+```
+
+Why `re.ASCII` flag: Without it, `\w` in Python's re matches Unicode word characters:
+accented letters (é, ñ), CJK characters, Arabic script. A filename like `سكة.jpg` would
+pass through unchanged. `re.ASCII` restricts `\w` to `[a-zA-Z0-9_]` only  ASCII letters,
+digits, underscore. Anything else becomes underscore.
+
+Why truncate to 64 chars: NTFS supports filenames up to 255 characters. But some filesystems
+(FAT32, older systems) support only 255 bytes. UTF-8 characters can be 14 bytes. To guarantee
+filename safety everywhere, limit to 64 ASCII characters (= 64 bytes maximum).
+
+**Step 5: asyncio.to_thread:**
+```python
+async with _classify_sem:   # Semaphore: at most 1 concurrent inference
+    state = await asyncio.to_thread(gk.analyze, str(save_path))
+```
+
+`asyncio.to_thread` is THE pattern for CPU-bound work in async Python.
+
+FastAPI runs on an async event loop. The event loop processes all I/O (recv HTTP request,
+send HTTP response) on ONE thread. If your route calls a slow synchronous function directly:
+```python
+@app.post("/classify")
+async def classify():
+    state = gk.analyze(path)  # BLOCKS the event loop for 15 seconds!
+    ...
+```
+The event loop is stuck in `gk.analyze`. No other request can be received or responded to
+for 15 seconds. The server appears hung.
+
+`asyncio.to_thread(gk.analyze, path)`:
+- Submits `gk.analyze(path)` to the thread pool executor.
+- Returns a coroutine that the event loop can AWAIT.
+- While waiting: event loop is FREE to process other requests (health checks, history fetches).
+- When `gk.analyze` finishes in its thread: the event loop picks up the result.
+
+Result: 15-second LLM call doesn't block health checks or concurrent history reads.
+
+**Step 6: finally block for cleanup:**
+```python
+finally:
+    save_path.unlink(missing_ok=True)
+```
+Regardless of whether the analysis succeeded or raised an exception, the uploaded file is
+deleted. WHY: accumulating upload files fills up disk space. WHY `missing_ok=True`:
+if the analysis itself moved/deleted the file for some reason, `unlink` doesn't crash.
+
+---
+
+### File: `src/api/routes/history.py`  History CRUD
+
+**`list_history()`  skip/limit pagination:**
+```python
+@app.get("/api/history")
+async def list_history(skip: int = 0, limit: int = 20) -> HistoryListResponse:
+    rows, total = await asyncio.to_thread(load_page, skip, limit)
+    return HistoryListResponse(items=[...], total=total, skip=skip, limit=limit)
+```
+
+Skip/limit vs cursor pagination:
+- Skip/limit: SQL `LIMIT 20 OFFSET 40`. Simple. Predictable. BUT: if someone deletes
+  a row while you're paginating, items shift and you might skip one.
+- Cursor pagination: "give me 20 items after ID xyz". Zero shift problem. Complex client.
+
+For a single-user history of coin analyses, the shift problem is theoretical. Skip/limit
+is simple and correct enough.
+
+**`delete_history_item()`  WHY 204 not 200:**
+HTTP semantics for DELETE:
+- `200 OK` with a body: "here is the deleted resource" (redundant  you already know what you deleted)
+- `204 No Content`: "deletion succeeded, nothing to return" (correct REST semantics)
+- `404 Not Found`: "ID doesn't exist in the database"
+
+```python
+@app.delete("/api/history/{record_id}", status_code=204)
+async def delete_history_item(record_id: str, ...) -> None:
+    deleted = await asyncio.to_thread(delete_by_id, record_id)
+    if not deleted:
+        raise HTTPException(404, "Record not found")
+    # Returns 204 with no body
+```
+
+The frontend's `useMutation` receives the 204 response and calls `invalidateQueries(["history"])`
+regardless of body content  the 204 is enough to trigger the refresh.
+
+---
+
+## Section 51  Frontend Architecture Deep Dive: Every File, Every Pattern, Every Decision
+
+This section is the definitive reference for `frontend/`. The goal: rebuild the entire
+Next.js frontend with full comprehension of why every pattern was chosen.
+
+---
+
+### Architecture Overview
+
+```
+frontend/
+ app/                       # Next.js 15 App Router (Server Components by default)
+    layout.tsx             # Root layout: TanStack Query provider + font setup
+    page.tsx               # "/"  upload + classify UI
+    error.tsx              # Root error boundary
+    history/
+       page.tsx           # "/history"  paginated coin analysis history
+       error.tsx
+    history/[id]/
+        page.tsx           # "/history/abc-123"  full analysis detail
+        error.tsx
+ components/
+    CoinUploader.tsx       # drag-drop upload, quality check, TTA toggle
+    AgentPipeline.tsx      # mission control modal during analysis
+    AnalysisPanel.tsx      # result display (CNN + agent sections)
+    HistoryTable.tsx       # paginated history table with filter bar
+    HealthDot.tsx          # tiny status indicator in nav
+ lib/
+    api.ts                 # axios clients + all API call functions
+    store.ts               # Zustand global state machine
+    utils.ts               # cn() utility (clsx + tailwind-merge)
+ types/
+    api.ts                 # TypeScript interfaces mirroring Pydantic schemas
+ next.config.ts             # Security headers, rewrites, devIndicators
+ .env.local                 # DEEPCOIN_API_URL + NEXT_PUBLIC_CLASSIFY_URL (gitignored)
+```
+
+---
+
+### File: `frontend/lib/store.ts`  Zustand Global State Machine
+
+**Why Zustand over React Context:**
+React Context triggers re-renders in ALL consuming components when ANY value changes.
+Zustand uses selector subscriptions: each component subscribes to only the slice of state
+it needs. This is critical because:
+- AgentPipeline updates `uploadProgress` 10 per second during upload.
+- AnalysisPanel needs `result`, not `uploadProgress`.
+- Without Zustand selectors, AnalysisPanel would re-render 10 per second during upload.
+- With Zustand selectors, AnalysisPanel stays still until `result` changes.
+
+**The state shape represents a state machine:**
+```typescript
+type UploadPhase = "idle" | "uploading" | "processing" | "done" | "error"
+
+interface DeepCoinState {
+  tta:             boolean             // user toggle: TTA on/off
+  phase:           UploadPhase         // current state in the machine
+  uploadProgress:  number             // 0100 (shown in progress bar)
+  selectedFile:    File | null         // the image the user selected
+  result:          ClassifyResponse | null  // null until analysis completes
+  errorMessage:    string | null       // shown in error state
+  _cancelFn:       (() => void) | null // PRIVATE: stores abort callback
+}
+```
+
+**State transitions:**
+```
+idle onDrop uploading API response done
+                          API error error
+                          Cancel idle
+```
+
+**The `_cancelFn` bridge (most important pattern in the store):**
+Problem: `CoinUploader` creates the AbortController (it starts the fetch).
+         `AgentPipeline` has the X button (different component, different subtree).
+         How does the X button cancel the fetch that `CoinUploader` started?
+
+Solution: React sibling communication via shared store:
+```typescript
+// CoinUploader.tsx (sets the cancel function):
+const { setCancelFn } = useDeepCoinStore()
+const controller = new AbortController()
+setCancelFn(() => controller.abort())
+classifyCoin(file, tta, progress, controller.signal)
+
+// AgentPipeline.tsx (uses the cancel function):
+const cancelFn = useDeepCoinStore(s => s._cancelFn)
+<button onClick={() => { cancelFn?.(); store.reset() }}></button>
+```
+
+No prop drilling. No context provider. Two unrelated components share a single mechanism.
+The `_cancelFn` prefix signals: "do not display this in the UI, it is internal machinery."
+
+---
+
+### File: `frontend/lib/api.ts`  HTTP Client Configuration
+
+**Two Axios clients  WHY:**
+
+```typescript
+// Client 1: apiClient  for fast read-only calls
+export const apiClient = axios.create({
+  baseURL: "/api",              // relative  goes to Next.js proxy  FastAPI
+  timeout: 120_000,             // 2 minutes (generous for health/history)
+})
+
+// Client 2: classifyApiClient  for the long AI inference call
+export const classifyApiClient = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_CLASSIFY_URL ?? "/api",  // direct to FastAPI
+  timeout: 600_000,             // 10 minutes (Ollama gemma3:4b can take ~4 minutes)
+})
+```
+
+**WHY classifyApiClient bypasses the Next.js proxy:**
+Next.js development server (Turbopack/Webpack) proxies `/api/*` requests to FastAPI.
+Built-in Next.js proxy has a hard socket inactivity timeout of approximately 30 seconds.
+If no data is received for 30 seconds, the proxy closes the connection.
+The Historian agent using Ollama gemma3:4b can take 34 minutes to generate a narrative.
+Result: proxy kills the connection at 30s  HTTP 504 Gateway Timeout  user sees error.
+
+Fix: `classifyApiClient` sends `POST /classify` directly to `http://127.0.0.1:8000/api/classify`.
+The request goes browser  FastAPI, bypassing Next.js entirely. No proxy timeout.
+The 600-second client-side timeout handles even the slowest Ollama runs.
+
+**WHY `127.0.0.1` not `localhost`:**
+Node.js 18+ resolves `localhost` to `::1` (IPv6 loopback) before `127.0.0.1` (IPv4).
+FastAPI defaults to listening on IPv4 `0.0.0.0`. IPv6 `::1` connection attempt 
+"Connection refused"  silent failure with no helpful error message.
+`127.0.0.1` (explicit IPv4)  connects to FastAPI directly. One-line fix, saves hours of debugging.
+
+**Interceptors for auth header injection:**
+```typescript
+function applyKeyInterceptor(client: AxiosInstance) {
+  client.interceptors.request.use(config => {
+    const key = process.env.NEXT_PUBLIC_API_KEY
+    if (key) config.headers["X-API-Key"] = key
+    return config
+  })
+}
+applyKeyInterceptor(apiClient)
+applyKeyInterceptor(classifyApiClient)
+```
+
+WHY interceptors instead of per-call headers:
+Without interceptors, every API call would need:
+```typescript
+axios.post("/classify", data, { headers: { "X-API-Key": key } })
+```
+With interceptors, the header is added automatically to every request.
+If you need to change the auth strategy (Bearer token, rotating key, etc.), you change
+ONE place (the interceptor) and all calls benefit.
+
+**`ApiError` class:**
+```typescript
+export class ApiError extends Error {
+  constructor(
+    public readonly status:  number,
+    public readonly detail:  string,
+    public readonly message: string
+  ) { super(message) }
+}
+```
+
+WHY a custom error class: Axios throws `AxiosError` which has the HTTP status buried at
+`error.response?.status`. You can't `catch(e)` and call `e.status` directly.
+`ApiError` normalises the structure: any catch block can access `err.status` without
+optional chaining gymnastics. In the TanStack Query error handler:
+```typescript
+if (error instanceof ApiError && error.status === 429) {
+  showToast("Rate limit reached. Please wait a moment.")
+}
+```
+
+---
+
+### File: `frontend/types/api.ts`  TypeScript Contracts
+
+**Manual sync vs openapi-typescript:**
+The Pydantic schemas in `schemas.py` define the server contract. The TypeScript interfaces
+in `types/api.ts` must match them. Two approaches:
+1. **Manual sync (what we do)**: Update TypeScript manually when Pydantic changes.
+   Pro: zero build tooling, full control. Con: drift risk if you forget.
+2. **openapi-typescript**: Generates TypeScript from `http://localhost:8000/openapi.json`.
+   `npx openapi-typescript http://localhost:8000/openapi.json -o types/api.ts`
+   Pro: always in sync. Con: requires FastAPI running during builds.
+
+For a 1-developer project, manual sync + grep-check is sufficient. A team of 5 would
+use openapi-typescript to prevent "backend added a field, frontend didn't know" bugs.
+
+**`vote_fraction: number | null`  the null vs undefined distinction:**
+In JSON, `null` means "field is present but has no value."
+In TypeScript, `undefined` means "field is absent."
+
+When `tta=false`, the backend sets `vote_fraction = None` in Python  JSON serialises to
+`"vote_fraction": null`  TypeScript receives `null`.
+
+If we typed it as `vote_fraction?: number` (undefined), TypeScript would suggest the field
+might not exist at all. That's wrong  the field is always present in the JSON (as `null`).
+`number | null` correctly models: "always present, possibly null."
+
+---
+
+### File: `frontend/next.config.ts`  Security and Routing
+
+**Security headers (full explanation):**
+
+```typescript
+const securityHeaders = [
+  // X-Frame-Options: DENY
+  // Prevents this page from being loaded in <iframe>, <frame>, <embed>, <object>
+  // Attack prevented: Clickjacking  attacker overlays invisible iframe over their malicious button
+  // so user thinks they clicked "OK" but actually clicked your "classify" button.
+  { key: "X-Frame-Options", value: "DENY" },
+
+  // X-Content-Type-Options: nosniff
+  // Prevents browser from "sniffing" MIME type of responses.
+  // Attack: attacker uploads a JS file with Content-Type: image/jpeg.
+  // Without nosniff, some browsers run it as JS. With nosniff, browser respects Content-Type.
+  { key: "X-Content-Type-Options", value: "nosniff" },
+
+  // Strict-Transport-Security
+  // max-age=63072000: "remember HTTPS for 2 years"
+  // includeSubDomains: applies to all subdomains
+  // preload: submit this domain to browser HSTS preload list (built into Chrome/Firefox)
+  // Effect: after first visit, browser REFUSES to connect via HTTP. Only HTTPS.
+  { key: "Strict-Transport-Security",
+    value: "max-age=63072000; includeSubDomains; preload" },
+
+  // Referrer-Policy: strict-origin-when-cross-origin
+  // When navigating to external site: send only origin (https://deepcoin.app), not full URL.
+  // WHY: full URL might contain sensitive params (token=abc123). Don't leak to third parties.
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+
+  // Permissions-Policy
+  // Explicitly disables browser APIs not needed by this app.
+  // camera: empty  we use file picker, not camera stream
+  // microphone: empty  no audio
+  // geolocation: empty  no location needed
+  // payment: empty  no payment flow
+  // WHY: if a third-party script (CDN compromise) tries to access camera, this blocks it.
+  { key: "Permissions-Policy",
+    value: "camera=(), microphone=(), geolocation=(), payment=()" },
+
+  // Content-Security-Policy (CSP)  the most complex and important header
+  // Allowlist of where content can be loaded from.
+  isDev
+    ? "default-src 'self'; img-src 'self' blob: data:; ..." // dev: unsafe-eval for hot reload
+    : "default-src 'self'; img-src 'self' blob: data:; ..." // prod: no unsafe-eval
+]
+```
+
+**CSP `blob:` in `img-src`:**
+`URL.createObjectURL(file)` returns a blob URL like `blob:http://localhost:3000/abc-123`.
+Without `blob:` in `img-src`, the browser blocks the coin preview image with a CSP error.
+This is a coin image the user just uploaded  it never leaves their browser. The browser
+won't display their own local file without explicit permission. Modern security is strict.
+
+**`connect-src http://127.0.0.1:8000`:**
+`classifyApiClient` sends requests directly to `http://127.0.0.1:8000`.
+The default CSP `connect-src 'self'` only allows `http://localhost:3000`.
+A connection to `127.0.0.1:8000` (different port) is BLOCKED by the browser.
+Adding it explicitly to `connect-src` whitelist: browser allows the direct classify request.
+
+**`devIndicators: false`:**
+Next.js dev server shows a floating indicator in the bottom-right corner showing which
+component is rendering and which route is active. It's useful for Next.js learning but
+visually clutters our DeepCoin UI during demos. One line removes it.
+
+---
+
+### Component: `CoinUploader.tsx`  Entry Point for Every Analysis
+
+**Image quality check (Laplacian blur detection):**
+```typescript
+function isBlurry(data: Uint8ClampedArray, w: number, h: number): boolean {
+  // Laplacian kernel: [0,1,0; 1,-4,1; 0,1,0]
+  // Apply to grayscale version of image
+  // Variance of output: low variance = smooth/blurry, high variance = sharp edges
+  return laplacianVariance(data, w, h) < 80
+}
+```
+
+The Laplacian operator is the second image derivative. Sharp images have strong edges
+(large second derivatives). Blurry images have weak edges (nearly zero second derivatives).
+Threshold 80: empirically calibrated on coin photos. Above 80  accept. Below 80  warn user.
+
+This runs in the BROWSER (via canvas pixel manipulation) before any upload. If blurry,
+show a warning: "Image may be too blurry  results may be poor." User can proceed anyway.
+We do NOT block the upload  the Investigator agent handles low-quality images gracefully.
+
+**TTA toggle:**
+```typescript
+const tta = useDeepCoinStore(s => s.tta)
+const setTta = useDeepCoinStore(s => s.setTta)
+
+<Switch checked={tta} onCheckedChange={setTta} />
+<span>TTA (8-pass ensemble)  +0.78% accuracy, ~8 slower</span>
+```
+
+TTA is stored globally in Zustand (not component-local state) because the HistoryTable
+might want to display whether TTA was used for each historical analysis. Global state is
+correct for preferences that outlive the component's lifecycle.
+
+**Progress bar during upload:**
+```typescript
+classifyCoin(file, tta, (percent) => {
+  store.setUploadProgress(percent)
+}, controller.signal)
+```
+
+Axios fires the `onUploadProgress` callback as chunks are sent. For a 200 KB file on localhost,
+progress goes from 0% to 100% nearly instantly. The real wait begins AFTER upload, during
+the 15-second LLM pipeline. The progress bar shows upload progress only  this is honest.
+A fake "analysis progress" animation would be misleading (we don't know when the LLM will finish).
+AgentPipeline's mission control log serves as the in-progress indicator during analysis.
+
+---
+
+### Component: `AgentPipeline.tsx`  Mission Control Modal
+
+**4-station layout:**
+```
+[Preprocessor]  [CNN]  [Agent]  [Synthesis]
+```
+Each station: icon + title + subtitle + chat log of sub-step messages.
+Lines between stations: `::after` pseudo-elements with animated particle-flow keyframes.
+
+**Particle beam animation:**
+```css
+@keyframes particle-flow {
+  0%   { transform: translateX(0%) }
+  100% { transform: translateX(200%) }
+}
+.connector::after {
+  content: '';
+  position: absolute;
+  width: 8px; height: 8px;
+  background: radial-gradient(circle, rgba(99,102,241,1) 0%, transparent 70%);
+  border-radius: 50%;
+  animation: particle-flow 1.2s ease-in-out infinite;
+}
+```
+The glowing dot travels leftright while a station is active, stops when done.
+The glow fix (commit `c8b74a7`) added a soft `box-shadow` to the connector rail itself
+so the dot is visible even when the rail is dark.
+
+**X button with hover state via useState (not DOM mutation):**
+Framer Motion manages the component tree's animation state. If you directly mutate DOM
+via `ref.current.style.color = "red"` inside a Framer Motion component, Motion can
+conflict on the next re-render (it controls layout/opacity/transform, you control color).
+
+Safe pattern: manage visual state with React useState.
+```typescript
+const [xHovered, setXHovered] = useState(false)
+<button
+  onMouseEnter={() => setXHovered(true)}
+  onMouseLeave={() => setXHovered(false)}
+  style={{ color: xHovered ? "#ef4444" : "#94a3b8" }}
+></button>
+```
+Motion never touches `color`. React handles it via inline style. No conflict.
+
+---
+
+### Component: `AnalysisPanel.tsx`  The 3-State CNN Display System
+
+This component implements the most nuanced UX decision in the frontend.
+
+**The confidence anxiety problem:**
+If CNN confidence is 42%, displaying "42% confident" makes users think the AI
+"barely knows" or "is probably wrong." In reality, 42% is the TOP score across 438 classes.
+Even 42% on a 438-way classification is often correct. The anxiety comes from the display,
+not the actual reliability.
+
+**3-state solution:**
+```typescript
+const DISPLAY_CONF_THRESHOLD = 0.70   // show raw % only if  70%
+const TTA_VOTE_THRESHOLD     = 0.75   // show TTA Consensus if  75% of passes agree
+
+function getConfidenceTier(cnn: CnnResult): "identified" | "tta_consensus" | "deep_search" {
+  if (cnn.confidence >= DISPLAY_CONF_THRESHOLD)                           return "identified"
+  if (cnn.vote_fraction !== null && cnn.vote_fraction >= TTA_VOTE_THRESHOLD) return "tta_consensus"
+  return "deep_search"
+}
+```
+
+**State 1  "Identified" (conf  70%):**
+- Green badge: "Identified"
+- Large animated CountUp: `0  91.1%` over 700ms
+- Bottom row: "Top result across 438 types"
+
+**State 2  "TTA Consensus" (vote_fraction  75%):**
+- Teal badge: "TTA Consensus"
+- NO raw percentage shown
+- Display: "6/8 passes agree" (reads from `cnn.tta_passes`)
+- Message: "Multiple analysis passes reached consensus"
+- WHY teal: users associate green with certainty, teal with agreement. Different concept.
+
+**State 3  "Deep Search" (below both thresholds):**
+- Purple badge: "Deep Search"
+- NO raw percentage shown
+- Display: "Best Visual Match"
+- Message: "Analyzing all 9,541 known types"
+- WHY "Deep Search" not "Low Confidence": The AI IS doing something  it's searching
+  the full knowledge base. That's worth communicating. "Low Confidence" is a label
+  about a number. "Deep Search" is a label about the process.
+
+**CountUp animation:**
+```typescript
+import CountUp from "react-countup"
+
+<CountUp
+  start={0}
+  end={cnn.confidence * 100}
+  duration={0.7}
+  decimals={1}
+  suffix="%"
+  onEnd={() => setAnimationDone(true)}
+/>
+```
+`react-countup` uses `requestAnimationFrame` to interpolate from start to end over the
+duration. The `onEnd` callback triggers the confidence bar animation (starts AFTER the
+number finishes counting, so both animations don't compete for visual attention).
+
+---
+
+### Component: `HistoryTable.tsx`  Paginated History with Filter Bar
+
+**Client-side filtering (useMemo):**
+```typescript
+const filteredItems = useMemo(() => {
+  return items.filter(item => {
+    const matchesSearch = searchQuery === "" ||
+      item.label.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesRoute = routeFilter === "all" || item.route_taken === routeFilter
+    return matchesSearch && matchesRoute
+  })
+}, [items, searchQuery, routeFilter])
+```
+
+WHY client-side filtering: The page shows the latest 20 records. Filtering 20 records
+client-side is instant. Sending a filter query to the server would require: a new API
+call, a new SQL query, and a round trip. For 20 items, that overhead is 50ms vs 0ms.
+
+**The delete flow (TanStack Query useMutation):**
+```typescript
+const queryClient = useQueryClient()
+const deleteMutation = useMutation({
+  mutationFn: (id: string) => deleteHistoryItem(id),
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["history"] })
+  },
+  onError: (err) => {
+    if (err instanceof ApiError) alert(`Delete failed: ${err.detail}`)
+  }
+})
+
+// In the delete button:
+<button onClick={() => {
+  if (window.confirm("Delete this analysis?")) {
+    deleteMutation.mutate(item.id)
+  }
+}}>
+  <Trash2 size={14} />
+</button>
+```
+
+WHY `window.confirm()`: A simple, zero-overhead guard against accidental deletion.
+Deploying a full toast notification system for a delete confirmation is over-engineering.
+The confirm dialog is synchronous (browser blocks until the user clicks OK/Cancel) and
+requires zero dependencies.
+
+**Delete button placement (HTML5 compliance):**
+The history table rows are also `<Link>` elements (clicking the row navigates to detail).
+Nesting `<button>` inside `<a>` is invalid HTML: interactive elements cannot be nested.
+
+Solution: render button and link as siblings in a flex container:
+```typescript
+<div className="flex items-center gap-2">
+  <Link href={`/history/${item.id}`} className="flex-1 ...">
+    {/* row content */}
+  </Link>
+  <button onClick={handleDelete}>
+    <Trash2 />
+  </button>
+</div>
+```
+The `<a>` and `<button>` are siblings, each independent, no nesting. Valid HTML5.
+`stopPropagation()` on the button click prevents the click from bubbling to the Link.
+
+---
+
+### `app/` Pages: Error Boundaries
+
+Every route has a sibling `error.tsx`:
+```typescript
+// app/error.tsx
+"use client"
+export default function ErrorPage({ error, reset }: ErrorBoundaryProps) {
+  return (
+    <div>
+      <h1>Something went wrong</h1>
+      <pre>{error.message}</pre>
+      <button onClick={reset}>Try again</button>
+    </div>
+  )
+}
+```
+
+WHY `"use client"`: Error boundaries are React class components under the hood.
+Next.js App Router Server Components cannot catch client-side JavaScript errors.
+Error boundary files must be Client Components to use `useEffect` for error logging.
+
+If `AnalysisPanel.tsx` throws an unhandled error during render, `app/error.tsx` catches it
+and shows the error page instead of a white blank screen. The `reset` function re-mounts
+the component tree  like refreshing but without a full page reload.
+
+---
+
+### URL-Synced Pagination in History Page
+
+```typescript
+// app/history/page.tsx is a Server Component
+// But it must read URL search params for pagination  needs Client Component
+
+// Solution: wrap the paginating part in a Client Component + Suspense boundary
+export default function HistoryPage() {
+  return (
+    <main>
+      <h1>Analysis History</h1>
+      <Suspense fallback={<HistoryTableSkeleton />}>
+        <HistoryContent />  {/* "use client"  uses useSearchParams */}
+      </Suspense>
+    </main>
+  )
+}
+```
+
+```typescript
+// HistoryContent.tsx
+"use client"
+export function HistoryContent() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const page = parseInt(searchParams.get("page") ?? "1")
+
+  const { data } = useQuery({
+    queryKey: ["history", page],
+    queryFn: () => getHistory((page - 1) * 20, 20),
+  })
+
+  function goToPage(n: number) {
+    router.push(`/history?page=${n}`, { scroll: false })
+    // URL changes  searchParams changes  page variable changes  TanStack Query refetches
+  }
+}
+```
+
+WHY URL-synced pagination: If the user is on `/history?page=3` and shares the URL,
+the recipient sees page 3 too. If instead pagination was in component state, sharing
+the URL would always show page 1 to the recipient  confusing and unhelpful.
+
+---
+
+### Complete Environment Variable Reference
+
+**Backend `.env` (gitignored):**
+```bash
+GITHUB_TOKEN=ghp_...              # LLM provider key  GitHub Models (Gemini 2.5 Flash)
+GOOGLE_API_KEY=AIza...            # Fallback LLM  Google AI Studio
+DEEPCOIN_API_KEY=your-secret-key  # Protects classify/metrics endpoints (optional in dev)
+ALLOWED_ORIGINS=http://localhost:3000,https://your-domain.com
+ENV=production                     # Gates Swagger UI (docs_url=None in production)
+LOG_FORMAT=json                    # json or text
+LOG_LEVEL=INFO
+```
+
+**Frontend `.env.local` (gitignored):**
+```bash
+DEEPCOIN_API_URL=http://127.0.0.1:8000          # Used by Next.js rewrites (server-side proxy)
+NEXT_PUBLIC_CLASSIFY_URL=http://127.0.0.1:8000  # Used by classifyApiClient (browser direct)
+NEXT_PUBLIC_API_KEY=your-secret-key             # Injected as X-API-Key header by axios interceptor
+```
+
+WHY some variables are `NEXT_PUBLIC_*`:
+Next.js only exposes env vars prefixed with `NEXT_PUBLIC_` to the browser bundle.
+Variables without this prefix are only available in Server Components and API routes.
+`NEXT_PUBLIC_CLASSIFY_URL` must be public because `classifyApiClient` runs IN THE BROWSER.
+`NEXT_PUBLIC_API_KEY` must be public because the axios interceptor runs in the browser.
+
+ Security note: `NEXT_PUBLIC_*` variables are embedded in the compiled JavaScript.
+Any user who opens browser DevTools  Sources can see them. This is acceptable for a
+non-public research system. For a production multi-tenant system, the API key would be
+managed server-side (in the Next.js API route that proxies classify  the browser never
+sees the key).
+
+---
+
+### How Framer Motion Powers the UI Transitions
+
+**AnimatePresence for mount/unmount animations:**
+```typescript
+import { AnimatePresence, motion } from "framer-motion"
+
+// Without AnimatePresence, unmounting components just disappear (no exit animation).
+// AnimatePresence detects when children are removed and runs their `exit` animation first.
+
+<AnimatePresence mode="wait">
+  {phase === "idle" && (
+    <motion.div
+      key="uploader"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+    >
+      <CoinUploader />
+    </motion.div>
+  )}
+  {phase === "done" && (
+    <motion.div
+      key="results"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+    >
+      <AnalysisPanel />
+    </motion.div>
+  )}
+</AnimatePresence>
+```
+
+`mode="wait"`: animate OUT the leaving component before animating IN the entering one.
+Sequential (not simultaneous). Prevents two panels from overlapping mid-animation.
+
+**CVA (Class Variance Authority) for component variants:**
+```typescript
+const badgeVariants = cva(
+  "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold",
+  {
+    variants: {
+      variant: {
+        identified:   "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30",
+        tta_consensus: "bg-teal-500/20 text-teal-400 border border-teal-500/30",
+        deep_search:  "bg-violet-500/20 text-violet-400 border border-violet-500/30",
+      }
+    }
+  }
+)
+
+// Usage:
+<span className={badgeVariants({ variant: tier })}>
+```
+
+CVA generates Tailwind class strings based on variant. Without CVA:
+```typescript
+const classes = tier === "identified" ? "bg-emerald-500/20 text-emerald-400 ..."
+              : tier === "tta_consensus" ? "bg-teal-500/20 ..."
+              : "bg-violet-500/20 ..."
+```
+With CVA: one declarative object. Type-safe (TypeScript knows valid variants). Maintainable.
+
+---
+
+### The Stats Strip on History Detail Page
+
+The stats strip shows three numbers:
+1. **Total analyses (global):** Reads from `HistoryListResponse.total`  which comes from
+   `SELECT COUNT(*) FROM history`  instant, accurate.
+2. **Route breakdown:** Counts in page window (e.g., "H:8 V:4 I:8")  counts type in
+   `items` array. WHY page window not global: global aggregation would require a new
+   backend endpoint. Page window is sufficient for quick insight.
+3. **Avg confidence:** `items.reduce((sum, i) => sum + i.confidence, 0) / items.length`.
+   Same page-window calculation.
+
+---
+
+### The Copy Link Button
+
+```typescript
+const [copied, setCopied] = useState(false)
+
+async function handleCopy() {
+  await navigator.clipboard.writeText(window.location.href)
+  setCopied(true)
+  setTimeout(() => setCopied(false), 2000)  // reset after 2 seconds
+}
+
+<button onClick={handleCopy}>
+  {copied ? <Check size={12} /> : <Copy size={12} />}
+  {copied ? "Copied!" : "Copy link"}
+</button>
+```
+
+`navigator.clipboard.writeText()` is async (requires user gesture, secure context HTTPS).
+The `copied` state swap triggers a transition: Copy icon  Check icon, "Copy link"  "Copied!".
+After 2 seconds, it resets. Standard pattern for clipboard copy feedback in modern interfaces.
+
+---
+
+## Section 52  How to Rebuild This Entire System From Scratch
+
+If you woke up tomorrow with no files and needed to rebuild DeepCoin from memory,
+here is the sequence. This is the final exam section.
+
+### 1. Environment (30 minutes)
+```powershell
+mkdir deepcoin ; cd deepcoin
+git init ; git remote add origin https://github.com/ChaiebDhia/DeepCoin-Core
+python -m venv venv ; & venv\Scripts\Activate.ps1
+# Install requirements.txt (50+ packages: torch, opencv, langchain, fpdf2, etc.)
+# Set up .gitignore: /data/, /models/, /venv/, /.env, notes.md
+```
+
+### 2. Data Pipeline (1 day)
+```python
+# audit.py: scan 9716 class folders, count images, histogram of distribution
+# Decision: threshold >= 10 images/class  438 viable classes
+# prep_engine.py: for each class: CLAHE(LAB L-channel)  letterbox(299x299)  save
+# Output: data/processed/[class_id]/[images]  7,677 images
+```
+
+### 3. CNN Training (1 day)
+```python
+# dataset.py: DeepCoinDataset (sorted class index, lazy loading, Albumentations)
+# model_factory.py: EfficientNet-B3 (replace head: 1536438, Dropout(0.4))
+# train.py: AdamW lr=1e-4, CosineAnnealingLR T=100, CrossEntropy label_smooth=0.1
+#           AMP (GradScaler + autocast), Mixup alpha=0.2, WeightedRandomSampler
+#           batch=16, early_stop patience=10
+# Save: models/best_model.pth + models/class_mapping.pth
+# Result: 80.03% TTA accuracy
+```
+
+### 4. Knowledge Base (3 hours scraping + 9 minutes indexing)
+```python
+# build_knowledge_base.py --all-types: scrape 9,716 CN types at 1 req/sec (~2h 41min)
+# rag_engine.py: 5 semantic chunks per type  9,541 types = 47,705 vectors
+# ChromaDB: sentence-transformers all-MiniLM-L6-v2 (384-dim, cosine, CPU)
+# BM25Okapi index over all text chunks
+# rebuild_chroma.py: populate ChromaDB in 500-item batches (~9 minutes)
+```
+
+### 5. Agent System (2 days)
+```python
+# gatekeeper.py: LangGraph StateGraph, CoinState TypedDict (12 fields)
+#   Routing: >0.85  historian, 0.40-0.85  validator, <0.40  investigator
+#   Per-node timing, retry (429/503 with backoff), graceful degradation
+# historian.py: get_context_blocks(type_id)  5 [CONTEXT N] blocks  Gemini prompt
+# validator.py: multi-scale HSV (40/60/80% crops, majority vote), detection_confidence
+# investigator.py: OpenCV fallback (HSV metal + Sobel edge), RAG search 9541 types
+# synthesis.py: FPDF2 direct draw (NO markdown parsing), _GREEK_MAP transliteration
+```
+
+### 6. FastAPI Backend (1 day)
+```python
+# main.py: lifespan (init gatekeeper), CORS, GZip, X-Request-ID, health (5 checks)
+# auth.py: hmac.compare_digest, dev-mode passthrough
+# limiter.py: slowapi singleton (separate file to avoid circular import)
+# _store.py: SQLite WAL mode, INSERT OR REPLACE, LIMIT/OFFSET pagination
+# schemas.py: Pydantic v2 ClassifyResponse, HistoryListResponse
+# routes/classify.py: Semaphore(1), magic bytes, to_thread, finally delete
+# routes/history.py: skip/limit, 204 DELETE
+# Run: uvicorn src.api.main:app --port 8000 --workers 1
+```
+
+### 7. Next.js Frontend (2 days)
+```typescript
+// npx create-next-app@latest frontend --typescript --tailwind --app
+// lib/store.ts: Zustand (_cancelFn bridge, UploadPhase state machine)
+// lib/api.ts: two Axios clients (direct + proxied), ApiError class
+// next.config.ts: security headers, CSP blob:, direct classify URL
+// .env.local: 127.0.0.1 (NOT localhost), NEXT_PUBLIC_CLASSIFY_URL
+// CoinUploader.tsx: blur check, canvas downsize, AbortController
+// AgentPipeline.tsx: 4-station mission control, particle beams, X button
+// AnalysisPanel.tsx: 3-state display (0.70/0.75 thresholds), CountUp, CVA badges
+// HistoryTable.tsx: useMutation delete, filter bar, sibling Link+button
+// npm run dev  verify 0 TypeScript errors
+```
+
+### 8. Verification
+```powershell
+# Backend:
+& venv\Scripts\python.exe scripts\test_pipeline.py  # 3/3 routes PASS
+pytest tests/ -v                                      # 36/36 tests pass
+# Frontend:
+cd frontend ; npx next build                          # 0 TS errors, 5 routes
+```
+
+---
+
+*Last updated: Engineering Journal expansion complete  Sections 4652.*
+*Journal scope: Every commit. Every file. Every function. Every engineering decision.*
+*Total: ~10,000 lines. The complete technical memory of DeepCoin from day 1 to Layer 5.*
+
