@@ -128,9 +128,10 @@ export function AgentPipeline() {
   addMessageRef.current = (stageIdx: number) => {
     const agent   = AGENTS[stageIdx];
     const idx     = msgIdxRef.current[stageIdx];
+    // All messages for this stage already shown — emit nothing
+    if (idx >= agent.messages.length) return;
     const message = agent.messages[idx];
-    // Advance but stop at the last message — do NOT wrap around
-    msgIdxRef.current[stageIdx] = Math.min(idx + 1, agent.messages.length - 1);
+    msgIdxRef.current[stageIdx] = idx + 1;   // advance past end to silence future ticks
     const id = ++logIdRef.current;
     setLog(l => [...l.slice(-7), { id, agentIdx: stageIdx, message }]);
   };
