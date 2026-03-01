@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+/**
+ * globals.css — DeepCoin brand design system
+ * ===========================================
+ * Tailwind v4 uses @theme for custom tokens.
+ * Standard Tailwind utilities (bg-blue-600, etc.) still work unchanged.
+ * Custom brand colours are referenced with var(--color-brand-*).
+ */
+
+:root {
+  /* DeepCoin brand palette — mirrors the PDF navy/blue scheme */
+  --brand-navy:     #0a1628;
+  --brand-dark:     #0f2040;
+  --brand-mid:      #1e5fa8;
+  --brand-light:    #3b82f6;
+  --brand-gold:     #d4a853;
+
+  /* Surface colours */
+  --surface-0:      #080e1a;   /* page background */
+  --surface-1:      #0f1d2e;   /* card background */
+  --surface-2:      #162436;   /* elevated card */
+  --surface-3:      #1e2f42;   /* input / table row */
+
+  /* Border */
+  --border:         #243447;
+
+  /* Text */
+  --text-primary:   #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted:     #64748b;
+}
+
+@theme inline {
+  --color-brand-navy:  var(--brand-navy);
+  --color-brand-dark:  var(--brand-dark);
+  --color-brand-mid:   var(--brand-mid);
+  --color-brand-light: var(--brand-light);
+  --color-brand-gold:  var(--brand-gold);
+
+  --color-surface-0:   var(--surface-0);
+  --color-surface-1:   var(--surface-1);
+  --color-surface-2:   var(--surface-2);
+  --color-surface-3:   var(--surface-3);
+
+  --color-border:      var(--border);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* ── Base HTML overrides ──────────────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+  box-sizing:  border-box;
+  border-color: var(--border);
+}
+
+html {
+  color-scheme: dark;
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--surface-0);
+  color:            var(--text-primary);
+  font-family:      var(--font-geist-sans, system-ui, sans-serif);
+  -webkit-font-smoothing:  antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Scrollbar styling ───────────────────────────────────────────────────── */
+
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--surface-1); }
+::-webkit-scrollbar-thumb { background: var(--brand-mid); border-radius: 3px; }
+
+/* ── Focus ring ──────────────────────────────────────────────────────────── */
+
+:focus-visible {
+  outline: 2px solid var(--brand-light);
+  outline-offset: 2px;
+}
+
+/* ── Prose utility — narrative paragraphs ────────────────────────────────── */
+
+.deepcoin-prose p   { margin-bottom: 0.875rem; line-height: 1.7; }
+.deepcoin-prose p:last-child { margin-bottom: 0; }
