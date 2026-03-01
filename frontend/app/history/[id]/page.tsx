@@ -14,10 +14,10 @@
  * build time. ISR would add complexity with no benefit for a single-user tool.
  */
 
-import { use }                from "react";
+import { use, useState }          from "react";
 import { useQuery }           from "@tanstack/react-query";
 import Link                   from "next/link";
-import { ArrowLeft, ExternalLink, FileDown, MapPin, Calendar, Coins, FlaskConical } from "lucide-react";
+import { ArrowLeft, ExternalLink, FileDown, MapPin, Calendar, Coins, FlaskConical, Link2, Check } from "lucide-react";
 
 import { getHistoryItem, pdfDownloadUrl } from "@/lib/api";
 import { AnalysisPanel }      from "@/components/coin/AnalysisPanel";
@@ -65,6 +65,15 @@ function RecordDetail({ data }: { data: ClassifyResponse }) {
   const hasQuickFacts = data.denomination || data.region || data.mint || data.date_range || data.material;
   const cnUrl = `https://www.corpus-nummorum.eu/types/${data.cnn.label}`;
 
+  // Copy-link state — resets to false after 2 seconds
+  const [copied, setCopied] = useState(false);
+  function handleCopyLink() {
+    navigator.clipboard.writeText(window.location.href).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
   return (
     <>
       {/* ── Page header ─────────────────────────────────────────────── */}
@@ -72,7 +81,14 @@ function RecordDetail({ data }: { data: ClassifyResponse }) {
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
-              CN {data.cnn.label}
+              <a
+                href={cnUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:underline underline-offset-4 hover:text-blue-300 transition-colors"
+              >
+                CN {data.cnn.label}
+              </a>
               {data.denomination && (
                 <span className="text-base font-normal ml-2 opacity-60">— {data.denomination}</span>
               )}
@@ -113,6 +129,21 @@ function RecordDetail({ data }: { data: ClassifyResponse }) {
                 Download PDF Report
               </a>
             )}
+            {/* Copy link — copies window.location.href to clipboard.
+                 Shows a green ✓ for 2 s then resets to the original icon. */}
+            <button
+              onClick={handleCopyLink}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all"
+              style={{
+                background: copied ? "rgba(16,185,129,0.12)" : "var(--surface-2)",
+                color:      copied ? "#6ee7b7" : "var(--text-muted)",
+                border:     copied ? "1px solid rgba(16,185,129,0.25)" : "1px solid var(--border)",
+              }}
+              title="Copy link to this record"
+            >
+              {copied ? <Check size={12} /> : <Link2 size={12} />}
+              {copied ? "Copied!" : "Copy link"}
+            </button>
           </div>
         </div>
       </div>

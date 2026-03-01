@@ -20,7 +20,7 @@ import Link                                         from "next/link";
 import { useState, useEffect }                       from "react";
 import { motion }                                    from "framer-motion";
 import CountUp                                       from "react-countup";
-import { Download, Clock, Cpu, BookOpen, Shield, Search } from "lucide-react";
+import { Download, Clock, Cpu, BookOpen, Shield, Search, ExternalLink } from "lucide-react";
 
 import type { ClassifyResponse, Top5Item }           from "@/types/api";
 import {
@@ -306,6 +306,38 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
             ))}
           </div>
         </div>
+
+        {/* ── Corpus Nummorum CTA ────────────────────────────────────────────
+         *  A full-width invitation to open the official scholarly record.
+         *  WHY a separate banner: the ↗ table links are fine for power users;
+         *  this card is for first-time viewers who need a clear signal that
+         *  there's more depth one click away. The hover translate-x animation
+         *  on the icon makes the interactivity unmistakable.
+         * ─────────────────────────────────────────────────────────────────── */}
+        <a
+          href={`https://www.corpus-nummorum.eu/types/${cnn.label}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="group flex items-center justify-between rounded-xl px-4 py-3 border transition-all hover:border-blue-500/50"
+          style={{
+            background:  "linear-gradient(135deg, rgba(37,99,235,0.05) 0%, rgba(99,102,241,0.03) 100%)",
+            borderColor: "rgba(59,130,246,0.20)",
+          }}
+        >
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-blue-300 group-hover:text-blue-200 transition-colors">
+              Explore the official scholarly record
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+              corpus-nummorum.eu · CN{" "}
+              <span className="font-mono">{cnn.label}</span>
+            </p>
+          </div>
+          <ExternalLink
+            size={15}
+            className="shrink-0 ml-3 text-blue-400 opacity-50 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all"
+          />
+        </a>
       </div>
     </Section>
   );
@@ -322,7 +354,20 @@ function HistorianSection({ result }: { result: ClassifyResponse }) {
   return (
     <Section icon={<BookOpen size={16} />} title={sectionTitle} variant="historian" delay={0.1}>
       <div className="flex flex-col gap-1">
-        <DataRow label="CN Type"      value={result.cnn.label ? `CN ${result.cnn.label}` : undefined} />
+        {result.cnn.label && (
+          <div className="flex items-start gap-2 py-1.5 border-b border-[var(--border)]">
+            <span className="text-xs text-[var(--text-muted)] w-32 shrink-0 pt-0.5">CN Type</span>
+            <a
+              href={`https://www.corpus-nummorum.eu/types/${result.cnn.label}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 transition-colors flex-1 flex items-center gap-1"
+            >
+              CN {result.cnn.label}
+              <ExternalLink size={11} className="opacity-60" />
+            </a>
+          </div>
+        )}
         <DataRow label="Denomination" value={result.denomination} />
         <DataRow label="Region"       value={result.region} />
         <DataRow label="Mint"         value={result.mint} />
@@ -362,7 +407,20 @@ function ValidatorSection({ result }: { result: ClassifyResponse }) {
       title={isLowConf ? "Best Match · Forensic Check" : "Forensic Validation"}
       variant="validator" delay={0.1}>
       <div className="flex flex-col gap-1">
-        <DataRow label="CN Type"      value={result.cnn.label ? `CN ${result.cnn.label}` : undefined} />
+        {result.cnn.label && (
+          <div className="flex items-start gap-2 py-1.5 border-b border-[var(--border)]">
+            <span className="text-xs text-[var(--text-muted)] w-32 shrink-0 pt-0.5">CN Type</span>
+            <a
+              href={`https://www.corpus-nummorum.eu/types/${result.cnn.label}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 transition-colors flex-1 flex items-center gap-1"
+            >
+              CN {result.cnn.label}
+              <ExternalLink size={11} className="opacity-60" />
+            </a>
+          </div>
+        )}
         <DataRow label="Denomination" value={result.denomination} />
         <DataRow label="Region"       value={result.region} />
         <DataRow label="Material"     value={result.material} />
@@ -472,32 +530,42 @@ export function AnalysisPanel({ result, showLink = false }: AnalysisPanelProps) 
         <span className={`text-xs font-bold px-3 py-1 rounded-full ${routeColor}`}>
           {routeLabel}
         </span>
-        {result.cnn.confidence >= DISPLAY_CONF_THRESHOLD ? (
-          /* High confidence — normal coloured badge */
-          <Badge variant={confBadgeVariant(result.cnn.confidence)}>
-            CN {result.cnn.label} · {formatConfidence(result.cnn.confidence)}
-          </Badge>
-        ) : (result.cnn.vote_fraction != null && result.cnn.vote_fraction >= TTA_VOTE_THRESHOLD) ? (
-          /* TTA consensus — teal badge, distinguishable from purple "best match" */
-          <span
-            className="text-xs font-bold px-3 py-1 rounded-full"
-            style={{
-              background: "rgba(20,184,166,0.16)",
-              color:      "#5eead4",
-              border:     "1px solid rgba(20,184,166,0.30)",
-            }}
-          >
-            CN {result.cnn.label} · TTA Consensus
-          </span>
-        ) : (
-          /* Genuinely unknown — neutral "Deep Search" badge */
-          <span
-            className="text-xs font-bold px-3 py-1 rounded-full"
-            style={{ background: "rgba(139,92,246,0.15)", color: "#c4b5fd", border: "1px solid rgba(139,92,246,0.25)" }}
-          >
-            CN {result.cnn.label} · Deep Search
-          </span>
-        )}
+        {/* Wrapping the type badge in <a display:contents> makes the badge itself a CN link
+             without altering its layout or visual style at all. */}
+        <a
+          href={`https://www.corpus-nummorum.eu/types/${result.cnn.label}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ display: "contents" }}
+          title="View this coin type on Corpus Nummorum"
+        >
+          {result.cnn.confidence >= DISPLAY_CONF_THRESHOLD ? (
+            /* High confidence — normal coloured badge */
+            <Badge variant={confBadgeVariant(result.cnn.confidence)}>
+              CN {result.cnn.label} · {formatConfidence(result.cnn.confidence)}
+            </Badge>
+          ) : (result.cnn.vote_fraction != null && result.cnn.vote_fraction >= TTA_VOTE_THRESHOLD) ? (
+            /* TTA consensus — teal badge, distinguishable from purple "best match" */
+            <span
+              className="text-xs font-bold px-3 py-1 rounded-full"
+              style={{
+                background: "rgba(20,184,166,0.16)",
+                color:      "#5eead4",
+                border:     "1px solid rgba(20,184,166,0.30)",
+              }}
+            >
+              CN {result.cnn.label} · TTA Consensus
+            </span>
+          ) : (
+            /* Genuinely unknown — neutral "Deep Search" badge */
+            <span
+              className="text-xs font-bold px-3 py-1 rounded-full"
+              style={{ background: "rgba(139,92,246,0.15)", color: "#c4b5fd", border: "1px solid rgba(139,92,246,0.25)" }}
+            >
+              CN {result.cnn.label} · Deep Search
+            </span>
+          )}
+        </a>
         <span className="text-xs text-[var(--text-muted)] flex items-center gap-1 ml-auto">
           <Clock size={11} />
           {result.processing_time_s.toFixed(1)} s · {formatDate(result.timestamp)}

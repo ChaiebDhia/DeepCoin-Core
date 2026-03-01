@@ -25,6 +25,7 @@ import { History }                                 from "lucide-react";
 import { getHistory, deleteHistoryItem }           from "@/lib/api";
 import { HistoryTable }                            from "@/components/history/HistoryTable";
 import { Spinner }                                 from "@/components/ui/spinner";
+import { routeStyle }                              from "@/lib/utils";
 
 const PAGE_LIMIT = 20;
 
@@ -98,6 +99,57 @@ function HistoryContent() {
         <div className="flex items-center gap-3 py-8 justify-center text-sm" style={{ color: "var(--text-muted)" }}>
           <Spinner size={18} />
           Loading history…
+        </div>
+      )}
+
+      {/* Stats strip — quick at-a-glance numbers above the filter bar.
+           Uses data.total (global count from SQL) for "total", and computes
+           route breakdown + avg confidence from the current page window.
+           WHY current page only: we only have the page slice in memory.
+           total is still the accurate global count from SELECT COUNT(*). */}
+      {data && data.total > 0 && (
+        <div
+          className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl px-4 py-2.5 text-xs border"
+          style={{ background: "var(--surface-1)", borderColor: "var(--border)" }}
+        >
+          <span style={{ color: "var(--text-muted)" }}>
+            <span className="font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>
+              {data.total}
+            </span>{" "}
+            analyses total
+          </span>
+          <span style={{ color: "var(--border)" }}>·</span>
+
+          {/* Route breakdown — counts from current page window */}
+          {Object.entries(
+            data.items.reduce<Record<string, number>>(
+              (acc, r) => ({ ...acc, [r.route_taken]: (acc[r.route_taken] ?? 0) + 1 }),
+              {}
+            )
+          ).sort().map(([route, count]) => (
+            <span
+              key={route}
+              className={`px-2 py-0.5 rounded-full border text-[11px] font-medium ${routeStyle(route).color}`}
+            >
+              {count} {routeStyle(route).label}
+            </span>
+          ))}
+
+          {/* Avg confidence from current page */}
+          {data.items.length > 0 && (
+            <>
+              <span style={{ color: "var(--border)" }}>·</span>
+              <span className="ml-auto" style={{ color: "var(--text-muted)" }}>
+                page avg{" "}
+                <span className="font-semibold" style={{ color: "var(--text-primary)" }}>
+                  {(
+                    (data.items.reduce((s, r) => s + r.confidence, 0) / data.items.length) * 100
+                  ).toFixed(1)}%
+                </span>
+                {" "}confidence
+              </span>
+            </>
+          )}
         </div>
       )}
 
