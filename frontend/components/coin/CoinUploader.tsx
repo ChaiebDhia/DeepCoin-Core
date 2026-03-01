@@ -20,7 +20,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { UploadCloud, ImageIcon, XCircle }    from "lucide-react";
+import { UploadCloud, ImageIcon, XCircle, StopCircle } from "lucide-react";
 import toast                                  from "react-hot-toast";
 
 import { classifyCoin }                       from "@/lib/api";
@@ -158,6 +158,14 @@ export function CoinUploader() {
     }
   }
 
+  // Abort the in-flight request and reset UI to idle
+  function handleCancel() {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    reset();
+    toast("Analysis cancelled.", { icon: "✋" });
+  }
+
   // ── Derived state ──────────────────────────────────────────────────────────
 
   const isLoading     = phase === "uploading" || phase === "processing";
@@ -288,20 +296,28 @@ export function CoinUploader() {
         </div>
       )}
 
-      {/* Analyse button */}
-      <Button
-        variant="primary"
-        size="lg"
-        disabled={!canAnalyse}
-        onClick={handleAnalyse}
-        className="w-full"
-      >
-        {isLoading ? (
-          <><Spinner size={16} /> {phaseLabel}</>
-        ) : (
-          "Analyse Coin"
-        )}
-      </Button>
+      {/* Action button — Cancel during loading, Analyse when idle */}
+      {isLoading ? (
+        <Button
+          variant="secondary"
+          size="lg"
+          onClick={handleCancel}
+          className="w-full border border-red-700/50 text-red-400 hover:bg-red-900/30 hover:text-red-300"
+        >
+          <StopCircle size={16} />
+          Cancel Analysis
+        </Button>
+      ) : (
+        <Button
+          variant="primary"
+          size="lg"
+          disabled={!canAnalyse}
+          onClick={handleAnalyse}
+          className="w-full"
+        >
+          Analyse Coin
+        </Button>
+      )}
 
       {/* Error message */}
       {phase === "error" && (
