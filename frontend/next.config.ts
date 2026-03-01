@@ -43,7 +43,7 @@ const securityHeaders = [
       "img-src 'self' blob: data:",
       "font-src 'self'",
       // connect-src self: Next.js HMR (dev) + /api/* proxied calls
-      "connect-src 'self'",
+      "connect-src 'self' http://127.0.0.1:8000 http://localhost:8000",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
@@ -52,6 +52,11 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Hide the Next.js dev overlay icons (build spinner bottom-right,
+  // framework logo bottom-left). They are purely cosmetic in dev mode
+  // and add visual clutter to the UI during testing.
+  devIndicators: false,
+
   async headers() {
     return [
       {

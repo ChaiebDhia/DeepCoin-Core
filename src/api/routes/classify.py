@@ -229,12 +229,18 @@ async def classify(
 
     # ── 7. Persist to history ──────────────────────────────────────────────────
     # Run in thread pool to avoid blocking event loop on file I/O
+    # WHY try/except: a history write failure must NEVER cause a 500 for the
+    # caller. The analysis completed successfully — losing a history record
+    # is acceptable; returning 500 after full pipeline completion is not.
     history_record = {
         **response.model_dump(),
         "cnn": response.cnn.model_dump(),   # flatten sub-model for JSON storage
         "image_path": str(save_path),       # full disk path (not in response)
     }
-    await asyncio.to_thread(history_append, history_record)
+    try:
+        await asyncio.to_thread(history_append, history_record)
+    except Exception as hist_exc:
+        logger.error("history_append failed (non-fatal): %s", hist_exc, exc_info=True)
 
     logger.info(
         "classify: id=%s  route=%s  label=%s  conf=%.1f%%  time=%.2fs  pdf=%s",
