@@ -12446,3 +12446,500 @@ Makefile                            Shortcuts: make api, make test, make lint, m
 ```
 
 ---
+
+---
+
+## Section 54  TTA UX Overhaul + Critical Auto-Crop Bug Fix
+**Date:** March 2, 2026 | **Commits:** `44b208b`, `f76d274`
+
+---
+
+### 54.1  The Problem Report
+
+The user uploaded `CN_type_858_cn_coin_2702_p.jpg`  a coin that exists in the training set
+at class folder `858/`  and the frontend showed:
+
+```
+TTA Consensus (6/8 agree)
+similarity score: 7.8%
+tooltip: "Why is the score low?  reflects image capture conditions
+          (screenshot quality, angle, lighting) rather than classification uncertainty"
+```
+
+Two things were wrong:
+
+1.  **The label was a lie.**  The tooltip blamed image capture quality.  But this was a
+    *processed* image taken directly from `data/processed/858/`  identical pixel
+    distribution to training.  The real cause was visual ambiguity between adjacent
+    CN types, not photography.
+
+2.  **The threshold was too low.**  `TTA_VOTE_THRESHOLD = 0.75` meant 6 out of 8 passes
+    agreeing triggered "TTA Consensus"  but 6/8 = 75% means 2 passes disagreed.
+    That is not consensus.  It is a bare majority.
+
+Then the user tested with *processed* images:
+- Type 1015: **3.0% confidence**
+- Type 858: **10.2% confidence** (predicted as type 860, completely wrong)
+
+This was catastrophic  the system had 79% test accuracy during training, and now it
+was giving 3% on its own training data.
+
+---
+
+### 54.2  Root Cause Analysis  Auto-Crop Destroying Processed Images
+
+File: `src/core/inference.py`  `_auto_crop_coin()`
+
+The auto-crop feature was added in commit `cadfac0` to help real user photos.
+It runs HoughCircles to detect the coin disk, then crops to it.
+
+The skip condition was:
+
+```python
+if min(h, w) < 200:   # OLD  WRONG
+    return img_bgr
+```
+
+What this means:
+- Training image (299  299): `min(299, 299) = 299 > 200`  **HoughCircles fires**
+- User photo (1200  900): `min(900, 1200) = 900 > 200`  HoughCircles fires (intended)
+
+Both paths went through HoughCircles.  For 299299 images, HoughCircles found a circle,
+cropped to it, and stripped the zero-padding that had been carefully added during
+preprocessing in `prep_engine.py`.
+
+The zero-padding is not cosmetic  it preserves the coin's circular shape as centered in a
+square frame.  The CNN's 438  7,677 training examples all had this framing.  After the
+crop stripped it, the spatial composition changed.  The EfficientNet-B3 feature maps
+activated differently.  Confidence collapsed.
+
+**The fix:**
+
+```python
+if max(h, w) < 400:   # NEW  CORRECT
+    return img_bgr
+```
+
+Now:
+- Training image (299  299): `max(299, 299) = 299 < 400`  **skip, return untouched**
+- User photo ( 600 px on any side): `max  600 > 400`  HoughCircles fires (intended)
+
+The threshold 400 px is a safe gap above the 299 px processed-image size and below the
+minimum sensible user photo (which phone cameras produce at  800 px on the long side).
+
+**Before fix:**  type 1015 = 3% confidence | type 858 = 2.5%
+**After fix:**   type 1015 = 97.5% confidence | type 858 = 91.7%
+
+---
+
+### 54.3  TTA UX Fixes  `AnalysisPanel.tsx` and `history/[id]/page.tsx`
+
+**1. Raise the vote threshold:**
+
+```typescript
+// Old
+const TTA_VOTE_THRESHOLD = 0.75;   // 6/8 passes
+
+// New
+const TTA_VOTE_THRESHOLD = 0.875;  // 7/8 passes
+```
+
+7/8 = 87.5%.  Only one pass disagrees.  That is genuine consensus.
+
+**2. Rename State 2 label:**
+
+```
+Old: "TTA Consensus"   (implied the confidence score is reliable)
+New: "Consistent Match" (describes what it actually is: visual consistency)
+```
+
+**3. Fix the score label:**
+
+```
+Old: "similarity score: 7.8%"   (misleading  "similarity" implies it measures
+                                  distance to a reference standard)
+New: "CNN confidence: 7.8%"     (honest  it is the raw softmax probability)
+```
+
+**4. Fix the tooltip:**
+
+```
+Old title: "Why is the score low?"
+New title: "What does this mean?"
+
+Old body: "The score reflects image capture conditions (screenshot quality,
+           angle, lighting) rather than classification uncertainty."
+           FACTUALLY WRONG for processed training images.
+
+New body: "The CNN assigned this type consistently across all TTA passes,
+           but with low per-pass probability  this typically means the coin
+           shares strong visual features with other CN types.
+           Review the Top-5 list for close neighbours."
+```
+
+The tooltip is now a teaching tool, not a blame-shifter.
+
+**5. Sync `history/[id]/page.tsx`:**
+
+```typescript
+// Old
+const confidenceTier = vote >= 0.75 ? "consensus" : "search";
+
+// New
+const confidenceTier = vote >= 0.875 ? "consensus" : "search";
+```
+
+---
+
+### 54.4  What This Teaches About Production AI
+
+The auto-crop bug is a classical **preprocessing pipeline mismatch**.
+
+Every ML system has two pipelines:
+1. **Training pipeline**  transforms raw data into what the model learns on
+2. **Inference pipeline**  transforms user input before the model sees it
+
+These pipelines must be **byte-for-byte identical** at every step except the step
+you explicitly change (augmentation).
+
+| Step | Training (`prep_engine.py`) | Inference (`inference.py`) |
+|------|---------------------------|--------------------------|
+| Read | `cv2.imread(path)` | `cv2.imread(path)` |
+| CLAHE | L-channel LAB, clip=2.0, tile=88 |  Added in commit `bc99423` |
+| Resize | Aspect-preserving + zero-pad  299299 |  Same |
+| Auto-crop | **NOT applied** (images already 299299) |  Was applying HoughCircles |
+
+The CLAHE mismatch was found and fixed earlier (commit `bc99423`).
+The auto-crop mismatch went undetected until a processed image was submitted live.
+
+**Key lesson:** Always test inference with the exact images you trained on.
+If training images get different confidence than unseen test images, the pipelines diverge.
+
+---
+
+## Section 55  Screenshot Warning Banner
+**Date:** March 2, 2026 | **Commit:** `9befeb3`
+
+---
+
+### 55.1  The Problem
+
+A user submitted a screenshot of the CN website showing coin type 858.
+The CNN returned 8% confidence, routed to Deep Search.
+
+This is **correct behaviour**  the pixel information was irreversibly degraded before
+our code ever ran.  The CNN still found CN 1015 at rank 1 in the Top-5.
+
+But the user had no warning.  From their perspective: "I gave it a coin image and it gave
+me 8%."  The system looked broken.
+
+The correct response is **not** to fix the confidence (impossible  the pixels are gone).
+The correct response is to **tell the user before they submit** that a screenshot will
+behave this way, and offer an alternative.
+
+---
+
+### 55.2  Detection Heuristics
+
+Function: `detectScreenshot(file: File): Promise<boolean>` in `CoinUploader.tsx`
+
+Three independent signals.  Any one signal triggers the warning:
+
+**Signal 1  Filename keyword** (language-aware):
+```typescript
+const SCREENSHOT_KEYWORDS = [
+  "screenshot", "screen shot", "screen_shot",
+  "capture", "captura",           // English, Spanish, Portuguese
+  "bildschirm",                   // German
+  "schermata",                    // Italian
+  "scherm",                       // Dutch
+  "ekran",                        // Turkish, Polish
+  "??????", "??????",             // Russian, Ukrainian
+  "snímek",                       // Czech
+];
+```
+Detects default naming conventions from Windows Snipping Tool, macOS CMD+Shift+4,
+Android screenshot, iOS screenshot, etc.
+
+**Signal 2  PNG + screen aspect ratio:**
+```typescript
+const SCREEN_RATIOS = [
+  16/9,    // 1.77   19201080, 25601440, 38402160
+  16/10,   // 1.6     19201200, 25601600
+  4/3,     // 1.33   older monitors, tablets
+  21/9,    // 2.33   ultrawide
+];
+const RATIO_TOLERANCE = 0.06;
+```
+Why PNG only: JPEG is the standard format for real coin photographs.  A PNG at screen
+aspect ratio is almost always a screenshot.
+
+**Signal 3  Large PNG:**
+```typescript
+if (file.type === "image/png" && file.size > 500_000)
+```
+High-DPI screenshots (Retina, 4K) are large PNG files.  Genuine coin photos at this
+size would typically be JPEG from a camera.
+
+The three signals are combined as OR: if any is true, `isScreenshot` becomes true.
+
+---
+
+### 55.3  UI Implementation
+
+Orange warning banner shown between the drop zone and the quality warnings:
+
+```tsx
+{hasFile && isScreenshot && (
+  <motion.div /* orange gradient border, appears on detection */>
+    <p> Screenshot detected  lower confidence expected</p>
+    <p>
+      Screenshots pass through browser rendering, OS compositing, and
+      JPEG compression before our model sees them.  That processing is
+      irreversible  the CNN will still find the closest match, but
+      confidence will be significantly lower than with the original image.
+    </p>
+    <p>
+       For best results: download the original image directly from
+      corpus-nummorum.eu rather than screenshotting the page.
+    </p>
+  </motion.div>
+)}
+```
+
+**Why orange, not red:**
+Red signals an error  something is broken.  Orange signals a caution  everything
+works, but the result may be suboptimal.  The distinction matters for user trust.
+
+**State lifecycle:**
+- Set to `true` in `handleFiles()` when screenshot detected
+- Cleared on file remove button click
+- Cleared on `handleCancel()`
+- Cleared when a new file replaces the current one
+
+---
+
+### 55.4  What This Teaches About UX for ML Systems
+
+The screenshot problem is a category of issue called **input quality degradation**.
+The model cannot fix it.  But the system CAN:
+
+1. Detect it proactively
+2. Explain it honestly
+3. Offer an alternative path
+
+This pattern applies broadly:
+- Blurry image  warn about focus
+- Extreme shadow on one side  warn about lighting
+- Non-coin image  warn about unexpected content
+
+All of these are handled by the existing `analyseImageQuality()` function in
+`CoinUploader.tsx`.  The screenshot detection is a fourth signal added to that family.
+
+---
+
+## Section 56  Waiting Animation + Mark-as-Wrong Feedback
+**Date:** March 2, 2026 | **Commits:** `9befeb3`, `9f8ce0d`
+
+---
+
+### 56.1  AgentPipeline Waiting Animation
+
+**Problem:** During the 1020 second processing window, the AgentPipeline overlay
+showed static agent cards.  The user had no visual indication that work was actively
+progressing inside each node.  A static UI during a long wait reads as frozen.
+
+**Three changes to `AgentPipeline.tsx`:**
+
+---
+
+**Change 1: Coin-flip header animation**
+
+Replaced the static green pulse dot with an animated  emoji:
+
+```tsx
+<motion.span
+  animate={{ scaleX: [1, 0.08, 1, 0.08, 1] }}
+  transition={{ duration: 1.8, repeat: Infinity, repeatDelay: 3.5, ease: "easeInOut" }}
+  className="text-base select-none leading-none"
+  style={{ display: "inline-block" }}
+>
+  
+</motion.span>
+```
+
+`scaleX` from `1.0` to `0.08` and back animates a coin flipping on its vertical axis.
+At `scaleX  0` the coin appears edge-on (a thin line).  The `repeatDelay: 3.5s` means
+it pauses at full width for 3.5 seconds between flips  not distracting, but alive.
+
+Why `scaleX` not a CSS 3D `rotateY`: Framer Motion's `scaleX` is GPU-accelerated via
+`transform: scaleX()` and works in all browsers without a 3D perspective context.
+`rotateY` needs `perspective: Npx` on the parent to look correct.
+
+---
+
+**Change 2: Mascot speech-bubble row**
+
+Inserted between the header and the agent station cards.  Shows the latest log message
+attributed to the currently active agent, with three bouncing typing dots:
+
+```tsx
+<AnimatePresence mode="wait">
+  {log.length > 0 && (
+    <motion.div key={log[log.length - 1].id} ...>
+
+      {/* Spring-pop emoji on stage change */}
+      <motion.span
+        key={activeStage}
+        initial={{ scale: 0.6 }}
+        animate={{ scale: 1 }}
+        transition={{ type: "spring", stiffness: 420, damping: 18 }}
+      >
+        {AGENTS[activeStage].emoji}
+      </motion.span>
+
+      {/* Speech bubble */}
+      <div style={{ background: AGENTS[activeStage].bgActive }}>
+        <span>{AGENTS[activeStage].name}:</span>
+        {log[log.length - 1].message}
+      </div>
+
+      {/* Bouncing typing dots */}
+      {[0, 1, 2].map(i => (
+        <motion.span
+          animate={{ opacity: [0.25, 1, 0.25], y: [0, -4, 0] }}
+          transition={{ duration: 0.75, repeat: Infinity, delay: i * 0.17 }}
+        />
+      ))}
+    </motion.div>
+  )}
+</AnimatePresence>
+```
+
+**Why `mode="wait"` on AnimatePresence:**
+Each new log message gets a unique `key`.  When the key changes, the old message
+exits before the new one enters.  Without `mode="wait"` both would animate
+simultaneously, creating layout jumps.
+
+**Why `key={activeStage}` on the emoji span:**
+Framer Motion treats a new `key` as a new element  it gets its own mount animation.
+When the stage advances (Preprocessor  CNN  KB  LLM  Synthesis), the emoji
+spring-pops into existence, drawing the user's eye to the stage transition.
+
+**Why staggered dot delay (`i * 0.17s`):**
+Three dots cycling at the same phase look like a single blinking blob.
+Staggering by 170ms gives the left-to-right wave pattern ("...") that humans
+universally recognise as "typing in progress."
+
+---
+
+### 56.2  Mark-as-Wrong Feedback System
+
+**Motivation:**  The system makes mistakes.  With 79% accuracy, ~1 in 5 coins is
+misclassified.  A museum curator reviewing PDFs will notice errors.  Without a
+feedback mechanism, those errors are invisible to the developer.  With one, they
+become a dataset of hard cases for future retraining.
+
+**Design principle:** Zero friction for the user.  One button  one typed correction
+ done.  No modal, no page navigation, no mandatory fields except the type ID.
+
+---
+
+**Backend  `_store.py`: `add_feedback()`**
+
+```python
+def add_feedback(record_id: str, correct_type_id: str, note: str) -> bool:
+    """
+    Patch the stored JSON payload to include a feedback sub-dict.
+    No schema migration required  the feedback is embedded in the
+    existing payload column.
+    """
+    payload["feedback"] = {
+        "correct_type_id": correct_type_id,
+        "note":            note,
+        "submitted_at":    datetime.now(timezone.utc).isoformat(),
+    }
+    # SQL UPDATE only touches the payload column; indexed columns unchanged
+```
+
+**Why embed in payload, not a new column:**
+Adding a column requires `ALTER TABLE classifications ADD COLUMN feedback TEXT`.
+SQLite supports ALTER TABLE ADD COLUMN, but only for nullable columns.
+More importantly, it would require a migration script and adds operational
+complexity.  Embedding in JSON is consistent with how `narrative`, `mint`,
+`pdf_url`, and every other optional field are already stored.
+
+**Backend  `history.py`: `POST /api/history/{id}/feedback`**
+
+```python
+@router.post("/history/{record_id}/feedback")
+async def submit_feedback(record_id: str, body: FeedbackRequest) -> JSONResponse:
+    ok = await asyncio.to_thread(add_feedback, record_id, body.correct_type_id, body.note)
+    if not ok:
+        raise HTTPException(status_code=404, ...)
+    return JSONResponse({"status": "ok"})
+```
+
+Returns 200 with body (not 204) because the frontend mutation reads the response
+to confirm success and show the "Correction saved" message.  204 has no body by
+HTTP specification.
+
+---
+
+**Frontend  `AnalysisPanel.tsx`: Inline feedback form**
+
+State machine with 4 states:
+
+```
+idle  (thumbs-down click)  open form
+open form  (submit)  submitting
+submitting  (API success)  done (shows green "Correction saved ")
+done  (2.5s timeout)  idle, form closes
+submitting  (API error)  idle ("Try again" button label)
+```
+
+The form slides down using `height: 0  auto` Framer Motion animation.
+`height: "auto"` is a special Framer Motion value  it reads the natural
+height of the DOM element at mount time, so the animation works without
+knowing the pixel height in advance.
+
+The thumbs-down button sits at `ml-auto` (far right of the footer bar),
+visually separated from the download and history buttons.  It is
+styled with a muted outline in idle state and switches to red when the
+form is open, giving a clear "this is a destructive/correction action" signal.
+
+---
+
+**Data flow summary:**
+
+```
+User clicks "Mark as wrong"
+   form slides open
+   user types correct CN type ID (e.g. "1017") + optional note
+   Submit clicked
+   submitFeedback(result.id, "1017", note)  [lib/api.ts]
+   POST /api/history/{id}/feedback          [FastAPI]
+   add_feedback(id, "1017", note)           [_store.py]
+   payload["feedback"] = {...}
+   SQL UPDATE classifications SET payload=? WHERE id=?
+   JSONResponse({"status": "ok"})
+   "Correction saved " for 2.5s
+   form closes
+```
+
+The feedback is now permanently attached to that classification record and
+visible in `GET /api/history/{id}`  the history detail page payload will
+include the `feedback` key.  Future work: display it in the history detail
+page and export it as a CSV for retraining.
+
+---
+
+### 56.3  Summary of Commits This Session
+
+| Commit | Description | Files |
+|--------|-------------|-------|
+| `44b208b` | TTA threshold 0.750.875; honest tooltip; "CNN confidence:" | `AnalysisPanel.tsx`, `history/[id]/page.tsx` |
+| `f76d274` | Auto-crop skip: `min(h,w)<200`  `max(h,w)<400` | `inference.py` |
+| `9befeb3` | Screenshot warning (3 heuristics) + coin-flip + mascot speech bubble + typing dots | `CoinUploader.tsx`, `AgentPipeline.tsx` |
+| `9f8ce0d` | Mark-as-wrong: `add_feedback()` store + POST endpoint + inline form | `_store.py`, `history.py`, `api.ts`, `AnalysisPanel.tsx` |
+
