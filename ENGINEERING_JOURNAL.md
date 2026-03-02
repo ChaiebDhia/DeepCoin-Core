@@ -7,7 +7,7 @@
 **Period**: PFE (Final Year Engineering Internship), Feb–July 2026  
 **GitHub**: https://github.com/ChaiebDhia/DeepCoin-Core  
 **Author**: Dhia Chaïeb  
-**Status as of**: March 2026 — Phase A1+A2 complete: PostgreSQL ORM (6 tables: User, Classification, Feedback, AuditLog, EmailVerification, RefreshToken), Alembic migration 001_initial_schema, full JWT auth system (8 endpoints, bcrypt work-factor-12, HS256 JWT, refresh-token rotation, RBAC with 3 roles). Frontend fully live through Phase 4 UX (CN links, delete, filter bar, stats strip, copy link, screenshot warning, mark-as-wrong feedback). Sections 59–61 added: full annotated gatekeeper.py + historian.py + frontend store.ts / CoinUploader.tsx from blank files. Table of Contents expanded to all 61 sections. HEAD: 608e91d. Phase A3 (per-user rate limiting + AuditLog writes) is next.  
+**Status as of**: March 2026 — Phase A1+A2+A3 complete: PostgreSQL ORM (6 tables: User, Classification, Feedback, AuditLog, EmailVerification, RefreshToken), Alembic migration 001_initial_schema, full JWT auth system (8 endpoints, bcrypt work-factor-12, HS256 JWT, refresh-token rotation, RBAC with 3 roles). Phase A3: shared `src/api/db/audit.py`, per-user rate-limiting key (`user_or_ip_key`), AuditLog writes on classify + delete. Frontend fully live through Phase 4 UX (CN links, delete, filter bar, stats strip, copy link, screenshot warning, mark-as-wrong feedback). Sections 59–62 added. Table of Contents expanded to all 62 sections. HEAD: to-be-updated after commit. 46/46 unit tests passing.  
 
 ---
 
@@ -74,6 +74,7 @@
 59. [Section 59 — Full Annotated `gatekeeper.py`: Every Line Explained](#section-59--full-annotated-gatekeeperpy--every-line-explained)
 60. [Section 60 — Full Annotated `historian.py`: Every Line Explained](#section-60--full-annotated-historianpy--every-line-explained)
 61. [Section 61 — Frontend: `store.ts` + `CoinUploader.tsx` From Blank Files](#section-61--frontend--storets--coinuploadertsx-from-blank-files)
+62. [Section 62 — Phase A3: Per-User Rate Limiting + AuditLog Writes](#section-62--phase-a3-per-user-rate-limiting--auditlog-writes)
 
 ---
 
@@ -19762,3 +19763,315 @@ Zero prop drilling. Zero parent involvement. Pure Zustand cross-component commun
 *Engineering Journal -- Sections 59-61 added.*
 *Coverage: Full annotated gatekeeper.py, historian.py, store.ts, CoinUploader.tsx.*
 *A reader can now build every part of this system from blank files.*
+
+---
+
+## Section 62  Phase A3: Per-User Rate Limiting + AuditLog Writes
+
+### What This Section Covers
+
+Phase A3 adds two production-hardening capabilities on top of the JWT auth system built in A1/A2:
+
+1. **Per-user rate limiting**  authenticated users are throttled by identity (`user:<uuid>`), not by IP address. A user behind a corporate NAT (shared IP) is no longer blocked by a colleague's requests.
+2. **AuditLog writes**  every `POST /api/classify` and `DELETE /api/history/{id}` action writes a structured row to the `audit_logs` table (who did it, from where, what resource was touched).
+
+Files changed  5 modified, 2 new:
+
+```
+MODIFIED  src/api/auth/router.py         removed inline helpers, now uses shared module
+MODIFIED  src/api/routes/classify.py     added optional_user + db deps + audit write
+MODIFIED  src/api/routes/history.py      added optional_user + db deps + audit on delete
+MODIFIED  src/api/limiter.py             replaced get_remote_address with user_or_ip_key
+MODIFIED  pyproject.toml                 reverted asyncio_mode (pytest-asyncio not installed)
+NEW       src/api/db/audit.py            shared write_audit() + client_ip() helpers
+NEW       tests/unit/test_audit.py       9 new tests  46 total, all passing
+```
+
+---
+
+### The Core Insight: Why Extract `audit.py`?
+
+Before Phase A3, `auth/router.py` contained two private helpers:
+
+```python
+async def _write_audit(db, *, action, user_id, ...): ...
+def _client_ip(request): ...
+```
+
+These were fine when only the auth router needed them. But Phase A3 requires `classify.py` and `history.py` to also write audit rows. If those modules imported the helpers from `auth/router.py`, it would create a circular import:
+
+```
+classify.py    auth/router.py    auth/deps.py    db/models.py    (shared base)
+```
+
+FastAPI would fail to start. The solution is to move the helpers to a neutral module that sits below all routes in the dependency tree:
+
+```
+src/api/db/audit.py    no FastAPI router imports, no route-level code
+```
+
+Every route can import from `db/` without circularity because `db/` is a leaf in the import graph.
+
+**WHAT** `db/audit.py` exports:
+- `write_audit(db, *, action, ...)`  builds an `AuditLog` ORM instance and calls `db.add()`, never `db.commit()`
+- `client_ip(request)`  returns first IP from `X-Forwarded-For` or `request.client.host`
+
+**WHY** no commit inside `write_audit`:
+The SQLAlchemy `AsyncSession` lifecycle is owned by `get_db()` (the FastAPI dependency). `get_db()` yields the session to the route, then commits or rolls back after the route handler returns. If `write_audit` called `db.commit()` internally, it would commit the entire transaction mid-request  before the route's own DB work is done. This would either cause a double-commit error or silently drop the route's subsequent writes. The correct contract: *write_audit adds a row to the session; the session commits when the request ends.*
+
+---
+
+### `src/api/db/audit.py`  Line-by-Line
+
+```python
+"""
+src/api/db/audit.py
+====================
+Shared audit helpers used by every API route that needs to write to audit_logs.
+
+Extracted from auth/router.py in Phase A3 so that classify.py and history.py
+can import without creating a circular auth/router  classify  auth/router chain.
+"""
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import Request
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.api.db.models import AuditLog
+```
+
+Why `from __future__ import annotations`? Enables PEP 563 postponed evaluation of annotations. Without it, `type | None` syntax requires Python 3.10+. With it, the annotation is a string at parse time, so Python 3.9 can run the same code.
+
+```python
+async def write_audit(
+    db: AsyncSession,
+    *,
+    action: str,
+    user_id: str | None = None,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
+    payload: dict[str, Any] | None = None,
+    ip_address: str | None = None,
+) -> None:
+```
+
+All parameters after `*` are keyword-only. This is intentional  calling `write_audit(db, "coin.classify", "abc")` is ambiguous and error-prone. Keyword-only forces the caller to be explicit:
+
+```python
+await write_audit(db, action="coin.classify", user_id=current_user.id, ...)
+```
+
+```python
+    row = AuditLog(
+        action=action,
+        user_id=user_id,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        payload=payload,
+        ip_address=ip_address,
+    )
+    db.add(row)
+    # NO db.commit()  session lifecycle owned by get_db()
+```
+
+`db.add()` is synchronous (it queues the INSERT in the unit-of-work). The actual SQL runs when `await db.commit()` is called later by `get_db()`.
+
+```python
+def client_ip(request: Request) -> str | None:
+    """
+    Extract the real client IP address.
+
+    Checks X-Forwarded-For first (set by Nginx reverse proxy).
+    X-Forwarded-For format: "original_client, proxy1, proxy2"
+    We want the first entry  the original client.
+
+    Falls back to request.client.host for direct connections (dev/test).
+    Returns None if request.client is None (Unix socket or test environment).
+    """
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.client.host if request.client else None
+```
+
+Why the `if request.client else None` guard? In unit tests, FastAPI's `TestClient` sets `request.client = None` when running under some transport configurations. Without the guard, the function raises `AttributeError` on `.host` in test mode. A None IP is acceptable  the audit row is still written, just without an IP.
+
+---
+
+### `src/api/limiter.py`  Per-User Rate Limiting
+
+**Before Phase A3:**
+
+```python
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+```
+
+This buckets ALL requests to the same IP together. A user behind a corporate NAT shares a bucket with hundreds of colleagues  five colleagues doing valid analysis fills the bucket and 401 appears for everyone.
+
+**After Phase A3:**
+
+```python
+def user_or_ip_key(request: Request) -> str:
+    """
+    Rate-limit key: authenticated users get bucket 'user:<uuid>'.
+    Unauthenticated requests fall back to their IP address.
+
+    MUST NEVER RAISE. If this function raises, SlowAPI crashes the entire
+    request before the route handler can return a 401. The silent fallback
+    to IP is the correct failure mode  the route's own auth dependency
+    handles the 401 response for malformed tokens.
+    """
+    try:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header.removeprefix("Bearer ")
+            payload = decode_token(token)          # raises HTTPException on invalid
+            return f"user:{payload['sub']}"        # sub = user UUID
+    except Exception:                             # includes HTTPException, JWTError
+        pass
+    return get_remote_address(request)            # fallback: IP string
+
+limiter = Limiter(key_func=user_or_ip_key)
+```
+
+The `f"user:{sub}"` prefix namespaces user buckets away from IP buckets. A user UUID that somehow equals an IP string (impossible in practice) would not collide.
+
+**Why `except Exception` (broad catch)?**
+SlowAPI calls `key_func(request)` and expects a string back. If the function raises, SlowAPI returns a 500 before the route even runs. Broad catch ensures that ANY token-decode failure  `HTTPException`, `JWTError` (python-jose), `KeyError` on missing `sub` field  silently degrades to the IP fallback. The route's own `Depends(optional_user)` dependency handles the 401 response to the client.
+
+---
+
+### `src/api/routes/classify.py`  Audit on Classification
+
+New additions to the route handler:
+
+**1. New dependency parameters:**
+```python
+current_user: User | None = Depends(optional_user_dep),
+db: AsyncSession = Depends(get_db),
+```
+
+`optional_user` returns `None` for unauthenticated (guest) requests instead of raising 401. This preserves the existing behavior  classification works without a token, but when a token IS present, `current_user` is available for the audit row.
+
+**2. Step 8  Audit write (non-fatal):**
+```python
+# Step 8  Audit (non-fatal: a failing audit must not block the classify response)
+try:
+    await write_audit(
+        db,
+        action="coin.classify",
+        user_id=str(current_user.id) if current_user else None,
+        resource_type="classification",
+        resource_id=record_id,
+        payload={
+            "route":      route,
+            "label":      cnn.label,
+            "confidence": round(cnn.confidence, 4),
+        },
+        ip_address=client_ip(request),
+    )
+except Exception as _audit_err:
+    logger.warning("audit write failed (non-fatal): %s", _audit_err)
+```
+
+Why `round(cnn.confidence, 4)`? The PostgreSQL JSONB column can store any Python dict, but float precision beyond 4 decimal places has no operational value for analytics and wastes storage. 4 decimal places gives 99.99% precision resolution.
+
+Why wrap in `try/except`? A failed DB connection at audit write time must NOT cause the classify response to fail. The user already waited ~15 seconds for CNN + LLM processing. Losing the audit row is acceptable; losing the user's result is not.
+
+---
+
+### `src/api/routes/history.py`  Audit on Delete
+
+Same pattern applied to `DELETE /api/history/{id}`:
+
+```python
+try:
+    await write_audit(
+        db,
+        action="classification.delete",
+        user_id=str(current_user.id) if current_user else None,
+        resource_type="classification",
+        resource_id=record_id,
+        ip_address=client_ip(request),
+    )
+except Exception as _audit_err:
+    logger.warning("audit write failed (non-fatal): %s", _audit_err)
+```
+
+No `payload` for delete  there is nothing meaningful to store. The `resource_id` already points to the deleted record; a forensics query against `audit_logs` can JOIN to any backup or log to recover what was deleted.
+
+---
+
+### `tests/unit/test_audit.py`  9 New Tests
+
+Test count: 37 existing  **46 total**. All 46 pass in 1.08 seconds.
+
+**Test group 1: `write_audit` (3 tests)**
+
+| Test | What it verifies |
+|------|-----------------|
+| `test_write_audit_inserts_row` | `db.add()` called once; all fields on the row match the call arguments |
+| `test_write_audit_guest_nullable_user_id` | `user_id=None` succeeds  guest classify path works |
+| `test_write_audit_minimal_fields` | Only `action` required; all other fields default to `None` |
+
+**Test group 2: `client_ip` (4 tests)**
+
+| Test | What it verifies |
+|------|-----------------|
+| `test_client_ip_forwarded_for_single` | First entry of `X-Forwarded-For` returned |
+| `test_client_ip_forwarded_for_multiple` | Whitespace stripped, only first IP returned |
+| `test_client_ip_no_forwarded_header` | Falls back to `request.client.host` |
+| `test_client_ip_no_client` | Returns `None` when `request.client is None` |
+
+**Test group 3: `user_or_ip_key` (4 tests, split: 2 existing + 2 new)**
+
+| Test | What it verifies |
+|------|-----------------|
+| `test_user_or_ip_key_valid_jwt` | Returns `"user:<sub>"` string for valid Bearer token |
+| `test_user_or_ip_key_no_auth_header` | Falls back to IP when no Authorization header |
+| `test_user_or_ip_key_malformed_token` | `HTTPException` from `decode_token`  IP fallback, no raise |
+| `test_user_or_ip_key_expired_token` | Expired token  IP fallback, no raise |
+
+**Why `asyncio.get_event_loop().run_until_complete()` and NOT `asyncio.run()`:**
+
+`asyncio.run()` creates a brand-new event loop, runs the coroutine, then **closes and destroys** the loop. When `test_auth.py` later calls `asyncio.get_event_loop().run_until_complete()`, Python finds no event loop in the main thread and raises `RuntimeError: There is no current event loop`. Using `.run_until_complete()` instead reuses the single shared main-thread event loop for the entire test session  no teardown conflict.
+
+---
+
+### What This Adds to the System
+
+```
+Before A3:
+    POST /api/classify   CNN + agents  PDF  response
+                                                
+                                           (no trace of who did what)
+
+After A3:
+    POST /api/classify   CNN + agents  PDF  audit_logs INSERT  response
+                                                
+                              action="coin.classify"
+                              user_id="abc-123" (or NULL for guest)
+                              resource_id="<uuid of classification record>"
+                              payload={"route":"historian","label":"1015","confidence":0.9108}
+                              ip_address="203.0.113.5"
+                              created_at=2026-03-15T14:23:01Z
+```
+
+After 1 week of real usage the ops team can run:
+```sql
+SELECT action, COUNT(*), AVG((payload->>'confidence')::float) as avg_conf
+FROM audit_logs
+WHERE created_at > NOW() - INTERVAL '7 days'
+GROUP BY action;
+```
+and see exactly how much classification confidence improved (or degraded) since the last deploy.
+
+---
+
+*Engineering Journal  Section 62 added.*
+*Phase A3 complete: shared audit module, per-user rate-limiting, AuditLog writes on classify + delete.*
+*46/46 unit tests passing.*

@@ -39,9 +39,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api._store   import append as history_append
 from src.api.auth     import require_api_key
+from src.api.auth.deps import optional_user as optional_user_dep
+from src.api.db.audit  import client_ip, write_audit
+from src.api.db.session import get_db
+from src.api.db.models  import User
 from src.api.limiter  import limiter
 from src.api.schemas  import ClassifyResponse, CnnResult, Top5Item
 
@@ -133,6 +138,8 @@ async def classify(
     request:  Request,
     file:     UploadFile = File(..., description="Coin photograph (JPEG or PNG, max 10 MB)"),
     tta:      bool       = Query(True,  description="Test-Time Augmentation (default on): +~1% accuracy, ~5× slower CNN pass"),
+    current_user: User | None = Depends(optional_user_dep),
+    db:       AsyncSession    = Depends(get_db),
 ) -> ClassifyResponse:
     """
     POST /api/classify
@@ -273,6 +280,31 @@ async def classify(
         history_append(history_record)
     except Exception as hist_exc:
         logger.error("history_append failed (non-fatal): %s", hist_exc, exc_info=True)
+
+    # ── 8. Write audit row (PostgreSQL, non-fatal) ────────────────────────────
+    # WHY after history_append:
+    #   history_append writes to SQLite (the legacy store).  The audit row goes
+    #   to PostgreSQL via the async session.  Doing them in sequence keeps the
+    #   code linear and easy to read.  A failure in audit write is non-fatal.
+    # WHY non-fatal:
+    #   Audit failures must never surface as a 500 to the user.  The primary
+    #   mission (classification + PDF) has already succeeded.
+    try:
+        await write_audit(
+            db,
+            action="coin.classify",
+            user_id=current_user.id if current_user else None,
+            resource_type="classification",
+            resource_id=record_id,
+            payload={
+                "route": route,
+                "label": cnn.label,
+                "confidence": round(cnn.confidence, 4),
+            },
+            ip_address=client_ip(request),
+        )
+    except Exception as audit_exc:
+        logger.warning("audit write failed (non-fatal): %s", audit_exc)
 
     logger.info(
         "classify: id=%s  route=%s  label=%s  conf=%.1f%%  time=%.2fs  pdf=%s",

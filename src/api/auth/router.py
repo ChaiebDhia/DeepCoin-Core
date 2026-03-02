@@ -46,7 +46,8 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from src.api.db.models import AuditLog, EmailVerification, RefreshToken, User, UserRole, UserStatus
+from src.api.db.models import EmailVerification, RefreshToken, User, UserRole, UserStatus
+from src.api.db.audit  import client_ip, write_audit
 from src.api.db.session import get_db
 from src.api.auth.utils import (
     create_access_token,
@@ -163,37 +164,6 @@ def _delete_refresh_cookie(response: Response) -> None:
     response.delete_cookie(key=_REFRESH_COOKIE_NAME, path="/auth")
 
 
-async def _write_audit(
-    db: AsyncSession,
-    *,
-    action: str,
-    user_id: str | None = None,
-    resource_type: str | None = None,
-    resource_id: str | None = None,
-    payload: dict | None = None,
-    ip_address: str | None = None,
-) -> None:
-    """Insert one audit_log row — fire-and-forget within the request transaction."""
-    entry = AuditLog(
-        user_id=user_id,
-        action=action,
-        resource_type=resource_type,
-        resource_id=resource_id,
-        payload=payload,
-        ip_address=ip_address,
-    )
-    db.add(entry)
-    # do NOT commit here — the session auto-commits in get_db's finally block
-
-
-def _client_ip(request: Request) -> str | None:
-    """Extract the real client IP, respecting X-Forwarded-For from Nginx."""
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
-    return request.client.host if request.client else None
-
-
 def _profile(user: User) -> UserProfile:
     return UserProfile(
         id=user.id,
@@ -265,14 +235,14 @@ async def register(
     db.add(verification)
 
     # 5. Write audit log (before commit so it's in the same transaction)
-    await _write_audit(
+    await write_audit(
         db,
         action="user.register",
         user_id=user.id,
         resource_type="user",
         resource_id=user.id,
         payload={"email": body.email, "role": "analyst"},
-        ip_address=_client_ip(request),
+        ip_address=client_ip(request),
     )
 
     # 6. Send email (after audit is written; does NOT block the commit)
@@ -318,11 +288,11 @@ async def login(
     # 2. Verify password (constant-time even for non-existent users)
     if user is None or not verify_password(body.password, user.hashed_password):
         if user:
-            await _write_audit(
+            await write_audit(
                 db, action="user.login_failed",
                 user_id=user.id,
                 payload={"reason": "wrong_password"},
-                ip_address=_client_ip(request),
+                ip_address=client_ip(request),
             )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -357,7 +327,7 @@ async def login(
         user_id=user.id,
         token_hash=refresh_hash,
         expires_at=refresh_exp,
-        ip_address=_client_ip(request),
+        ip_address=client_ip(request),
     ))
 
     # 6. Write refresh cookie
@@ -367,12 +337,12 @@ async def login(
     user.last_login_at = datetime.now(timezone.utc)
 
     # 8. Audit log
-    await _write_audit(
+    await write_audit(
         db, action="user.login",
         user_id=user.id,
         resource_type="user", resource_id=user.id,
         payload={"role": user.role.value},
-        ip_address=_client_ip(request),
+        ip_address=client_ip(request),
     )
 
     logger.info("User logged in: id=%s email=%s", user.id, user.email)
@@ -431,7 +401,7 @@ async def verify_email(
     user.email_verified_at = now
     verification.used_at = now
 
-    await _write_audit(
+    await write_audit(
         db, action="user.email_verified",
         user_id=user.id,
         resource_type="user", resource_id=user.id,
@@ -513,7 +483,7 @@ async def refresh_access_token(
         user_id=user.id,
         token_hash=hash_new,
         expires_at=exp_new,
-        ip_address=_client_ip(request),
+        ip_address=client_ip(request),
     ))
     _set_refresh_cookie(response, raw_new)
 
@@ -559,10 +529,10 @@ async def logout(
             rt.revoked_at = datetime.now(timezone.utc)
 
     _delete_refresh_cookie(response)
-    await _write_audit(
+    await write_audit(
         db, action="user.logout",
         user_id=current_user.id,
-        ip_address=_client_ip(request),
+        ip_address=client_ip(request),
     )
 
     logger.info("User logged out: id=%s", current_user.id)
@@ -614,7 +584,7 @@ async def forgot_password(
             expires_at=datetime.now(timezone.utc) + timedelta(hours=_PASSWORD_RESET_EXPIRE_HOURS),
         ))
         await send_password_reset_email(user.email, raw_token)
-        await _write_audit(db, action="user.forgot_password", user_id=user.id)
+        await write_audit(db, action="user.forgot_password", user_id=user.id)
 
     # Always return the same message — do NOT leak whether the email exists
     return MessageResponse(message="If an account with that email exists, a reset link has been sent.")
@@ -674,6 +644,6 @@ async def reset_password(
     # Mark token as used
     verification.used_at = now
 
-    await _write_audit(db, action="user.password_reset", user_id=user.id)
+    await write_audit(db, action="user.password_reset", user_id=user.id)
     logger.info("Password reset for user id=%s", user.id)
     return MessageResponse(message="Password updated successfully. Please log in with your new password.")

@@ -29,12 +29,17 @@ import asyncio
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from src.api._store  import get_by_id, load_page, count as history_count, delete_by_id, add_feedback
+from src.api.auth.deps  import optional_user as optional_user_dep
+from src.api.db.audit   import client_ip, write_audit
+from src.api.db.models  import User
+from src.api.db.session import get_db
 from src.api.schemas import ClassifyResponse, CnnResult, Top5Item, HistoryListResponse, HistorySummary
 
 
@@ -159,7 +164,12 @@ async def get_history_item(record_id: str) -> ClassifyResponse:
     status_code=204,
     summary="Delete one past classification by ID",
 )
-async def delete_history_item(record_id: str) -> Response:
+async def delete_history_item(
+    record_id:    str,
+    request:      Request,
+    current_user: User | None = Depends(optional_user_dep),
+    db:           AsyncSession = Depends(get_db),
+) -> Response:
     """
     DELETE /api/history/{id}
 
@@ -178,6 +188,20 @@ async def delete_history_item(record_id: str) -> Response:
             status_code=404,
             detail=f"Record '{record_id}' not found.",
         )
+
+    # Write audit row (non-fatal — delete has already succeeded)
+    try:
+        await write_audit(
+            db,
+            action="classification.delete",
+            user_id=current_user.id if current_user else None,
+            resource_type="classification",
+            resource_id=record_id,
+            ip_address=client_ip(request),
+        )
+    except Exception as audit_exc:
+        logger.warning("audit write failed on delete (non-fatal): %s", audit_exc)
+
     return Response(status_code=204)
 
 
