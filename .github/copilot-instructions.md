@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: March 2026 — HSV patina/silver false mismatch FIXED (Bug 18): validator.py silver S_max raised 40→70, consensus override added for Ag₂S patina ambiguity. Engineering Journal Section 53 added (+2037 lines baby-engineer companion). HEAD: see latest commit. Layer 6 (Docker) is next.
+# Last updated: March 2026 — HSV patina/silver false mismatch FIXED (Bug 18): validator.py silver S_max raised 40→70, consensus override added for Ag₂S patina ambiguity. Engineering Journal Section 53 added (+2037 lines baby-engineer companion). HEAD: 8326993. Layer 6 (Docker) is next.
 
 ---
 
@@ -1253,7 +1253,8 @@ pytest (9.0.2)      # unit testing (34 tests across 3 files)
 | `451f3f2` | ux: eliminate confidence anxiety + enrich history detail page (Quick Facts grid, getConfidenceTier, TTA label fix) |
 | `0455d45` | feat: CN links in top-5, delete button + filter bar (Phase 3 UX) + DELETE /api/history/{id} backend |
 | `e92c1ba` | feat: CN CTAs, linked type rows, stats strip, copy link (Phase 4 UX) |
-| `ca16ead` | docs: engineering journal sections 41-45 — Phase 3+4 UX, HSV patina false-mismatch analysis ← LATEST |
+| `ca16ead` | docs: engineering journal sections 41-45 — Phase 3+4 UX, HSV patina false-mismatch analysis |
+| `8326993` | fix: Bug 18 — HSV patina/silver false mismatch — validator S_max 40→70, Ag₂S consensus override ← LATEST |
 
 ---
 
