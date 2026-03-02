@@ -147,8 +147,20 @@ def _auto_crop_coin(img_bgr: np.ndarray) -> np.ndarray:
     """
     h, w = img_bgr.shape[:2]
 
-    # Skip if image is already tight (< 200 px) — nothing meaningful to crop away
-    if min(h, w) < 200:
+    # Skip if image is already small and well-framed (longest edge < 400 px).
+    # WHY 400 and not 200:
+    #   Preprocessed training images are exactly 299×299 (prep_engine.py output).
+    #   With the old threshold of 200, these images PASSED through auto-crop:
+    #   HoughCircles detected the coin circle, stripped the zero-padding added
+    #   during training preprocessing, and returned a tight crop.
+    #   At inference time the model then saw the same coin without padding —
+    #   a different spatial composition than training → confidence collapsed to
+    #   noise level (2–12%) even for coin types with known 80%+ validation accuracy.
+    #   With max(h,w) < 400: any 299×299 processed image bypasses auto-crop
+    #   entirely (max=299 < 400).  Real user photos and screenshots are always
+    #   larger (≥600px for phone cameras, ≥800px for museum scans) and still go
+    #   through the full Hough/contour pipeline as intended.
+    if max(h, w) < 400:
         return img_bgr
 
     gray    = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
