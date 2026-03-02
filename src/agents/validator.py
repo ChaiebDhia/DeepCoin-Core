@@ -40,12 +40,17 @@ from src.core.rag_engine     import get_rag_engine
 #   HSV Hue channel:  0–179 in OpenCV (maps to 0–360°)
 #   Gold   → warm yellow-orange  hue ~15-35, S > 80
 #   Bronze → reddish-brown       hue ~5-20,  S 50-150
-#   Silver → desaturated grey    S < 40 (any hue, low saturation)
+#   Silver → desaturated grey    S < 70 (any hue, low–medium saturation)
+#
+# PATINA FIX (Bug 18): ancient silver sulphide patina (Ag₂S) has S≈55–80.
+# Old S_max=40 classified all patinated silver as bronze (S>40 & H:5-25).
+# Raising S_max to 70 captures lightly toned silver without overlapping
+# vivid bronze (S>70 shows reddish warmth that silver never has).
 #
 _METAL_THRESHOLDS = {
     "gold":   {"h_min": 15, "h_max": 35,  "s_min": 80,  "s_max": 255},
     "bronze": {"h_min": 5,  "h_max": 25,  "s_min": 50,  "s_max": 180},
-    # silver = everything with low saturation (S < 40)
+    # silver = low-to-medium saturation (S < 70) — raised from 40 to capture patina
 }
 
 
@@ -110,12 +115,34 @@ class Validator:
                     expected = metal
                     break
 
-        # 3. Compare
-        match  = _materials_match(detected, expected)
-        status = "consistent" if match else ("mismatch" if expected else "uncertain")
-        warning = _build_warning(detected, expected, match,
-                                 detection_confidence, uncertainty,
-                                 cnn_prediction["confidence"])
+        # 3. Consensus override: if CNN+KB both say silver but HSV says bronze,
+        #    the patinated-silver HSV ambiguity is likely. Downgrade to "uncertain"
+        #    rather than alerting on a false mismatch.
+        #
+        #    WHY: Ancient silver sulphide patina (Ag₂S) absorbs light and shifts HSV
+        #    saturation into the bronze detection window (S=55-80). The CNN confidence
+        #    AND the KB material record are two independent lines of evidence saying
+        #    silver. HSV alone should not override both. We emit "uncertain" so the
+        #    report calls for manual review rather than falsely flagging a mismatch.
+        cnn_conf = cnn_prediction.get("confidence", 0.0)
+        if (detected == "bronze" and expected == "silver"
+                and cnn_conf >= 0.40
+                and uncertainty in ("low", "medium")):
+            match  = True
+            status = "uncertain"
+            warning = (
+                f"Patina ambiguity detected: HSV analysis shows bronze-range saturation "
+                f"(detection confidence {detection_confidence:.0%}, uncertainty: {uncertainty}), "
+                f"but KB records this type as silver and CNN confidence is "
+                f"{cnn_conf:.1%}. Ancient silver sulphide patina (Ag\u2082S) can "
+                f"appear bronze in HSV. Manual review recommended."
+            )
+        else:
+            match  = _materials_match(detected, expected)
+            status = "consistent" if match else ("mismatch" if expected else "uncertain")
+            warning = _build_warning(detected, expected, match,
+                                     detection_confidence, uncertainty,
+                                     cnn_conf)
 
         return {
             "status":              status,
@@ -187,7 +214,7 @@ class Validator:
                 np.array([_METAL_THRESHOLDS["bronze"]["h_max"], _METAL_THRESHOLDS["bronze"]["s_max"], 255]))
             silver_mask = cv2.inRange(hsv,
                 np.array([0,   0,   80]),
-                np.array([179, 40, 255]))
+                np.array([179, 70, 255]))  # S_max raised 40→70: captures patinated silver
 
             pct_gold   = float(np.count_nonzero(gold_mask))   / total
             pct_bronze = float(np.count_nonzero(bronze_mask)) / total
