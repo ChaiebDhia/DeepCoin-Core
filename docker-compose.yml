@@ -1,0 +1,143 @@
+# DeepCoin — Docker Compose service stack
+# =========================================
+# Services:
+#   postgres  — PostgreSQL 17 (primary datastore)
+#   redis     — Redis 7      (rate-limit counters + result cache)
+#   api       — FastAPI      (AI pipeline + REST endpoints)
+#   web       — Next.js 15   (frontend — production build)
+#   nginx     — Nginx 1.27   (reverse proxy, TLS termination)
+#
+# For LOCAL DEVELOPMENT (without building containers):
+#   docker compose up postgres redis   ← start only the infrastructure services
+#   then: uvicorn src.api.main:app --port 8000   (FastAPI in venv)
+#   then: cd frontend && pnpm dev                (Next.js hot-reload)
+#
+# For FULL STACK:
+#   docker compose up --build
+#
+# Secrets: copy .env.example → .env and fill in real values
+
+x-common-env: &common-env
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-deepcoin}:${POSTGRES_PASSWORD:-deepcoin}@postgres:5432/${POSTGRES_DB:-deepcoin}
+  REDIS_URL: redis://redis:6379/0
+  ENV: production
+
+services:
+
+  # ── PostgreSQL 17 ─────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER:-deepcoin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-deepcoin}
+      POSTGRES_DB:       ${POSTGRES_DB:-deepcoin}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"       # expose for local alembic migrations
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-deepcoin} -d ${POSTGRES_DB:-deepcoin}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ── Redis 7 ───────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── FastAPI (AI pipeline + REST API) ──────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api          # to be created in Layer 6
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      DEEPCOIN_API_KEY:  ${DEEPCOIN_API_KEY:-}
+      GITHUB_TOKEN:      ${GITHUB_TOKEN:-}
+      GOOGLE_API_KEY:    ${GOOGLE_API_KEY:-}
+      JWT_SECRET:        ${JWT_SECRET:-change_me_in_production}
+      LOG_FORMAT:        json
+      LOG_LEVEL:         INFO
+    volumes:
+      - ./models:/app/models:ro           # CNN weights (read-only)
+      - ./data/metadata:/app/data/metadata:ro
+      - reports_data:/app/reports
+      - uploads_tmp:/tmp/deepcoin_uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ── Next.js (production build) ────────────────────────────────────────────
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile              # to be created in Layer 6
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL:      http://nginx/api
+      NEXT_PUBLIC_CLASSIFY_URL: http://nginx/api
+      NEXTAUTH_URL:             ${NEXTAUTH_URL:-http://localhost}
+      NEXTAUTH_SECRET:          ${NEXTAUTH_SECRET:-change_me_in_production}
+    depends_on:
+      api:
+        condition: service_healthy
+    expose:
+      - "3000"
+
+  # ── Nginx (reverse proxy) ─────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro  # to be created in Layer 6
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - api
+      - web
+
+  # ── Alembic migration runner (one-shot) ───────────────────────────────────
+  # Run with: docker compose run --rm migrator
+  migrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-deepcoin}:${POSTGRES_PASSWORD:-deepcoin}@postgres:5432/${POSTGRES_DB:-deepcoin}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - migration          # only runs when explicitly invoked
+
+volumes:
+  postgres_data:           # persistent PostgreSQL data
+  redis_data:              # Redis AOF persistence
+  reports_data:            # generated PDF reports
+  uploads_tmp:             # temporary upload files (ephemeral; cleaned by lifespan hook)

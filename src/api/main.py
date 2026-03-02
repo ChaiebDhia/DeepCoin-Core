@@ -59,6 +59,7 @@ from slowapi.errors import RateLimitExceeded
 
 from src.api._store          import ensure_store, count as history_count
 from src.api.auth            import require_api_key
+from src.api.auth.router     import router as auth_router
 from src.api.limiter         import limiter
 from src.api.logging_config  import configure_logging
 from src.api.routes.classify import router as classify_router
@@ -196,7 +197,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins     = _allowed_origins,
     allow_credentials = True,
-    allow_methods     = ["GET", "POST"],
+    allow_methods     = ["GET", "POST", "DELETE"],
     allow_headers     = ["Content-Type", "Authorization", "X-API-Key"],
 )
 
@@ -227,8 +228,9 @@ async def add_request_id(request, call_next):
 #       /*          → Next.js frontend
 #   This is the standard reverse-proxy pattern for monorepo deployments.
 #
-app.include_router(classify_router, prefix="/api", tags=["Classification"])
-app.include_router(history_router,  prefix="/api", tags=["History"])
+app.include_router(auth_router)                                              # /auth/*
+app.include_router(classify_router, prefix="/api", tags=["Classification"])  # /api/classify
+app.include_router(history_router,  prefix="/api", tags=["History"])         # /api/history
 
 
 # ── PDF report serving ────────────────────────────────────────────────────────

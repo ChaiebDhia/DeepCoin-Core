@@ -111,14 +111,14 @@ class TestTimingAttackResistance:
 
     def test_hmac_compare_digest_used(self):
         """
-        The auth module source code must use hmac.compare_digest, not ==.
+        The api_key auth module source code must use hmac.compare_digest, not ==.
         This is a code-quality / security assertion, not a runtime test.
         """
         import inspect
-        import src.api.auth as auth_module
+        import src.api.auth.api_key as auth_module
 
         source = inspect.getsource(auth_module)
         assert "hmac.compare_digest" in source, (
-            "auth.py must use hmac.compare_digest() for constant-time comparison, "
+            "api_key.py must use hmac.compare_digest() for constant-time comparison, "
             "not the == operator. This prevents timing oracle attacks."
         )
