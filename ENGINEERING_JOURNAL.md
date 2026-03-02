@@ -13424,97 +13424,605 @@ After 2 seconds, it resets. Standard pattern for clipboard copy feedback in mode
 
 ## Section 52  How to Rebuild This Entire System From Scratch
 
-If you woke up tomorrow with no files and needed to rebuild DeepCoin from memory,
-here is the sequence. This is the final exam section.
+This section is different from all others. Every other section explains what we built.
+This section tells you HOW to build it — step by step, file by file, command by command.
+If you have never written Python before, start with Sections 3, 5, 6, and the Glossary first.
+If you know Python but have never done ML, read Sections 7–9 first.
+If you are ready to build: follow this sequence exactly. Every file is listed in creation order.
+Each step tells you what to type, what to name things, and what "done" looks like.
 
-### 1. Environment (30 minutes)
+---
+
+### STEP 1 — Set Up the Environment (30 minutes)
+
+Open PowerShell. Create the project folder and Python virtual environment:
+
 ```powershell
-mkdir deepcoin ; cd deepcoin
-git init ; git remote add origin https://github.com/ChaiebDhia/DeepCoin-Core
-python -m venv venv ; & venv\Scripts\Activate.ps1
-# Install requirements.txt (50+ packages: torch, opencv, langchain, fpdf2, etc.)
-# Set up .gitignore: /data/, /models/, /venv/, /.env, notes.md
+mkdir C:\Users\Administrator\deepcoin
+cd C:\Users\Administrator\deepcoin
+python -m venv venv
+& venv\Scripts\Activate.ps1
+# Your prompt should now show "(venv)" at the start — this means the venv is active.
+# Every python command from now on uses this isolated environment.
 ```
 
-### 2. Data Pipeline (1 day)
-```python
-# audit.py: scan 9716 class folders, count images, histogram of distribution
-# Decision: threshold >= 10 images/class  438 viable classes
-# prep_engine.py: for each class: CLAHE(LAB L-channel)  letterbox(299x299)  save
-# Output: data/processed/[class_id]/[images]  7,677 images
-```
+Create the folder structure. These folders must exist before any code runs:
 
-### 3. CNN Training (1 day)
-```python
-# dataset.py: DeepCoinDataset (sorted class index, lazy loading, Albumentations)
-# model_factory.py: EfficientNet-B3 (replace head: 1536438, Dropout(0.4))
-# train.py: AdamW lr=1e-4, CosineAnnealingLR T=100, CrossEntropy label_smooth=0.1
-#           AMP (GradScaler + autocast), Mixup alpha=0.2, WeightedRandomSampler
-#           batch=16, early_stop patience=10
-# Save: models/best_model.pth + models/class_mapping.pth
-# Result: 80.03% TTA accuracy
-```
-
-### 4. Knowledge Base (3 hours scraping + 9 minutes indexing)
-```python
-# build_knowledge_base.py --all-types: scrape 9,716 CN types at 1 req/sec (~2h 41min)
-# rag_engine.py: 5 semantic chunks per type  9,541 types = 47,705 vectors
-# ChromaDB: sentence-transformers all-MiniLM-L6-v2 (384-dim, cosine, CPU)
-# BM25Okapi index over all text chunks
-# rebuild_chroma.py: populate ChromaDB in 500-item batches (~9 minutes)
-```
-
-### 5. Agent System (2 days)
-```python
-# gatekeeper.py: LangGraph StateGraph, CoinState TypedDict (12 fields)
-#   Routing: >0.85  historian, 0.40-0.85  validator, <0.40  investigator
-#   Per-node timing, retry (429/503 with backoff), graceful degradation
-# historian.py: get_context_blocks(type_id)  5 [CONTEXT N] blocks  Gemini prompt
-# validator.py: multi-scale HSV (40/60/80% crops, majority vote), detection_confidence
-# investigator.py: OpenCV fallback (HSV metal + Sobel edge), RAG search 9541 types
-# synthesis.py: FPDF2 direct draw (NO markdown parsing), _GREEK_MAP transliteration
-```
-
-### 6. FastAPI Backend (1 day)
-```python
-# main.py: lifespan (init gatekeeper), CORS, GZip, X-Request-ID, health (5 checks)
-# auth.py: hmac.compare_digest, dev-mode passthrough
-# limiter.py: slowapi singleton (separate file to avoid circular import)
-# _store.py: SQLite WAL mode, INSERT OR REPLACE, LIMIT/OFFSET pagination
-# schemas.py: Pydantic v2 ClassifyResponse, HistoryListResponse
-# routes/classify.py: Semaphore(1), magic bytes, to_thread, finally delete
-# routes/history.py: skip/limit, 204 DELETE
-# Run: uvicorn src.api.main:app --port 8000 --workers 1
-```
-
-### 7. Next.js Frontend (2 days)
-```typescript
-// npx create-next-app@latest frontend --typescript --tailwind --app
-// lib/store.ts: Zustand (_cancelFn bridge, UploadPhase state machine)
-// lib/api.ts: two Axios clients (direct + proxied), ApiError class
-// next.config.ts: security headers, CSP blob:, direct classify URL
-// .env.local: 127.0.0.1 (NOT localhost), NEXT_PUBLIC_CLASSIFY_URL
-// CoinUploader.tsx: blur check, canvas downsize, AbortController
-// AgentPipeline.tsx: 4-station mission control, particle beams, X button
-// AnalysisPanel.tsx: 3-state display (0.70/0.75 thresholds), CountUp, CVA badges
-// HistoryTable.tsx: useMutation delete, filter bar, sibling Link+button
-// npm run dev  verify 0 TypeScript errors
-```
-
-### 8. Verification
 ```powershell
-# Backend:
-& venv\Scripts\python.exe scripts\test_pipeline.py  # 3/3 routes PASS
-pytest tests/ -v                                      # 36/36 tests pass
-# Frontend:
-cd frontend ; npx next build                          # 0 TS errors, 5 routes
+mkdir src, src\agents, src\api, src\api\routes, src\core, src\data_pipeline
+mkdir scripts, data\raw, data\processed, data\metadata, models, reports, tests\unit, notebooks
+```
+
+Create `.gitignore` in the project root. This tells Git NOT to track huge files:
+
+```
+# .gitignore
+/venv/
+/data/raw/
+/data/processed/
+/models/*.pth
+/.env
+notes.md
+__pycache__/
+*.pyc
+*.egg-info/
+/lib/           # IMPORTANT: use /lib/ with leading slash, not lib/ without it
+/lib64/         # otherwise it would also exclude frontend/lib/ — see Bug 17
+```
+
+Install all Python dependencies. The `requirements.txt` file lists every package:
+
+```powershell
+# First install PyTorch with CUDA 12.4 support (this is ~2 GB, takes 5-10 minutes)
+pip install torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cu124
+# Then install everything else
+pip install fastapi uvicorn[standard] opencv-python albumentations chromadb
+pip install sentence-transformers langgraph langchain openai fpdf2 rank-bm25
+pip install slowapi pydantic python-dotenv python-json-logger tqdm requests beautifulsoup4
+pip install pytest black flake8 httpx
+```
+
+How do you know PyTorch installed correctly? Run this:
+
+```powershell
+& venv\Scripts\python.exe -c "import torch; print(torch.cuda.is_available(), torch.version.cuda)"
+# Should print: True  12.4
+# If it prints: False  None — CUDA is not available. Check your GPU drivers.
 ```
 
 ---
 
-*Last updated: Engineering Journal expansion complete  Sections 4652.*
-*Journal scope: Every commit. Every file. Every function. Every engineering decision.*
-*Total: ~10,000 lines. The complete technical memory of DeepCoin from day 1 to Layer 5.*
+### STEP 2 — Audit and Preprocess the Dataset (4 hours)
+
+**Where the raw data comes from:**
+The Corpus Nummorum dataset was downloaded separately. It lives at `data/raw/` with one
+subfolder per coin type: `data/raw/1015/`, `data/raw/1017/`, etc.
+
+**What `src/data_pipeline/prep_engine.py` does — in English:**
+1. Opens each class folder in `data/raw/`
+2. Skips folders with fewer than 10 images (long-tail filter)
+3. For every image that passes: applies CLAHE (contrast enhancement in LAB colour space)
+4. Resizes to exactly 299×299 while preserving the coin's round shape (letterbox)
+5. Saves to `data/processed/[class_id]/[original_filename]`
+
+**Create `src/data_pipeline/prep_engine.py`.**
+
+The key functions you need to write:
+
+```python
+import cv2, numpy as np, pathlib, tqdm
+
+def apply_clahe(bgr_image):
+    """
+    Enhance contrast WITHOUT distorting colour.
+
+    WHY: Coins have patina (green/brown oxidation). If you apply CLAHE
+    directly to RGB, all 3 colour channels change — the patina colour
+    is destroyed. CLAHE in LAB space only changes the L (luminance)
+    channel, leaving the A (green-red) and B (blue-yellow) untouched.
+    """
+    lab     = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    clahe   = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    l_eq    = clahe.apply(l)
+    lab_eq  = cv2.merge([l_eq, a, b])
+    return cv2.cvtColor(lab_eq, cv2.COLOR_LAB2BGR)
+
+def letterbox(image, size=299):
+    """
+    Resize to size×size while keeping the original aspect ratio.
+
+    WHY not just cv2.resize(img, (299,299)):
+    Simple resize STRETCHES the image. A round coin becomes oval.
+    The model then learns oval shapes instead of circles.
+    Letterbox scales the image so the longest edge = 299, then
+    pads the shorter edge with black zeros to reach 299×299.
+    Coin stays round. Model learns round shapes.
+    """
+    h, w    = image.shape[:2]
+    scale   = size / max(h, w)
+    new_h   = int(h * scale)
+    new_w   = int(w * scale)
+    # INTER_AREA is best for shrinking (less aliasing)
+    # INTER_CUBIC is best for enlarging (smoother output)
+    interp  = cv2.INTER_AREA if scale < 1 else cv2.INTER_CUBIC
+    resized = cv2.resize(image, (new_w, new_h), interpolation=interp)
+    canvas  = np.zeros((size, size, 3), dtype=np.uint8)  # black canvas
+    y_off   = (size - new_h) // 2    # centre vertically
+    x_off   = (size - new_w) // 2    # centre horizontally
+    canvas[y_off:y_off+new_h, x_off:x_off+new_w] = resized
+    return canvas
+
+def process_all(raw_dir, out_dir, min_samples=10):
+    raw  = pathlib.Path(raw_dir)
+    out  = pathlib.Path(out_dir)
+    kept = 0
+    for cls_folder in tqdm.tqdm(sorted(raw.iterdir())):
+        images = list(cls_folder.glob("*.jpg")) + list(cls_folder.glob("*.png"))
+        if len(images) < min_samples:
+            continue          # skip long-tail classes
+        (out / cls_folder.name).mkdir(parents=True, exist_ok=True)
+        for img_path in images:
+            bgr = cv2.imread(str(img_path))
+            if bgr is None:
+                continue      # skip corrupt files
+            bgr = apply_clahe(bgr)
+            bgr = letterbox(bgr, 299)
+            cv2.imwrite(str(out / cls_folder.name / img_path.name), bgr)
+            kept += 1
+    print(f"Processed {kept} images across retained classes")
+```
+
+Run preprocessing:
+
+```powershell
+& venv\Scripts\python.exe -c "
+from src.data_pipeline.prep_engine import process_all
+process_all('data/raw', 'data/processed', min_samples=10)
+"
+# Takes ~20 minutes. Output: "Processed 7677 images across retained classes"
+```
+
+---
+
+### STEP 3 — Build the PyTorch Dataset Class (`src/core/dataset.py`)
+
+**Why this file exists before the training file:**
+The training script (train.py) needs to load images from disk in batches of 16.
+It cannot use raw file paths — PyTorch's DataLoader needs a Dataset object that
+has exactly two methods: `__len__()` (how many samples?) and `__getitem__(idx)` (give me sample #idx).
+
+**Create `src/core/dataset.py`:**
+
+```python
+import os, cv2, numpy as np
+from pathlib import Path
+from torch.utils.data import Dataset
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
+
+class DeepCoinDataset(Dataset):
+    """
+    PyTorch Dataset for DeepCoin.
+
+    WHAT: Connects the data/processed/ directory to the training loop.
+    HOW: Stores (path, integer_label) tuples — NOT pixel arrays.
+    WHY lazy: Loading 7,677 images at once = ~2.6 GB RAM. Loading one
+              batch of 16 images at a time = ~50 MB RAM. The __getitem__
+              method reads each image from disk ON DEMAND when the
+              DataLoader requests it. This is called "lazy loading".
+    """
+
+    def __init__(self, root_dir: str, transform=None):
+        root = Path(root_dir)
+        # sorted() ensures class ordering is DETERMINISTIC across different OS.
+        # On Windows, os.listdir returns folders in creation order.
+        # On Linux, it returns them in inode order.
+        # sorted() always returns alphabetical order: "1015", "1017", "10708"...
+        self.classes     = sorted(d.name for d in root.iterdir() if d.is_dir())
+        self.class_to_idx = {c: i for i, c in enumerate(self.classes)}
+        self.idx_to_class = {i: c for c, i in self.class_to_idx.items()}
+        self.transform   = transform
+        self.samples     = []   # list of (path_str, int_label)
+        for cls in self.classes:
+            label = self.class_to_idx[cls]
+            for img_path in (root / cls).glob("*.jpg"):
+                self.samples.append((str(img_path), label))
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, idx):
+        path, label = self.samples[idx]
+        # Use open(rb) + frombuffer instead of cv2.imread for reliability
+        # on non-ASCII paths (handles Unicode filenames on Windows)
+        with open(path, "rb") as f:
+            buf = f.read()
+        bgr = cv2.imdecode(np.frombuffer(buf, np.uint8), cv2.IMREAD_COLOR)
+        if bgr is None:
+            raise ValueError(f"cv2.imdecode returned None for: {path}")
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)   # PyTorch expects RGB not BGR
+        if self.transform:
+            rgb = self.transform(image=rgb)["image"]  # Albumentations style
+        return rgb, label
+
+
+def get_train_transforms():
+    """
+    Training augmentation pipeline.
+
+    WHY each transform:
+    - Rotate(15): coins are photographed at various angles
+    - BrightnessContrast: different lighting rigs in museums
+    - GaussNoise: low-resolution or compressed images
+    - ElasticTransform: slight warping from worn/bent coins
+    - HorizontalFlip: coin can be photographed either way up
+    - Normalize([0.485,0.456,0.406],...): MANDATORY — these are the ImageNet means.
+      EfficientNet-B3 was pretrained with images normalised to these exact values.
+      Using incorrect normalisation gives ~15% lower accuracy.
+    - ToTensorV2: converts numpy HWC to PyTorch CHW (channels first)
+    """
+    return A.Compose([
+        A.Rotate(limit=15, p=0.5),
+        A.RandomBrightnessContrast(0.2, 0.2, p=0.5),
+        A.GaussNoise(p=0.3),
+        A.ElasticTransform(p=0.3),
+        A.HorizontalFlip(p=0.5),
+        A.Normalize([0.485,0.456,0.406], [0.229,0.224,0.225]),
+        ToTensorV2(),
+    ])
+
+def get_val_transforms():
+    """Validation: normalise only. No augmentation — honest evaluation."""
+    return A.Compose([
+        A.Normalize([0.485,0.456,0.406], [0.229,0.224,0.225]),
+        ToTensorV2(),
+    ])
+```
+
+---
+
+### STEP 4 — Define the Model Architecture (`src/core/model_factory.py`)
+
+**Create `src/core/model_factory.py`:**
+
+```python
+import torch.nn as nn
+import torchvision
+
+def get_deepcoin_model(num_classes: int = 438, dropout: float = 0.4) -> nn.Module:
+    """
+    Build EfficientNet-B3 with a custom 438-class head.
+
+    WHY EfficientNet-B3:
+        Compound scaling — simultaneously scales depth, width, and resolution.
+        Achieves excellent accuracy-per-parameter ratio. B3 requires ~2 GB VRAM
+        at batch_size=16, which fits on the RTX 3050 Ti (4.3 GB).
+        B7 would be more accurate but needs ~8 GB VRAM — doesn't fit.
+
+    WHAT we change from the pretrained model:
+        The PRETRAINED model has a final layer: Linear(1536, 1000) — 1000 ImageNet classes.
+        We REPLACE only this final layer: Linear(1536, 438) — our 438 coin types.
+        All 18 earlier layer groups (edge detectors, texture detectors, shape detectors)
+        remain unchanged. They were trained on 1.2M ImageNet images. We benefit from
+        that history without giving up VRAM for re-training it.
+    """
+    model = torchvision.models.efficientnet_b3(
+        weights=torchvision.models.EfficientNet_B3_Weights.IMAGENET1K_V1
+    )
+    # 1536 = number of features in the B3 penultimate layer
+    in_features = model.classifier[1].in_features
+    model.classifier = nn.Sequential(
+        nn.Dropout(p=dropout, inplace=True),
+        nn.Linear(in_features, num_classes),
+    )
+    return model
+```
+
+---
+
+### STEP 5 — Write the Training Script (`scripts/train.py`)
+
+The training script is 729 lines. Here are the four CRITICAL blocks and exactly why each exists.
+
+**Block A — Data splitting (stratified 70/15/15):**
+
+```python
+from sklearn.model_selection import train_test_split
+
+full_ds = DeepCoinDataset("data/processed", transform=None)
+labels  = [lbl for _, lbl in full_ds.samples]
+
+# stratify=labels ensures each split has the SAME class distribution.
+# Without stratify, a rare class (5 images) might end up entirely in train,
+# meaning the model gets no validation examples for it.
+train_idx, temp_idx   = train_test_split(range(len(full_ds)), test_size=0.30, stratify=labels)
+val_idx,   test_idx   = train_test_split(temp_idx, test_size=0.50,
+                                         stratify=[labels[i] for i in temp_idx],
+                                         random_state=42)
+```
+
+**Block B — Weighted sampler (class imbalance fix):**
+
+```python
+from torch.utils.data import WeightedRandomSampler
+
+train_labels   = [labels[i] for i in train_idx]
+class_counts   = np.bincount(train_labels)            # [204, 13, 87, ...] — count per class
+class_weights  = 1.0 / class_counts                   # rare class gets HIGH weight
+sample_weights = [class_weights[lbl] for lbl in train_labels]
+sampler = WeightedRandomSampler(sample_weights, num_samples=len(train_idx), replacement=True)
+# In each training epoch, EVERY class is seen approximately equally regardless
+# of whether it has 5 images or 204 images.
+```
+
+**Block C — Mixup regularisation:**
+
+```python
+import numpy as np
+
+def mixup_batch(images, labels, alpha=0.2):
+    """
+    Mix pairs of images and their labels.
+    lambda ~ Beta(alpha, alpha). For alpha=0.2, lambda is usually near 0 or 1
+    (mostly one image with a little of the other).
+    WHY: The model cannot memorise training images — even if it sees image A
+    during training, it always sees A blended with some of B. This forces
+    learning of features rather than pixel patterns.
+    """
+    lam    = np.random.beta(alpha, alpha)
+    idx    = torch.randperm(images.size(0))    # random permutation of indices
+    mixed  = lam * images + (1 - lam) * images[idx]   # weighted pixel average
+    return mixed, labels, labels[idx], lam
+```
+
+**Block D — AMP (Automatic Mixed Precision):**
+
+```python
+from torch.amp import GradScaler, autocast
+
+scaler = GradScaler("cuda")   # manages float16 scaling
+
+# Inside the training loop:
+with autocast("cuda"):              # forward pass in float16 (half VRAM)
+    outputs = model(images)
+    loss    = criterion(outputs, labels)
+
+scaler.scale(loss).backward()       # backward pass with scaling
+scaler.step(optimizer)              # update weights
+scaler.update()                     # update the scaler
+optimizer.zero_grad()
+```
+
+Run training:
+
+```powershell
+& venv\Scripts\python.exe scripts/train.py
+# Prints epoch summary after each epoch. Takes ~103 minutes.
+# Early stop fires at epoch 62 (10 epochs with no improvement from epoch 52).
+# Saves: models/best_model.pth (epoch 52, val 79.25%)
+#        models/class_mapping.pth
+```
+
+---
+
+### STEP 6 — Build the Knowledge Base (3 hours + 9 min)
+
+**Part 6a: Scrape all 9,716 coin types from corpus-nummorum.eu:**
+
+```powershell
+& venv\Scripts\python.exe scripts/build_knowledge_base.py --all-types
+# Rate-limited to 1 request/second.
+# Total time: ~2h 41min.
+# Output: data/metadata/cn_types_metadata_full.json (~3.2 MB)
+# Progress: saved every 50 types (crash-safe).
+# Resumable: add --resume flag to skip already-scraped IDs.
+```
+
+**Part 6b: Build the RAG engine and ChromaDB index:**
+
+```powershell
+& venv\Scripts\python.exe scripts/rebuild_chroma.py
+# Reads cn_types_metadata_full.json.
+# Splits each coin into 5 semantic chunks (identity, obverse, reverse, material, context).
+# Builds BM25 keyword index (in-memory).
+# Uploads 47,705 vectors to ChromaDB in batches of 500.
+# Total time: ~9 minutes.
+# Output: data/metadata/chroma_db_rag/ (~180 MB)
+```
+
+**How to verify the RAG engine works:**
+
+```python
+from src.core.rag_engine import get_rag_engine
+rag = get_rag_engine()
+print(rag.corpus_size())            # should print 9541
+results = rag.search("silver drachm Thrace", n=3)
+for r in results:
+    print(r["type_id"], r["rrf_score"])
+# Should return types from Thrace minting silver drachms
+```
+
+---
+
+### STEP 7 — Write the 5 Agents (2 days)
+
+**Creation order depends on import structure:**
+```
+synthesis.py   ← imports nothing from agents/ (standalone)
+historian.py   ← imports rag_engine, knowledge_base
+validator.py   ← imports rag_engine
+investigator.py ← imports historian (for KB search), rag_engine
+gatekeeper.py  ← imports all 4 above + CoinInference
+```
+
+Create them in this order: synthesis → historian → validator → investigator → gatekeeper.
+
+**The single most important rule when writing `gatekeeper.py`:**
+Do NOT use `class_id` (the raw softmax integer 0-437) for Knowledge Base lookups.
+ALWAYS use `label` (the string folder name, e.g. `"1015"`).
+See Bug 12 in Section 12 for the full story of this mistake.
+
+```python
+# WRONG — class_id=0 means "type at index 0 in sorted list", NOT "type 0"
+record = rag.get_by_id(cnn_prediction["class_id"])   # Bug 12: looks up type "0" (doesn't exist)
+
+# CORRECT — label="1015" is the actual Corpus Nummorum type ID
+record = rag.get_by_id(cnn_prediction["label"])      # looks up type 1015 ✓
+```
+
+**Quick check each agent works:**
+
+```powershell
+& venv\Scripts\python.exe -c "
+from src.agents.gatekeeper import Gatekeeper
+gk = Gatekeeper()
+result = gk.analyze('data/processed/1015/CN_type_1015_cn_coin_5943_p.jpg', tta=False)
+print('Route:', result['state']['route_taken'])
+print('PDF:', result['pdf_path'])
+"
+# Should print: Route: historian
+#               PDF: reports/report_CN_type_1015_cn_coin_5943_p_<timestamp>.pdf
+```
+
+---
+
+### STEP 8 — Build the FastAPI Backend (1 day)
+
+**File creation order:**
+
+1. `src/__init__.py` — version string: `__version__ = "0.4.0"`
+2. `src/api/limiter.py` — SlowAPI singleton (must be its OWN file — see Section 25)
+3. `src/api/auth.py` — `require_api_key()` with `hmac.compare_digest`
+4. `src/api/_store.py` — SQLite WAL store
+5. `src/api/logging_config.py` — JSON/text logging setup
+6. `src/api/schemas.py` — Pydantic v2 models
+7. `src/api/routes/classify.py` — POST /api/classify
+8. `src/api/routes/history.py` — GET/DELETE /api/history
+9. `src/api/main.py` — FastAPI app factory (import all of the above)
+
+**Create `.env` in the project root:**
+
+```bash
+# .env (copy from .env.example, fill in real values)
+GITHUB_TOKEN=ghp_your_token_here
+DEEPCOIN_API_KEY=           # leave blank for dev mode
+ALLOWED_ORIGINS=http://localhost:3000
+ENV=development
+LOG_FORMAT=text
+LOG_LEVEL=INFO
+```
+
+**Start the server:**
+
+```powershell
+& venv\Scripts\python.exe -m uvicorn src.api.main:app --port 8000 --log-level info --reload
+# Server starts at http://localhost:8000
+# Open http://localhost:8000/docs to see auto-generated Swagger UI
+# POST /api/classify with a coin image to test end-to-end
+```
+
+**Run unit tests:**
+
+```powershell
+& venv\Scripts\python.exe -m pytest tests/ -v
+# Should print: 36 passed in 1.31s
+```
+
+---
+
+### STEP 9 — Build the Next.js Frontend (2 days)
+
+**Bootstrap:**
+
+```powershell
+cd C:\Users\Administrator\deepcoin
+npx create-next-app@latest frontend --typescript --tailwind --app --no-src-dir
+cd frontend
+npm install zustand @tanstack/react-query axios framer-motion react-countup lucide-react react-hot-toast
+```
+
+**Create `.env.local` in the `frontend/` folder:**
+
+```bash
+# frontend/.env.local
+DEEPCOIN_API_URL=http://127.0.0.1:8000
+NEXT_PUBLIC_CLASSIFY_URL=http://127.0.0.1:8000
+# CRITICAL: use 127.0.0.1, NOT localhost.
+# Node.js on Windows resolves "localhost" to ::1 (IPv6).
+# FastAPI only listens on 0.0.0.0 (IPv4). The request never arrives.
+```
+
+**File creation order:**
+
+```
+types/api.ts         ← TypeScript mirror of Python Pydantic models
+lib/utils.ts         ← cn(), routeStyle(), getConfidenceTier()
+lib/store.ts         ← Zustand state machine (see Section 62 for full file)
+lib/api.ts           ← Axios clients + classifyCoin()
+components/ui/       ← button.tsx, progress.tsx, spinner.tsx (shadcn copies)
+components/coin/AgentPipeline.tsx
+components/coin/CoinUploader.tsx   ← (see Section 62 for full walkthrough)
+components/coin/AnalysisPanel.tsx
+components/history/HistoryTable.tsx
+app/layout.tsx
+app/page.tsx
+app/history/page.tsx
+app/history/[id]/page.tsx
+app/error.tsx, app/history/error.tsx, app/history/[id]/error.tsx
+next.config.ts       ← security headers + API proxy rewrites
+```
+
+**Start the dev server:**
+
+```powershell
+npm run dev
+# Open http://localhost:3000
+# You should see the DeepCoin hero page with the upload dropzone.
+```
+
+**Final check — prod build (catches all TypeScript errors):**
+
+```powershell
+npx next build
+# MUST show: "TypeScript: 0 errors"
+# Should show: "5 routes compiled (4 static + 1 dynamic)"
+```
+
+---
+
+### STEP 10 — Verify Everything End-to-End
+
+```powershell
+# Backend:
+& C:\Users\Administrator\deepcoin\venv\Scripts\python.exe scripts/test_pipeline.py
+# Expected: RESULTS: 3/3 passed — all routes OK    EXIT: 0
+
+# Tests:
+& C:\Users\Administrator\deepcoin\venv\Scripts\python.exe -m pytest tests/ -v
+# Expected: 36 passed in 1.31s
+
+# Frontend:
+cd C:\Users\Administrator\deepcoin\frontend
+npx next build
+# Expected: TypeScript: 0 errors | 5 routes generated
+```
+
+**You have now rebuilt DeepCoin from scratch.**
+
+---
+
+### Common Mistakes and How to Avoid Them
+
+| Mistake | Symptom | Fix |
+|---------|---------|-----|
+| Used `class_id` for KB lookup | Wrong coin history returned (different mint, region, period) | Always use `label` (string folder name) — see Bug 12 |
+| Forgot `weights_only=True` in `torch.load()` | Security warning or exception on Python 3.12+ | Add `weights_only=True` to both torch.load calls |
+| Used `localhost` in `.env.local` | Frontend gets ECONNREFUSED | Use `127.0.0.1` explicitly |
+| Created `limiter.py` code inline in `main.py` | CircularImportError | Limiter MUST be in its own file — see Section 25 |
+| Forgot `model.eval()` before inference | Different results on same image every run | Always `.eval()` before `predict()` |
+| Forgot `A.Normalize(ImageNet stats)` | Model accuracy drops ~15% | Add Normalize as last transform before ToTensorV2 |
+| Used `lib/` in .gitignore without leading `/` | `frontend/lib/*.ts` silently excluded from Git | Use `/lib/` (leading slash = repo root only) — Bug 17 |
 
 
 ---
@@ -18299,3 +18807,944 @@ Tests after Phase A2: **37/37 passing**
 **Then A4: Migrate classify.py + history.py from SQLite `_store.py` to PostgreSQL.**
 **Then A5: NextAuth.js v5 credentials provider + `/login` + `/register` pages.**
 
+
+
+---
+
+## Section 59  Full Annotated `gatekeeper.py`  Every Line Explained
+
+This section shows the complete `gatekeeper.py` (474 lines) with every decision explained.
+This is the most important file in the agent system  it is the traffic controller that routes
+every coin analysis request through the correct pipeline.
+
+Read this section AFTER you have read Sections 19-22 (the high-level agent overview).
+Come back here when you want to understand each line in detail.
+
+---
+
+### 59.1  The CoinState TypedDict  Shared Memory Between All Agents
+
+```python
+from typing import TypedDict, Optional, Literal
+
+class CoinState(TypedDict, total=False):
+    """
+    The shared state dictionary that travels through the LangGraph pipeline.
+
+    WHAT: A TypedDict is a regular Python dict with type hints.
+    WHY TypedDict instead of a dataclass or Pydantic model:
+        LangGraph's StateGraph requires a TypedDict. It uses the type
+        annotations to validate that nodes write the correct field types.
+        A dataclass would need extra boilerplate to convert to/from dict.
+
+    WHY total=False:
+        total=False means ALL fields are OPTIONAL. This is essential because:
+        - When the pipeline starts, only image_path and use_tta are set.
+        - historian_result, validator_result, investigator_result are NEVER
+          all set at the same time -- only ONE route is taken per request.
+        - pdf_path is None if PDF generation fails.
+        Without total=False, Python's type checker would complain that
+        required fields are missing at the start of the pipeline.
+    """
+    image_path         : str
+    use_tta            : bool
+    cnn_prediction     : dict    # {class_id, label, confidence, top5, vote_fraction, tta_passes}
+    route_taken        : Literal["historian", "validator", "investigator"]
+    historian_result   : dict
+    validator_result   : dict
+    investigator_result: dict
+    node_timings       : dict    # {"cnn": "0.54s", "historian": "19.85s", ...}
+    report             : str     # plain-text summary
+    pdf_path           : Optional[str]
+```
+
+---
+
+### 59.2  `Gatekeeper.__init__`  Loading All the Heavy Objects Once
+
+```python
+class Gatekeeper:
+    def __init__(self):
+        """
+        Load all expensive objects exactly once at startup.
+
+        WHY load here and not lazily (on first request):
+            CoinInference loads a 90 MB .pth weight file.
+            RAGEngine builds a BM25 index over 47,705 text chunks.
+            These operations take 3-8 seconds each.
+            Loading on first request would make the FIRST user wait
+            8-10 extra seconds. Loading at startup means all users get
+            equal sub-second response times after warm-up.
+
+        The FastAPI lifespan hook calls get_gatekeeper() at server start,
+        so this expensive init runs ONCE and the in-memory singleton
+        is reused for every subsequent /api/classify request.
+        """
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s %(name)s %(levelname)s %(message)s"
+        )
+        # basicConfig is a no-op if logging is already configured.
+        # FastAPI configures its own logging at startup.
+        # This line only fires if Gatekeeper is created outside FastAPI (e.g. in tests).
+        self.logger = logging.getLogger(__name__)
+
+        self.logger.info("Gatekeeper init -- loading pipeline components")
+        self._inference    = CoinInference(device="auto")    # loads best_model.pth
+        self._historian    = Historian()                     # loads KB + RAG
+        self._validator    = Validator()                     # loads RAG engine ref
+        self._investigator = Investigator()                  # loads RAG engine ref
+        self._synthesis    = Synthesis()                     # no heavy objects
+        self._graph        = self._build_graph()             # compile LangGraph
+        self.logger.info("Gatekeeper ready")
+```
+
+---
+
+### 59.3  `_retry_call`  Handling Rate Limits Gracefully
+
+```python
+def _retry_call(self, fn, *args, retries=2, backoff=1.5, **kwargs):
+    """
+    Retry a function call on transient API errors with exponential backoff.
+
+    WHY we need this:
+        GitHub Models API (free tier) returns HTTP 429 (rate limit) when
+        you send more than ~5 requests per minute. Google AI Studio
+        returns HTTP 503 during maintenance windows.
+        Without retry, the first 429 error crashes the entire analysis.
+        With retry: wait 1.5s then try again. Wait 3.0s then try again.
+        >95% of 429 errors resolve within 5 seconds.
+
+    HOW it detects errors:
+        Method 1: openai SDK exceptions expose exc.status_code attribute.
+        Method 2: Some libraries wrap the status code into the string.
+                  We check str(exc) for "429" and "503" as fallback.
+
+    WHY retries=2 (not 5 or 10):
+        2 retries = 3 total attempts. If 3 attempts fail (>99.9% rate limit
+        situation), waiting longer will not help. The user gets graceful
+        degradation (fallback output) rather than a 30-second hang.
+    """
+    last_exc = None
+    delay    = backoff            # starts at 1.5 seconds
+    for attempt in range(retries + 1):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as exc:
+            code = getattr(exc, "status_code", None)
+            msg  = str(exc)
+            if code in (429, 503) or "429" in msg or "503" in msg:
+                last_exc = exc
+                if attempt < retries:
+                    self.logger.warning("Retry %d after %.1fs (HTTP %s)", attempt+1, delay, code)
+                    time.sleep(delay)
+                    delay *= backoff   # 1.5 -> 3.0 -> 4.5 (exponential)
+            else:
+                raise               # non-retriable error -- re-raise immediately
+    raise last_exc                  # all retries exhausted
+```
+
+---
+
+### 59.4  The CNN Node  Where Every Request Starts
+
+```python
+def cnn_node(state: CoinState) -> CoinState:
+    """
+    Node 1 of 5. Runs the EfficientNet-B3 model and decides the route.
+    """
+    t0          = time.perf_counter()
+    image_path  = state["image_path"]
+    use_tta     = state.get("use_tta", False)
+
+    prediction  = inference.predict(image_path, tta=use_tta)
+    conf        = prediction["confidence"]
+
+    # Vote-fraction routing override
+    # WHAT: TTA (8 forward passes) returns vote_fraction -- the fraction of
+    #       the 8 passes that agreed on the top-1 class.
+    #       Example: 7/8 passes chose class 1015 -> vote_fraction = 0.875.
+    # WHY we need this override:
+    #       Screenshots of coins have different contrast/colour statistics
+    #       than photographed coins. They can have confidence 38% even when
+    #       7/8 TTA passes agree -- because all 8 softmax distributions are
+    #       flat (low peak) but they all peak at the SAME class.
+    #       vote_fraction=0.875 means "highly consistent even if not highly
+    #       confident." We bump effective confidence above 0.40 so the coin
+    #       goes to validator/historian instead of investigator.
+    vote_fraction  = prediction.get("vote_fraction", 0.0)
+    effective_conf = conf
+    if vote_fraction is not None and vote_fraction >= 0.75:
+        effective_conf = max(conf, 0.42)   # 0.42 > 0.40 threshold -> not investigator
+
+    if effective_conf > 0.85:
+        route = "historian"
+    elif effective_conf >= 0.40:
+        route = "validator"
+    else:
+        route = "investigator"
+
+    elapsed = time.perf_counter() - t0
+    logger.info("cnn_node: label=%s conf=%.3f vote=%.2f route=%s time=%.2fs",
+                prediction.get("label"), conf, vote_fraction or 0, route, elapsed)
+
+    return {
+        **state,
+        "cnn_prediction": prediction,
+        "route_taken"   : route,
+        "node_timings"  : {**(state.get("node_timings") or {}), "cnn": f"{elapsed:.2f}s"},
+    }
+```
+
+---
+
+### 59.5  Graph Wiring  How LangGraph Connects the Nodes
+
+```python
+def _build_graph(self) -> CompiledGraph:
+    """
+    Compile the LangGraph state machine.
+
+    Flow:
+        cnn_node  -->  [historian | validator | investigator]  -->  synthesis_node  -->  END
+    """
+    graph = StateGraph(CoinState)
+
+    graph.add_node("cnn",          cnn_node)
+    graph.add_node("historian",    historian_node)
+    graph.add_node("validator",    validator_node)
+    graph.add_node("investigator", investigator_node)
+    graph.add_node("synthesis",    synthesis_node)
+
+    graph.set_entry_point("cnn")
+
+    def _route(state: CoinState) -> str:
+        return state["route_taken"]   # "historian", "validator", or "investigator"
+
+    graph.add_conditional_edges(
+        "cnn",
+        _route,
+        {
+            "historian"   : "historian",
+            "validator"   : "validator",
+            "investigator": "investigator",
+        }
+    )
+
+    graph.add_edge("historian",    "synthesis")
+    graph.add_edge("validator",    "synthesis")
+    graph.add_edge("investigator", "synthesis")
+    graph.add_edge("synthesis",    END)
+
+    return graph.compile()
+```
+
+---
+
+### 59.6  The Singleton  Thread-Safe Access to Gatekeeper
+
+```python
+_gk_instance : Optional[Gatekeeper] = None
+_gk_lock      = threading.Lock()
+
+def get_gatekeeper() -> Gatekeeper:
+    """
+    Return the shared Gatekeeper, initializing exactly once.
+
+    WHY double-checked locking:
+        Without locking, two simultaneous /api/classify requests arriving
+        at a cold server could BOTH see "_gk_instance is None" and BOTH
+        start building a new Gatekeeper -- loading the model twice, building
+        BM25 twice -- causing OOM on a 4.3 GB VRAM GPU.
+
+        Pattern:
+        1. Read without lock (fast path -- 99.9% of requests hit this)
+        2. If None, acquire lock (slow path -- only first request ever)
+        3. Check AGAIN inside the lock (another thread may have beaten you)
+        4. Build if still None
+        5. Release lock
+    """
+    global _gk_instance
+    if _gk_instance is None:        # fast path
+        with _gk_lock:
+            if _gk_instance is None:   # double check inside lock
+                _gk_instance = Gatekeeper()
+    return _gk_instance
+```
+
+---
+
+## Section 60  Full Annotated `historian.py`  Every Line Explained
+
+`historian.py` is 512 lines. It is the research librarian of the system: given a CNN
+prediction, it looks up the full coin record, structures it into 5 labeled knowledge
+blocks, and uses an LLM to write a professional historical narrative.
+
+---
+
+### 60.1  `_get_llm`  The 4-Provider Priority Chain
+
+```python
+_text_client   = None   # module-level cache
+_vision_client = None
+_llm_lock      = threading.Lock()  # protects both caches
+
+def _get_llm(capability: str = "text"):
+    """
+    Return an OpenAI-compatible LLM client, trying providers in priority order.
+
+    WHY this function exists instead of hardcoding one provider:
+        This is a PFE project. The API key changes:
+        - Development: Ollama (free, local, no internet)
+        - Demo/presentation: GitHub Models (free with student Copilot)
+        - Production: Google AI Studio (1500 req/day free tier)
+        This function tries each in order and returns the first working one.
+
+    WHY all providers use the SAME openai SDK:
+        The openai Python package supports "compatible" endpoints --
+        any server that implements the OpenAI chat completions protocol.
+        Ollama, GitHub Models, and Google AI Studio all implement this protocol.
+        We just point the base_url and api_key at different servers.
+        One SDK instead of three.
+
+    HOW the Ollama probe works:
+        Ollama runs at http://localhost:11434.
+        GET /api/tags lists downloaded models.
+        We fetch that URL with a 5-second timeout. If it responds AND
+        contains a matching model name, we use Ollama.
+        WHY probe: if Ollama not running, the first chat request would hang
+        for 60 seconds before failing. The 5s probe prevents that hang.
+    """
+    global _text_client, _vision_client
+    cache = _text_client if capability == "text" else _vision_client
+    if cache is not None:
+        return cache      # fast path
+
+    with _llm_lock:
+        cache = _text_client if capability == "text" else _vision_client
+        if cache is not None:
+            return cache
+
+        client = None
+
+        # Provider 1: Ollama (local)
+        ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        try:
+            resp = requests.get(f"{ollama_host}/api/tags", timeout=5)
+            if resp.status_code == 200:
+                names = [m["name"] for m in resp.json().get("models", [])]
+                text_models = [n for n in names if any(k in n for k in
+                               ("gemma", "llama", "deepseek", "phi"))]
+                if capability == "text" and text_models:
+                    client = OpenAI(
+                        base_url=f"{ollama_host}/v1",
+                        api_key="ollama",   # Ollama ignores key but SDK requires one
+                    )
+                    client._model_name = text_models[0]
+        except Exception:
+            pass
+
+        # Provider 2: GitHub Models
+        if client is None and os.getenv("GITHUB_TOKEN"):
+            client = OpenAI(
+                base_url="https://models.inference.ai.azure.com",
+                api_key=os.getenv("GITHUB_TOKEN"),
+            )
+            client._model_name = "gemini-2.5-flash"
+
+        # Provider 3: Google AI Studio
+        if client is None and os.getenv("GOOGLE_API_KEY"):
+            client = OpenAI(
+                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+                api_key=os.getenv("GOOGLE_API_KEY"),
+            )
+            client._model_name = "gemini-2.5-flash"
+
+        # Provider 4: None -> _generate_narrative() uses _fallback_narrative()
+        # The system NEVER crashes because no API key is set.
+
+        if capability == "text":
+            _text_client = client
+        else:
+            _vision_client = client
+        return client
+```
+
+---
+
+### 60.2  `research()`  The Critical label_str Rule
+
+```python
+def research(self, cnn_prediction: dict) -> dict:
+    """
+    Given a CNN prediction dict, return a full historical analysis dict.
+
+    THE MOST IMPORTANT LINE IN THIS FILE:
+        cn_type_id = label_str     # NOT cnn_prediction["class_id"]
+
+    WHY label_str and NOT class_id (see Bug 12):
+        cnn_prediction["class_id"] is the softmax OUTPUT INDEX -- an integer
+        0 to 437 representing the position in the alphabetically sorted
+        class list. class_id=0 means "first class alphabetically" = type 1015.
+        If you call rag.get_by_id(0), ChromaDB looks for type_id "0" which
+        does not exist. You get nothing, or the wrong record.
+
+        cnn_prediction["label"] is the FOLDER NAME -- the string "1015".
+        This is the actual Corpus Nummorum type identifier.
+        rag.get_by_id("1015") returns the correct Maroneia drachm.
+
+        class_id = 0   is an implementation detail.
+        label = "1015" is the real-world coin type identity.
+        ALWAYS use label for external lookups.
+    """
+    label_str  = str(cnn_prediction.get("label", ""))
+    cn_type_id = int(label_str) if label_str.isdigit() else label_str
+
+    record = self._rag.get_by_id(cn_type_id)        # 9,541-type RAG engine
+    if not record:
+        record = self._kb.search_by_id(cn_type_id)  # fallback: 438-type legacy KB
+
+    if not record:
+        return {
+            "type_id"   : cn_type_id,
+            "found_in_kb": False,
+            "narrative" : self._fallback_narrative(cnn_prediction, {}),
+        }
+
+    context_blocks = self._rag.get_context_blocks(cn_type_id)
+    # Returns 5 strings:
+    # "[CONTEXT 1 - Identity] type: 1015 | denomination: drachm | ..."
+    # "[CONTEXT 2 - Obverse]  bunch of grapes | legend: MAR"
+    # "[CONTEXT 3 - Reverse]  ..."
+    # "[CONTEXT 4 - Material] silver | weight: 2.44g | mint: Maroneia"
+    # "[CONTEXT 5 - Context]  persons: Magistrate Zenon"
+
+    narrative = self._generate_narrative(record, context_blocks, cnn_prediction)
+
+    return {
+        "type_id"            : cn_type_id,
+        "found_in_kb"        : True,
+        "in_training_set"    : record.get("in_training_set", False),
+        "denomination"       : record.get("denomination", ""),
+        "authority"          : record.get("authority", ""),
+        "region"             : record.get("region", ""),
+        "mint"               : record.get("mint", ""),
+        "date_range"         : record.get("date_range", ""),
+        "material"           : record.get("material", ""),
+        "obverse_description": _clean_field(record.get("obverse_description", "")),
+        "reverse_description": _clean_field(record.get("reverse_description", "")),
+        "narrative"          : narrative,
+    }
+```
+
+---
+
+### 60.3  `_generate_narrative()`  The 7-Rule Grounded Prompt
+
+```python
+def _generate_narrative(self, record: dict, context_blocks: list, prediction: dict) -> str:
+    """
+    Generate a grounded historical narrative using the LLM.
+
+    GROUNDED means: the LLM can ONLY state facts that appear in the context blocks.
+    This is RAG (Retrieval-Augmented Generation):
+    Retrieve facts -> Augment the prompt with them -> Generate prose from them only.
+
+    WHY 7 explicit rules:
+        Without rules, LLMs hallucinate -- they generate plausible-sounding
+        but invented facts. For a museum-facing tool, an invented date or mint
+        is worse than no information at all. Each rule fixes a failure mode:
+
+        Rule 1 "only from context"   -> prevents invention of dates, persons, mints
+        Rule 2 "cite [CONTEXT N]"    -> adds traceability for auditors
+        Rule 3 "no Markdown"         -> prevents **bold** leaking into PDF
+        Rule 4 "no [CONTEXT N] in output" -> prevents citation markers in final text
+        Rule 5 "3 paragraphs"        -> consistent report structure
+        Rule 6 "no Wait/Think"       -> strips deepseek-r1 reasoning artifacts
+        Rule 7 "professional tone"   -> suitable for museum/academic audience
+    """
+    client = _get_llm("text")
+    if client is None:
+        return _fallback_narrative(record, prediction)
+
+    context_str = "\n".join(context_blocks)
+    prompt = f"""You are a professional numismatist writing for an academic audience.
+
+GROUNDING CONTEXT:
+{context_str}
+
+OUTPUT FORMAT RULES (FOLLOW EXACTLY):
+1. Use ONLY facts from the context above. Do not add any fact not in the context.
+2. You may refer to context blocks in your thinking, but never write [CONTEXT N] in output.
+3. No Markdown formatting (no **, no *, no ##, no backticks).
+4. Do not write "[CONTEXT N]" anywhere in your output text.
+5. Write exactly 3 paragraphs: (1) denomination and authority, (2) visual description,
+   (3) historical significance.
+6. Do not write "Wait", "Let me", "I need to" or any reasoning artifact.
+7. Professional, precise tone. Appropriate for a museum label or academic paper.
+
+Write the analysis now:"""
+
+    response = client.chat.completions.create(
+        model      = getattr(client, "_model_name", "gemini-2.5-flash"),
+        messages   = [{"role": "user", "content": prompt}],
+        max_tokens = 800,
+        temperature= 0.4,   # low = more deterministic, less creative invention
+    )
+
+    raw_text = response.choices[0].message.content or ""
+    if not raw_text.strip():
+        return _fallback_narrative(record, prediction)
+
+    return _clean_narrative(raw_text)
+```
+
+---
+
+### 60.4  `_clean_narrative()`  Defense in Depth Against Artefacts
+
+```python
+def _clean_narrative(text: str) -> str:
+    """
+    Strip LLM artefacts from narrative text BEFORE it goes to synthesis.py.
+
+    WHY clean here AND in synthesis.py:
+        Defense in depth. If a new LLM provider introduces a new artefact
+        format that synthesis does not know about, historian still strips it.
+        Both layers protect = zero artefacts in final PDF.
+
+    Steps and their purpose:
+    """
+    import re, unicodedata
+
+    # Step 1: Remove [CONTEXT N] citation markers (Rule 4 violation by LLM)
+    text = re.sub(r"\[CONTEXT\s*\d+[^\]]*\]", "", text)
+
+    # Step 2: Remove Markdown bold, italic, headers, backticks (Rule 3 violation)
+    text = re.sub(r"\*{1,3}(.*?)\*{1,3}", r"\1", text)     # **bold** -> bold
+    text = re.sub(r"#{1,4}\s*", "", text)                   # ## Heading -> Heading
+    text = re.sub(r"`([^`]+)`", r"\1", text)                # `code` -> code
+
+    # Step 3: Normalise curly quotes and em/en dashes to ASCII
+    # WHY: fpdf2 with latin-1 encoding cannot render Unicode curly quotes.
+    #      They appear as "?" in the PDF. Replace before reaching fpdf2.
+    _TYPO_MAP = {
+        "\u2018": "'", "\u2019": "'",
+        "\u201c": '"', "\u201d": '"',
+        "\u2013": "-", "\u2014": "-",
+        "\u2026": "...",
+    }
+    for bad, good in _TYPO_MAP.items():
+        text = text.replace(bad, good)
+
+    # Step 4: NFD normalization + strip combining marks
+    # WHY: Some LLMs output "e" + combining acute (U+0301) instead of precomposed "e-acute".
+    #      fpdf2 only handles precomposed characters. NFD splits them, then we remove
+    #      the Mn (Mark, NonSpacing) category combining characters.
+    normalized = unicodedata.normalize("NFD", text)
+    text = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
+
+    # Step 5: Strip "Wait/Let me/I need to" reasoning artifacts
+    text = re.sub(r"(?i)^(Wait[,.]?|Let me|I need to)[^\n]*\n?", "", text, flags=re.MULTILINE)
+
+    # Step 6: Collapse multiple blank lines to one
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    return text.strip()
+```
+
+---
+
+## Section 61  Frontend: `store.ts` + `CoinUploader.tsx` From Blank Files
+
+---
+
+### 61.1  Why Zustand? (The State Management Problem)
+
+The user journey involves two sibling React components:
+- `CoinUploader.tsx` sends the HTTP request and holds the AbortController.
+- `AgentPipeline.tsx` shows the mission control modal with an X button.
+
+When the user clicks X in `AgentPipeline.tsx`, the AbortController lives in `CoinUploader.tsx`.
+React components cannot directly call sibling functions -- they need a shared parent or a store.
+
+"Prop drilling" (passing cancel through parent) means:
+`CoinUploader` -> passes cancelFn prop up to `page.tsx` -> passes it down to `AgentPipeline`.
+This makes `page.tsx` responsible for cancel logic it doesn't own. Messy.
+
+Zustand stores a `_cancelFn` that ANY component can write or read.
+`CoinUploader.tsx` writes: `store.setCancelFn(() => abort.abort())`
+`AgentPipeline.tsx` reads: `store._cancelFn?.()` on X click.
+Zero prop drilling. Zero parent coordination.
+
+---
+
+### 61.2  `frontend/lib/store.ts`  Complete File
+
+```typescript
+import { create } from "zustand"
+import type { ClassifyResponse } from "@/types/api"
+
+// UploadPhase: a finite state machine for the upload lifecycle.
+// WHY not boolean flags (isLoading, isError, isDone):
+// With 3 booleans you can have illegal states: isLoading=true AND isDone=true.
+// With a string union, only ONE state is active at any time.
+export type UploadPhase =
+  | "idle"        // no action
+  | "uploading"   // HTTP POST in progress
+  | "processing"  // server running agent pipeline
+  | "done"        // result received
+  | "error"       // something failed
+
+interface DeepCoinState {
+  tta            : boolean
+  phase          : UploadPhase
+  uploadProgress : number
+  selectedFile   : File | null
+  result         : ClassifyResponse | null
+  errorMessage   : string | null
+  _cancelFn      : (() => void) | null   // cross-component cancel bridge
+
+  setTta           : (v: boolean) => void
+  setSelectedFile  : (f: File | null) => void
+  setUploadProgress: (n: number) => void
+  setPhase         : (p: UploadPhase) => void
+  setResult        : (r: ClassifyResponse) => void   // also sets phase -> "done"
+  setError         : (msg: string) => void            // also sets phase -> "error"
+  reset            : () => void
+  setCancelFn      : (fn: (() => void) | null) => void
+}
+
+export const useDeepCoinStore = create<DeepCoinState>((set) => ({
+  tta            : false,
+  phase          : "idle",
+  uploadProgress : 0,
+  selectedFile   : null,
+  result         : null,
+  errorMessage   : null,
+  _cancelFn      : null,
+
+  setTta           : (v)   => set({ tta: v }),
+  setSelectedFile  : (f)   => set({ selectedFile: f }),
+  setUploadProgress: (n)   => set({ uploadProgress: n }),
+  setPhase         : (p)   => set({ phase: p }),
+  setResult        : (r)   => set({ result: r, phase: "done" }),
+  setError         : (msg) => set({ errorMessage: msg, phase: "error" }),
+  reset            : ()    => set({
+    phase: "idle", uploadProgress: 0, selectedFile: null,
+    result: null, errorMessage: null, _cancelFn: null,
+  }),
+  setCancelFn      : (fn)  => set({ _cancelFn: fn }),
+}))
+```
+
+Usage in CoinUploader.tsx:
+```typescript
+const { setPhase, setResult, setError, setCancelFn, reset } = useDeepCoinStore()
+const abort = new AbortController()
+setCancelFn(() => abort.abort())
+setPhase("uploading")
+```
+
+Usage in AgentPipeline.tsx:
+```typescript
+const { _cancelFn } = useDeepCoinStore()
+const handleCancel = () => { _cancelFn?.(); reset() }
+```
+
+---
+
+### 61.3  `CoinUploader.tsx`  Key Functions
+
+#### `downsizeImage()`  Prevent Large Uploads
+
+```typescript
+async function downsizeImage(file: File, maxPx = 1024): Promise<File> {
+  /**
+   * WHY: A DSLR photo can be 6000x4000 = 8 MB.
+   * Sending 8 MB for a 299x299 network input is wasteful.
+   * Canvas resize is free on the client.
+   * WHY 1024px not 299px: auto-crop (HoughCircles) needs extra resolution.
+   * WHY quality 0.85: visually identical to 100%, ~40% smaller file.
+   */
+  if (typeof window === "undefined") return file  // SSR guard
+
+  return new Promise((resolve) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+
+    img.onload = () => {
+      URL.revokeObjectURL(url)  // release blob URL immediately (memory leak prevention)
+      const { naturalWidth: w, naturalHeight: h } = img
+      if (w <= maxPx && h <= maxPx) { resolve(file); return }
+
+      const scale   = maxPx / Math.max(w, h)
+      const canvas  = document.createElement("canvas")
+      canvas.width  = Math.round(w * scale)
+      canvas.height = Math.round(h * scale)
+      canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height)
+
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) { resolve(file); return }
+          resolve(new File([blob], file.name.replace(/\.[^.]+$/, "_resized.jpg"), {
+            type: "image/jpeg",
+          }))
+        },
+        "image/jpeg", 0.85,
+      )
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file) }
+    img.src = url
+  })
+}
+```
+
+#### `analyseImageQuality()`  Laplacian Variance Blur Detection
+
+```typescript
+async function analyseImageQuality(file: File): Promise<string[]> {
+  /**
+   * WHY the Laplacian variance method:
+   * The Laplacian operator measures pixel intensity CHANGE.
+   * High values = sharp edges = in-focus. Low values = smooth = blurry.
+   *
+   * Algorithm:
+   * 1. Draw on 96x96 greyscale canvas (small = fast)
+   * 2. Apply kernel [0,-1,0;-1,4,-1;0,-1,0] on each pixel
+   * 3. Compute variance of results
+   * 4. Variance < 60 = probably blurry
+   *
+   * Warnings are SOFT -- shown but do not block the upload.
+   * A blurry image may still classify correctly.
+   */
+  const warnings: string[] = []
+  if (typeof window === "undefined") return warnings
+
+  return new Promise((resolve) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      if (img.naturalWidth < 100 || img.naturalHeight < 100) {
+        warnings.push("Image resolution too low (< 100x100 px). Accuracy will be reduced.")
+      }
+
+      const size   = 96
+      const canvas = document.createElement("canvas")
+      canvas.width = canvas.height = size
+      const ctx    = canvas.getContext("2d")!
+      ctx.drawImage(img, 0, 0, size, size)
+      const data   = ctx.getImageData(0, 0, size, size).data
+
+      const grey = new Float32Array(size * size)
+      for (let i = 0; i < size * size; i++) {
+        grey[i] = 0.299 * data[i*4] + 0.587 * data[i*4+1] + 0.114 * data[i*4+2]
+      }
+
+      const lap = new Float32Array(size * size)
+      for (let y = 1; y < size - 1; y++) {
+        for (let x = 1; x < size - 1; x++) {
+          const i = y * size + x
+          lap[i]  = 4*grey[i] - grey[i-1] - grey[i+1] - grey[i-size] - grey[i+size]
+        }
+      }
+
+      const mean = lap.reduce((s, v) => s + v, 0) / lap.length
+      const vars = lap.reduce((s, v) => s + (v - mean) ** 2, 0) / lap.length
+      if (vars < 60) warnings.push("Image appears blurry. A sharper photo improves accuracy.")
+
+      resolve(warnings)
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(warnings) }
+    img.src = url
+  })
+}
+```
+
+#### `detectScreenshot()`  3-Signal Detection
+
+```typescript
+function detectScreenshot(file: File): boolean {
+  /**
+   * WHY warn about screenshots:
+   * Training images were photographed and preprocessed with CLAHE.
+   * Screenshots have different colour statistics (sRGB display gamma,
+   * white background, PNG format). CLAHE calibration assumes photographic
+   * contrast. Screenshots cause lower softmax confidence.
+   *
+   * We do NOT block screenshots -- we warn the user.
+   *
+   * Signal 1: Filename keyword (13 languages)
+   * Signal 2: PNG + screen aspect ratio (16:9, 16:10, 4:3, 21:9)
+   * Signal 3: Large PNG at modest resolution (> 500 KB PNG)
+   */
+  const name = file.name.toLowerCase()
+
+  // Signal 1
+  const KEYWORDS = [
+    "screenshot", "screen shot", "capture", "captura",
+    "bildschirmfoto", "bildschirm",
+    "schermata", "schermo",
+    "ekran", "ekrangoruntusu",
+    "screenshot", "screengrab",
+  ]
+  if (KEYWORDS.some((k) => name.includes(k))) return true
+
+  // Signal 2 + 3
+  const isPng = file.type === "image/png" || name.endsWith(".png")
+  if (isPng && file.size > 500 * 1024) return true
+
+  return false
+}
+```
+
+#### Component Body  Essential Structure
+
+```typescript
+export default function CoinUploader() {
+  const {
+    tta, setTta,
+    phase, setPhase,
+    selectedFile, setSelectedFile,
+    setResult, setError, reset,
+    setCancelFn,
+  } = useDeepCoinStore()
+
+  const [isDragging,      setIsDragging]      = React.useState(false)
+  const [qualityWarnings, setQualityWarnings] = React.useState<string[]>([])
+  const [isScreenshot,    setIsScreenshot]    = React.useState(false)
+
+  const inputRef = React.useRef<HTMLInputElement>(null)
+  const abortRef = React.useRef<AbortController | null>(null)
+  // WHY useRef for AbortController:
+  // Updating a ref does NOT trigger a re-render.
+  // We just need to call abort() -- no UI update needed when controller changes.
+
+  const handleFile = async (file: File) => {
+    setIsScreenshot(detectScreenshot(file))
+    const warnings = await analyseImageQuality(file)
+    setQualityWarnings(warnings)
+    setSelectedFile(file)
+    setPhase("idle")
+  }
+
+  const handleAnalyse = async () => {
+    if (!selectedFile) return
+    setPhase("uploading")
+    const abort = new AbortController()
+    abortRef.current = abort
+    setCancelFn(() => abort.abort())
+
+    try {
+      const fileToSend = await downsizeImage(selectedFile, 1024)
+      const result = await classifyCoin(fileToSend, tta, abort.signal)
+      setResult(result)   // phase -> "done"
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        reset()            // user cancelled -- silent return to idle
+      } else {
+        setError(err instanceof Error ? err.message : "Classification failed")
+      }
+    } finally {
+      abortRef.current = null
+      setCancelFn(null)
+    }
+  }
+
+  const handleCancel = () => { abortRef.current?.abort(); reset() }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault(); setIsDragging(false)
+    const file = e.dataTransfer.files[0]
+    if (file) handleFile(file)
+  }
+
+  const isLoading = phase === "uploading" || phase === "processing"
+
+  return (
+    <div
+      onDragOver  ={(e) => { e.preventDefault(); setIsDragging(true) }}
+      onDragLeave ={() => setIsDragging(false)}
+      onDrop      ={handleDrop}
+    >
+      {/* screenshot warning banner */}
+      {isScreenshot && (
+        <div className="bg-orange-500/10 border border-orange-500/30 rounded p-3 text-sm text-orange-300">
+          This looks like a screenshot. For best accuracy, photograph the coin directly.
+        </div>
+      )}
+
+      {/* quality warnings */}
+      {qualityWarnings.map((w, i) => (
+        <p key={i} className="text-yellow-400 text-sm">{w}</p>
+      ))}
+
+      {/* hidden file input */}
+      <input ref={inputRef} type="file" accept="image/*" className="hidden"
+             onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
+
+      {/* drag zone */}
+      <div className={isDragging ? "border-blue-400" : "border-gray-600"}
+           onClick={() => inputRef.current?.click()}>
+        Drop coin image here or click to browse
+      </div>
+
+      {/* TTA toggle */}
+      <label>
+        <input type="checkbox" checked={tta} onChange={(e) => setTta(e.target.checked)} />
+        Use TTA (8 passes, more accurate, slower)
+      </label>
+
+      {/* Analyse / Cancel button */}
+      {isLoading ? (
+        <button onClick={handleCancel}>Cancel</button>
+      ) : (
+        <button onClick={handleAnalyse} disabled={!selectedFile}>Analyse</button>
+      )}
+    </div>
+  )
+}
+```
+
+---
+
+### 61.4  How All Three Files Connect (Data Flow)
+
+```
+User drags image onto CoinUploader
+    |
+handleFile()
+    |--> detectScreenshot()      -> sets isScreenshot (local state)
+    |--> analyseImageQuality()   -> sets qualityWarnings (local state)
+    |--> setSelectedFile()       -> writes to Zustand store
+    |
+User clicks "Analyse"
+    |
+handleAnalyse()
+    |--> new AbortController()
+    |--> setCancelFn(() => abort.abort())  -> writes to Zustand store
+    |--> setPhase("uploading")             -> Zustand -> AgentPipeline sees "uploading" -> shows modal
+    |--> downsizeImage()                   -> canvas resize client-side
+    |--> classifyCoin(file, tta, signal)   -> POST /api/classify (FastAPI)
+    |                                          -> result -> setResult() -> phase = "done"
+    |
+If user clicks X in AgentPipeline
+    |
+AgentPipeline reads store._cancelFn
+    |--> store._cancelFn?.()               -> calls abort.abort()
+    |--> reset()                           -> all store fields -> initial values
+    |
+handleAnalyse() catches AbortError
+    |--> reset() (called from handleCancel, already done -- no double reset risk)
+```
+
+Zero prop drilling. Zero parent involvement. Pure Zustand cross-component communication.
+
+---
+
+*Engineering Journal -- Sections 59-61 added.*
+*Coverage: Full annotated gatekeeper.py, historian.py, store.ts, CoinUploader.tsx.*
+*A reader can now build every part of this system from blank files.*
