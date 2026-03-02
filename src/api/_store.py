@@ -51,6 +51,7 @@ import json
 import logging
 import sqlite3
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -261,6 +262,60 @@ def delete_by_id(record_id: str) -> bool:
             return deleted
         except Exception as exc:
             logger.error("History store delete_by_id error for %s: %s", record_id, exc)
+            return False
+
+
+def add_feedback(record_id: str, correct_type_id: str, note: str) -> bool:
+    """
+    Attach user feedback ("mark as wrong" correction) to an existing record.
+
+    WHAT:
+        Reads the stored JSON payload, adds a `feedback` sub-dict, and writes
+        it back via SQL UPDATE.  The rest of the row (indexed columns) is
+        unchanged — we only patch the payload blob.
+
+    WHY store feedback inside the payload:
+        Adding a dedicated `feedback` column would require an ALTER TABLE
+        migration.  Embedding it in the JSON payload is zero-migration and
+        consistent with how every other optional field (mint, narrative, etc.)
+        is already stored.
+
+    Args:
+        record_id:       UUID of the classification to correct.
+        correct_type_id: The true CN type ID the user says it should be.
+        note:            Optional free-text explanation from the user.
+
+    Returns:
+        True on success, False if the record was not found or on DB error.
+
+    Thread-safe: protected by _lock.
+    """
+    with _lock:
+        try:
+            conn = _get_conn()
+            row  = conn.execute(
+                "SELECT payload FROM classifications WHERE id = ?",
+                (record_id,),
+            ).fetchone()
+            if row is None:
+                conn.close()
+                return False
+
+            payload = json.loads(row["payload"])
+            payload["feedback"] = {
+                "correct_type_id": correct_type_id,
+                "note":            note,
+                "submitted_at":    datetime.now(timezone.utc).isoformat(),
+            }
+            conn.execute(
+                "UPDATE classifications SET payload = ? WHERE id = ?",
+                (json.dumps(payload, ensure_ascii=False), record_id),
+            )
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as exc:
+            logger.error("History store add_feedback error for %s: %s", record_id, exc)
             return False
 
 

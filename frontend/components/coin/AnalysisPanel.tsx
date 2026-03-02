@@ -17,17 +17,17 @@
  */
 
 import Link                                         from "next/link";
-import { useState, useEffect }                       from "react";
-import { motion }                                    from "framer-motion";
+import { useState, useEffect, FormEvent }            from "react";
+import { AnimatePresence, motion }                   from "framer-motion";
 import CountUp                                       from "react-countup";
-import { Download, Clock, Cpu, BookOpen, Shield, Search, ExternalLink } from "lucide-react";
+import { Download, Clock, Cpu, BookOpen, Shield, Search, ExternalLink, ThumbsDown, CheckCircle, X } from "lucide-react";
 
 import type { ClassifyResponse, Top5Item }           from "@/types/api";
 import {
   formatConfidence, formatDate, confidenceBg,
   confidenceText, routeStyle, truncate,
 }                                                    from "@/lib/utils";
-import { pdfDownloadUrl }                            from "@/lib/api";
+import { pdfDownloadUrl, submitFeedback }             from "@/lib/api";
 import { Badge, routeBadgeVariant, confBadgeVariant } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent }  from "@/components/ui/card";
 import { Button }                                    from "@/components/ui/button";
@@ -534,6 +534,26 @@ interface AnalysisPanelProps {
 export function AnalysisPanel({ result, showLink = false }: AnalysisPanelProps) {
   const { label: routeLabel, color: routeColor } = routeStyle(result.route_taken);
 
+  // ── "Mark as wrong" feedback state ───────────────────────────────────────
+  const [feedbackOpen,   setFeedbackOpen]   = useState(false);
+  const [feedbackType,   setFeedbackType]   = useState("");
+  const [feedbackNote,   setFeedbackNote]   = useState("");
+  const [feedbackStatus, setFeedbackStatus] = useState<"idle" | "submitting" | "done" | "error">("idle");
+
+  async function handleFeedbackSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!feedbackType.trim()) return;
+    setFeedbackStatus("submitting");
+    try {
+      await submitFeedback(result.id, feedbackType.trim(), feedbackNote.trim());
+      setFeedbackStatus("done");
+      setTimeout(() => { setFeedbackOpen(false); setFeedbackStatus("idle"); }, 2500);
+    } catch {
+      setFeedbackStatus("error");
+      setTimeout(() => setFeedbackStatus("idle"), 3000);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4 w-full">
       {/* ── Header: route + type + conf + time ── */}
@@ -591,7 +611,7 @@ export function AnalysisPanel({ result, showLink = false }: AnalysisPanelProps) 
       {result.route_taken === "validator"    && <ValidatorSection    result={result} />}
       {result.route_taken === "investigator" && <InvestigatorSection result={result} />}
 
-      {/* ── Footer: PDF download + history link ── */}
+      {/* ── Footer: PDF download + history link + mark-as-wrong ───────────── */}
       <div className="flex items-center gap-3 flex-wrap">
         {result.pdf_url && (
           <Button variant="gold" size="md" asChild>
@@ -608,7 +628,128 @@ export function AnalysisPanel({ result, showLink = false }: AnalysisPanelProps) 
             </Button>
           </Link>
         )}
+
+        {/* Mark-as-wrong button — only shown when a real record id exists */}
+        {result.id && (
+          <button
+            onClick={() => { setFeedbackOpen(v => !v); setFeedbackStatus("idle"); }}
+            className="ml-auto flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all"
+            style={{
+              color:      feedbackOpen ? "#f87171" : "var(--text-muted)",
+              background: feedbackOpen ? "rgba(239,68,68,0.10)" : "rgba(255,255,255,0.04)",
+              border:     `1px solid ${feedbackOpen ? "rgba(239,68,68,0.30)" : "rgba(255,255,255,0.08)"}`,
+            }}
+            title="Report a misclassification"
+          >
+            <ThumbsDown size={12} />
+            Mark as wrong
+          </button>
+        )}
       </div>
+
+      {/* ── Inline feedback form (slide-down) ───────────────────────────── */}
+      <AnimatePresence>
+        {feedbackOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.22 }}
+            style={{ overflow: "hidden" }}
+          >
+            <div
+              className="rounded-xl p-4 flex flex-col gap-3"
+              style={{
+                background: "rgba(239,68,68,0.05)",
+                border:     "1px solid rgba(239,68,68,0.20)",
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-red-400">Report misclassification</span>
+                <button
+                  onClick={() => setFeedbackOpen(false)}
+                  className="text-[var(--text-muted)] hover:text-red-400 transition-colors"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+
+              {feedbackStatus === "done" ? (
+                <div className="flex items-center gap-2 text-emerald-400 text-sm py-2">
+                  <CheckCircle size={15} />
+                  Correction saved — thank you!
+                </div>
+              ) : (
+                <form onSubmit={handleFeedbackSubmit} className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">
+                      Correct CN Type ID <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={feedbackType}
+                      onChange={e => setFeedbackType(e.target.value)}
+                      placeholder="e.g.&nbsp;1015"
+                      required
+                      className="rounded-lg px-3 py-1.5 text-sm outline-none"
+                      style={{
+                        background: "rgba(255,255,255,0.05)",
+                        border:     "1px solid rgba(255,255,255,0.12)",
+                        color:      "var(--text-primary)",
+                      }}
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">
+                      Note (optional)
+                    </label>
+                    <textarea
+                      value={feedbackNote}
+                      onChange={e => setFeedbackNote(e.target.value)}
+                      placeholder="Why do you think it\'s wrong? Any visual details..."
+                      rows={2}
+                      className="rounded-lg px-3 py-1.5 text-sm outline-none resize-none"
+                      style={{
+                        background: "rgba(255,255,255,0.05)",
+                        border:     "1px solid rgba(255,255,255,0.12)",
+                        color:      "var(--text-primary)",
+                      }}
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="submit"
+                      disabled={feedbackStatus === "submitting" || !feedbackType.trim()}
+                      className="flex-1 text-xs py-1.5 rounded-lg font-bold transition-all"
+                      style={{
+                        background: feedbackStatus === "submitting" ? "rgba(239,68,68,0.20)" : "rgba(239,68,68,0.70)",
+                        color:      "#fff",
+                        opacity:    feedbackStatus === "submitting" || !feedbackType.trim() ? 0.5 : 1,
+                      }}
+                    >
+                      {feedbackStatus === "submitting" ? "Saving…" : feedbackStatus === "error" ? "Try again" : "Submit correction"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFeedbackOpen(false)}
+                      className="text-xs py-1.5 px-3 rounded-lg transition-all"
+                      style={{
+                        background: "rgba(255,255,255,0.05)",
+                        color:      "var(--text-muted)",
+                        border:     "1px solid rgba(255,255,255,0.08)",
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

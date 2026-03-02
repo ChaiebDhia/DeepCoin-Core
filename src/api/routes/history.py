@@ -31,8 +31,24 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Response
 
-from src.api._store  import get_by_id, load_page, count as history_count, delete_by_id
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+
+from src.api._store  import get_by_id, load_page, count as history_count, delete_by_id, add_feedback
 from src.api.schemas import ClassifyResponse, CnnResult, Top5Item, HistoryListResponse, HistorySummary
+
+
+# ── feedback request body ─────────────────────────────────────────────────────
+
+class FeedbackRequest(BaseModel):
+    """
+    Body for POST /api/history/{id}/feedback.
+
+    correct_type_id: The CN type ID the user believes is correct (e.g. "1015").
+    note:            Optional free-text explanation (why it's wrong, visual clues, etc.).
+    """
+    correct_type_id: str
+    note:            str = ""
 
 logger = logging.getLogger(__name__)
 
@@ -163,3 +179,39 @@ async def delete_history_item(record_id: str) -> Response:
             detail=f"Record '{record_id}' not found.",
         )
     return Response(status_code=204)
+
+
+# ── feedback ───────────────────────────────────────────────────────────────────
+
+@router.post(
+    "/history/{record_id}/feedback",
+    summary="Mark a classification as wrong and supply the correct CN type",
+)
+async def submit_feedback(
+    record_id: str,
+    body:       FeedbackRequest,
+) -> JSONResponse:
+    """
+    POST /api/history/{id}/feedback
+
+    Stores the user's correction inside the existing record payload.
+    Returns 200 {"status": "ok"} on success, 404 if the record does not exist.
+
+    WHY not a separate table:
+        Feedback is tightly coupled to one classification record.  Embedding it
+        in the JSON payload (via add_feedback) avoids an ALTER TABLE migration
+        and keeps the data co-located for export / reporting.
+
+    WHY 200 (not 204):
+        The frontend mutation reads the response body to confirm success and
+        show a "Correction saved" toast.  204 has no body by HTTP spec.
+    """
+    ok = await asyncio.to_thread(
+        add_feedback, record_id, body.correct_type_id, body.note
+    )
+    if not ok:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Record '{record_id}' not found.",
+        )
+    return JSONResponse({"status": "ok"})

@@ -197,6 +197,31 @@ export async function deleteHistoryItem(id: string): Promise<void> {
 }
 
 /**
+ * POST /api/history/{id}/feedback
+ *
+ * Submit a "mark as wrong" correction so the analyst can review
+ * misclassifications.  Stores the correction inside the record payload.
+ *
+ * @param id             - UUID of the classification record to correct.
+ * @param correctTypeId  - The CN type ID the user says is correct (e.g. "1015").
+ * @param note           - Optional free-text explanation.
+ */
+export async function submitFeedback(
+  id:            string,
+  correctTypeId: string,
+  note:          string,
+): Promise<void> {
+  try {
+    await apiClient.post(`/history/${id}/feedback`, {
+      correct_type_id: correctTypeId,
+      note,
+    });
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+/**
  * GET /api/health
  *
  * Check that FastAPI, the model, RAG engine and ChromaDB are all up.
