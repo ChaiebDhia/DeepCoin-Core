@@ -96,26 +96,32 @@ const DISPLAY_CONF_THRESHOLD = 0.70;
 
 // ─── TTA consensus threshold ─────────────────────────────────────────────────
 // When 8 TTA passes are used we track what fraction independently selected the
-// same top-1 class. At ≥ 75% (6/8+ passes agree) we promote the display to
-// "TTA Consensus Identified" even if the raw softmax is below 0.70.
+// same top-1 class. At ≥ 87.5% (7/8+ passes agree) we promote the display to
+// "TTA Consensus" even if the raw softmax is below 0.70.
 //
-// WHY: A coin at 8% confidence but vote_fraction = 1.0 means every augmented
-// view agreed on the same type. The low softmax reflects image capture quality
-// (screenshot, angle, lighting), NOT actual uncertainty. Showing "Not identified"
-// in that case would mislead the user about the reliability of the result.
-const TTA_VOTE_THRESHOLD = 0.75;
+// WHY 0.875 (not 0.75): 6/8 agreement is too weak a signal — two passes
+// disagreed, and the raw softmax may still be very low (<20%) meaning the
+// model genuinely found multiple plausible candidates. At 7/8+, the consensus
+// is strong enough to surface as a "Consistent Match" with a review notice.
+//
+// IMPORTANT: TTA consistency ≠ correctness. A low softmax score alongside
+// high TTA agreement means the model found a strong visual pattern, but two
+// visually similar types may share that pattern. The user should always review
+// the Top-5 predictions in this state.
+const TTA_VOTE_THRESHOLD = 0.875;
 
 function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
   /**
    * THREE visual modes:
-   * 1. IDENTIFIED    (conf ≥ 0.70)                  → green type + CountUp %
-   * 2. TTA CONSENSUS (conf < 0.70, vote ≥ 0.75)    → teal badge + photo-quality note
-   * 3. UNIDENTIFIED  (conf < 0.70, vote < 0.75)    → purple "Not identified" pill
+   * 1. IDENTIFIED    (conf ≥ 0.70)                   → green type + CountUp %
+   * 2. TTA CONSENSUS (conf < 0.70, vote ≥ 0.875)    → teal badge + "Consistent Match" + review notice
+   * 3. LOW SIGNAL    (conf < 0.70, vote < 0.875)    → purple Deep Search pill
    *
-   * The TTA Consensus state exists for the case where all 8 TTA passes agree
-   * on the correct type but the raw softmax is depressed by photo quality
-   * (screenshot, angle, lighting). Without this third state, a correctly
-   * classified coin would display as "Not identified" — misleading the user.
+   * State 2 means the model voted consistently across augmented views, but the
+   * raw softmax is below the identification threshold. This can happen because
+   * two visually similar CN types share features, OR because image conditions
+   * reduced the decision margin. Either way, it is NOT a confirmed identification
+   * — it is a strong candidate that requires review of the Top-5.
    */
   const [barWidths, setBarWidths] = useState<number[]>(cnn.top5.map(() => 0));
   useEffect(() => {
@@ -158,19 +164,21 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
 
         ) : ttaConsensus ? (
           /* ── STATE 2 — TTA CONSENSUS ────────────────────────────────────────
-           *  All augmented passes agreed → the model IS certain. The low softmax
-           *  is caused by photo conditions (screenshot, angle, lighting), not by
-           *  genuine classification uncertainty. Show as identified + explain why.
+           *  7/8+ augmented passes agreed on the same top-1 class, but the raw
+           *  softmax is below the 70% identification threshold. This is a strong
+           *  candidate, NOT a confirmed identification. The low % can mean two
+           *  visually similar types share features. Show clearly and ask the
+           *  user to review the Top-5 before treating it as definitive.
            * ─────────────────────────────────────────────────────────────────── */
           <>
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs text-[var(--text-muted)] mb-0.5">Identified Type</p>
+                <p className="text-xs text-[var(--text-muted)] mb-0.5">Consistent Match</p>
                 <p className="text-2xl font-bold text-[var(--text-primary)] font-mono">
                   CN {cnn.label}
                 </p>
                 <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                  similarity score: {(cnn.confidence * 100).toFixed(1)}%
+                  CNN confidence: {(cnn.confidence * 100).toFixed(1)}%
                 </p>
               </div>
               <span
@@ -188,17 +196,20 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
               className="rounded-lg px-3 py-2.5 text-xs leading-relaxed"
               style={{ background: "rgba(20,184,166,0.07)", border: "1px solid rgba(20,184,166,0.22)" }}
             >
-              <p className="font-semibold text-teal-300 mb-1">Why is the score low?</p>
+              <p className="font-semibold text-teal-300 mb-1">What does this mean?</p>
               <p className="text-[var(--text-secondary)]">
-                The classifier was consistent across{" "}
                 <span className="text-teal-200 font-medium">
-                  all {numPasses} augmented views{passLabel ? ` (${passLabel} agree)` : ""}
+                  {passLabel ? `${passLabel}` : `${numPasses}/${numPasses}`} augmented views
                 </span>
-                {" "}— the low percentage reflects{" "}
-                <span className="text-teal-200 font-medium">image capture conditions</span>
-                {" "}(screenshot quality, angle, lighting) rather than classification
-                uncertainty. The knowledge-base agents have retrieved the full scholarly
-                record for this type.
+                {" "}independently arrived at the same result — strong internal consistency.
+                However, the{" "}
+                <span className="text-teal-200 font-medium">
+                  low confidence score ({(cnn.confidence * 100).toFixed(1)}%)
+                </span>
+                {" "}indicates this coin type shares visual features with other CN types.
+                Review the{" "}
+                <span className="text-teal-200 font-medium">Top-5 predictions</span>
+                {" "}below before treating this as a definitive identification.
               </p>
             </div>
           </>

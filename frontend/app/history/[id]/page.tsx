@@ -51,9 +51,9 @@ function QuickFact({
 // ── Confidence tier label ─────────────────────────────────────────────────────
 
 function confidenceTier(conf: number, vote: number | null) {
-  if (conf >= 0.70) return { label: "High confidence", color: "text-green-400" };
-  if (vote != null && vote >= 0.75) return { label: "TTA consensus", color: "text-teal-400" };
-  if (conf >= 0.40) return { label: "Moderate match", color: "text-amber-400" };
+  if (conf >= 0.70) return { label: "High confidence",   color: "text-green-400" };
+  if (vote != null && vote >= 0.875) return { label: "TTA consensus", color: "text-teal-400" };
+  if (conf >= 0.40) return { label: "Moderate match",    color: "text-amber-400" };
   return { label: "Low visual signal", color: "text-purple-400" };
 }
 
