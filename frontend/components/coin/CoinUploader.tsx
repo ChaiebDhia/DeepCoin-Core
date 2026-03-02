@@ -183,6 +183,76 @@ async function analyseImageQuality(file: File): Promise<string[]> {
   });
 }
 
+// ── Screenshot detector ─────────────────────────────────────────────────────
+
+/**
+ * Heuristically determine whether an image is likely a screen capture
+ * (e.g. Win+Shift+S, macOS Cmd+Shift+4, Snipping Tool) rather than a
+ * direct coin photograph.
+ *
+ * WHY this matters:
+ *   Screenshots pass through browser rendering → screen sub-pixel scaling →
+ *   PNG compression before we ever see the file. Each step permanently
+ *   discards pixel-level texture information the CNN learnt from during
+ *   training. Result: softmax probability collapses to 5–12% even for
+ *   coin types the model knows at 90%+. The correct answer still appears
+ *   at rank 1, but the user has no way to know why the score is low.
+ *   A pre-analysis warning sets accurate expectations.
+ *
+ * THREE detection signals (any one is sufficient):
+ *   1. Filename contains a common screenshot keyword in any language.
+ *      Most OS screenshot tools embed their name: "Capture d'écran",
+ *      "Screenshot", "Bildschirmfoto", "Schermata", "Ekran Alıntısı", etc.
+ *   2. File is PNG AND aspect ratio matches a common screen resolution
+ *      (16:9 = 1.778, 16:10 = 1.60, 4:3 = 1.333, 21:9 = 2.333).
+ *      Coin photographs uploaded by researchers are almost always JPEG;
+ *      PNG + screen ratio is a very strong signal.
+ *   3. File is very large PNG (> 500 KB) at modest resolution — typical
+ *      for high-DPI screenshots (Retina/4K) that have not been compressed.
+ *
+ * Returns true = likely screenshot → show warning.
+ */
+async function detectScreenshot(file: File): Promise<boolean> {
+  // Signal 1 — filename keyword match (multilingual)
+  const name = file.name.toLowerCase();
+  const SCREENSHOT_KEYWORDS = [
+    "screenshot", "screen shot", "screen_shot",
+    "capture",    // Windows Snipping Tool, French "Capture d'écran"
+    "bildschirm",                               // German
+    "schermata",  "scherm",                     // Italian, Dutch
+    "ekran",                                    // Turkish / Polish
+    "снимок",     "снимок экрана",              // Russian
+    "snímek",     "snimek",                     // Czech / Slovak
+    "captura",                                  // Spanish / Portuguese
+  ];
+  if (SCREENSHOT_KEYWORDS.some(k => name.includes(k))) return true;
+
+  // Signals 2 & 3 require reading image dimensions — only applies to PNG
+  if (file.type !== "image/png") return false;
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const { naturalWidth: W, naturalHeight: H } = img;
+      // Signal 2 — screen aspect ratio
+      const ratio = Math.max(W, H) / Math.min(W, H);
+      const SCREEN_RATIOS = [1.778, 1.600, 2.333, 1.333, 1.500, 1.250];
+      if (SCREEN_RATIOS.some(r => Math.abs(ratio - r) < 0.06)) {
+        resolve(true); return;
+      }
+      // Signal 3 — large PNG at modest resolution (high-DPI screenshot)
+      if (file.size > 500_000 && W <= 3840 && H <= 2160) {
+        resolve(true); return;
+      }
+      resolve(false);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(false); };
+    img.src = url;
+  });
+}
+
 export function CoinUploader() {
   const {
     tta, setTta,
@@ -195,6 +265,7 @@ export function CoinUploader() {
 
   const [isDragging,      setIsDragging]      = useState(false);
   const [qualityWarnings, setQualityWarnings] = useState<string[]>([]);
+  const [isScreenshot,    setIsScreenshot]    = useState(false);
   const inputRef   = useRef<HTMLInputElement>(null);
   /**
    * AbortController ref for the in-flight classifyCoin Axios request.
@@ -255,10 +326,12 @@ export function CoinUploader() {
       return;
     }
     reset();
-    setQualityWarnings([]);      // clear any previous warnings
+    setQualityWarnings([]);   // clear any previous warnings
+    setIsScreenshot(false);
     setSelectedFile(file);
-    // Run quality check in background — does not block the UI
+    // Run quality checks in background — neither blocks the UI
     analyseImageQuality(file).then(setQualityWarnings);
+    detectScreenshot(file).then(setIsScreenshot);
   }
 
   // ── Drag events ────────────────────────────────────────────────────────────
@@ -324,6 +397,8 @@ export function CoinUploader() {
     abortRef.current?.abort();
     abortRef.current = null;
     setCancelFn(null);
+    setIsScreenshot(false);
+    setQualityWarnings([]);
     reset();
     toast("Analysis cancelled.", { icon: "✋" });
   }
@@ -380,7 +455,7 @@ export function CoinUploader() {
             </p>
             {/* Remove button */}
             <button
-              onClick={(e) => { e.stopPropagation(); abortRef.current?.abort(); abortRef.current = null; setQualityWarnings([]); reset(); }}
+              onClick={(e) => { e.stopPropagation(); abortRef.current?.abort(); abortRef.current = null; setQualityWarnings([]); setIsScreenshot(false); reset(); }}
               className="absolute top-2 right-2 text-[var(--text-muted)] hover:text-red-400 transition-colors"
               aria-label="Remove file"
             >
@@ -428,6 +503,28 @@ export function CoinUploader() {
           </>
         )}
       </div>
+
+      {/* Screenshot warning — shown when heuristics detect a screen capture */}
+      {hasFile && isScreenshot && (
+        <div
+          className="rounded-lg px-3 py-2.5 text-xs leading-relaxed"
+          style={{ background: "rgba(234,88,12,0.10)", border: "1px solid rgba(234,88,12,0.40)" }}
+        >
+          <p className="font-semibold text-orange-300 mb-1">📸 Screenshot detected — lower confidence expected</p>
+          <p className="text-orange-200/80">
+            Screenshots pass through browser rendering, screen scaling, and PNG compression
+            before reaching the classifier — permanently discarding fine texture details the
+            model was trained on.{" "}
+            <span className="font-semibold text-orange-200">Confidence scores will be significantly lower</span>
+            {" "}than for a direct photograph, even when the correct type is identified.
+          </p>
+          <p className="text-orange-200/60 mt-1.5">
+            💡 For best results: download the original image from{" "}
+            <span className="font-medium text-orange-200/80">corpus-nummorum.eu</span>,
+            or photograph the physical coin directly.
+          </p>
+        </div>
+      )}
 
       {/* Quality warnings — shown after file is selected if issues detected */}
       {hasFile && qualityWarnings.length > 0 && (

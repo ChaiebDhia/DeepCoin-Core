@@ -237,7 +237,15 @@ export function AgentPipeline({ onCancel }: AgentPipelineProps) {
         style={{ borderColor: "rgba(255,255,255,0.07)" }}
       >
         <div className="flex items-center gap-2.5">
-          <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse inline-block" />
+          {/* Coin-flip mascot — scaleX 1→0.1→1 simulates a coin flipping */}
+          <motion.span
+            animate={{ scaleX: [1, 0.08, 1, 0.08, 1] }}
+            transition={{ duration: 1.8, repeat: Infinity, repeatDelay: 3.5, ease: "easeInOut" }}
+            className="text-base select-none leading-none"
+            style={{ display: "inline-block" }}
+          >
+            🪙
+          </motion.span>
           <span
             className="text-[10px] font-bold tracking-widest uppercase"
             style={{ color: "var(--text-muted)" }}
@@ -271,6 +279,74 @@ export function AgentPipeline({ onCancel }: AgentPipelineProps) {
           )}
         </div>
       </div>
+
+      {/* ── Mascot row: active agent speaks the latest log message ─────
+           WHY: the chat log below is useful but small. This persistent
+           "speech bubble" always shows what the active agent is doing in a
+           prominent, human-readable line. The bouncing dots signal in-progress
+           work without a spinner — keeps the UI alive and engaging.          */}
+      <AnimatePresence mode="wait">
+        {log.length > 0 && (
+          <motion.div
+            key={log[log.length - 1].id}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.28 }}
+            className="flex items-center gap-3 px-5 py-2.5"
+            style={{
+              borderBottom: "1px solid rgba(255,255,255,0.05)",
+              background:   "rgba(255,255,255,0.015)",
+            }}
+          >
+            {/* Active agent emoji — spring-pops on stage change */}
+            <motion.span
+              key={activeStage}
+              initial={{ scale: 0.6 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 420, damping: 18 }}
+              className="text-2xl shrink-0 select-none"
+              style={{ filter: `drop-shadow(0 0 9px ${AGENTS[activeStage].color}55)` }}
+            >
+              {AGENTS[activeStage].emoji}
+            </motion.span>
+
+            {/* Speech bubble */}
+            <div
+              className="rounded-lg px-3 py-1.5 text-xs flex-1 min-w-0"
+              style={{
+                background: AGENTS[activeStage].bgActive,
+                border:     `1px solid ${AGENTS[activeStage].border}`,
+              }}
+            >
+              <span className="font-bold mr-2" style={{ color: AGENTS[activeStage].color }}>
+                {AGENTS[activeStage].name}:
+              </span>
+              <span style={{ color: "var(--text-secondary)" }}>
+                {log[log.length - 1].message}
+              </span>
+            </div>
+
+            {/* Bouncing typing dots */}
+            <div className="flex items-center gap-1 shrink-0">
+              {[0, 1, 2].map(i => (
+                <motion.span
+                  key={i}
+                  className="inline-block w-1.5 h-1.5 rounded-full"
+                  style={{ background: AGENTS[activeStage].color }}
+                  animate={{ opacity: [0.25, 1, 0.25], y: [0, -4, 0] }}
+                  transition={{
+                    duration: 0.75,
+                    repeat:   Infinity,
+                    delay:    i * 0.17,
+                    ease:     "easeInOut",
+                  }}
+                />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Agent stations + connectors ──────────────────────────────── */}
       {/* NOTE: overflow-x-auto was removed intentionally. Setting overflow-x:auto
