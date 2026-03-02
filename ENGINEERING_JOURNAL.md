@@ -7,7 +7,7 @@
 **Period**: PFE (Final Year Engineering Internship), Feb–July 2026  
 **GitHub**: https://github.com/ChaiebDhia/DeepCoin-Core  
 **Author**: Dhia Chaïeb  
-**Status as of**: March 2026 — Phase A1+A2 complete: PostgreSQL ORM (6 tables: User, Classification, Feedback, AuditLog, EmailVerification, RefreshToken), Alembic migration 001_initial_schema, full JWT auth system (8 endpoints, bcrypt work-factor-12, HS256 JWT, refresh-token rotation, RBAC with 3 roles). Frontend fully live through Phase 4 UX (CN links, delete, filter bar, stats strip, copy link, screenshot warning, mark-as-wrong feedback). HEAD: 40933f2. Phase A3 (per-user rate limiting + AuditLog writes) is next.  
+**Status as of**: March 2026 — Phase A1+A2 complete: PostgreSQL ORM (6 tables: User, Classification, Feedback, AuditLog, EmailVerification, RefreshToken), Alembic migration 001_initial_schema, full JWT auth system (8 endpoints, bcrypt work-factor-12, HS256 JWT, refresh-token rotation, RBAC with 3 roles). Frontend fully live through Phase 4 UX (CN links, delete, filter bar, stats strip, copy link, screenshot warning, mark-as-wrong feedback). Sections 59–61 added: full annotated gatekeeper.py + historian.py + frontend store.ts / CoinUploader.tsx from blank files. Table of Contents expanded to all 61 sections. HEAD: 608e91d. Phase A3 (per-user rate limiting + AuditLog writes) is next.  
 
 ---
 
@@ -58,8 +58,22 @@
 43. [Phase 3 — CN Links, Delete Button, Filter Bar](#43-phase-3--cn-links-delete-button-filter-bar-march-2026)
 44. [Phase 4 — CTA Banner, Linked Badges, Stats Strip, Copy Link](#44-phase-4--cta-banner-linked-badges-stats-strip-copy-link-march-2026)
 45. [Known Issue: Material Check False Mismatch — Patina/HSV Problem](#45-known-issue-material-check-false-mismatch--patinahsv-problem-march-2026)
-46. [Section 57 — Phase A1: PostgreSQL Database Layer (Enterprise Auth Foundation)](#section-57--phase-a1-postgresql-database-layer-enterprise-auth-foundation)
-47. [Section 58 — Phase A2: JWT Authentication System (Register, Login, Tokens, RBAC)](#section-58--phase-a2-jwt-authentication-system-register-login-tokens-rbac)
+46. [Section 46 — Thirteen Missing Commits: The Complete Engineering Record](#section-46--thirteen-missing-commits-the-complete-engineering-record)
+47. [Section 47 — Complete File Inventory: Every File, Every Function (2026)](#section-47--complete-file-inventory-every-file-every-function-2026)
+48. [Section 48 — End-to-End Data Flow: From Browser Click to PDF Download](#section-48--end-to-end-data-flow-from-browser-click-to-pdf-download)
+49. [Section 49 — Engineering Foundations: The "Why" Behind Every Technology](#section-49--engineering-foundations-the-why-behind-every-technology)
+50. [Section 50 — FastAPI Backend Architecture: Every File, Every Line, Every Decision](#section-50--fastapi-backend-architecture-every-file-every-line-every-decision)
+51. [Section 51 — Frontend Architecture Deep Dive: Every File, Every Pattern, Every Decision](#section-51--frontend-architecture-deep-dive-every-file-every-pattern-every-decision)
+52. [Section 52 — How to Rebuild This Entire System From Scratch](#section-52--how-to-rebuild-this-entire-system-from-scratch)
+53. [Section 53 — The Complete Baby Engineer's Reference: Every Term, Every Gap, Every Relationship](#section-53--the-complete-baby-engineers-reference-every-term-every-gap-every-relationship)
+54. [Section 54 — TTA UX Overhaul + Critical Auto-Crop Bug Fix](#section-54--tta-ux-overhaul--critical-auto-crop-bug-fix)
+55. [Section 55 — Screenshot Warning Banner](#section-55--screenshot-warning-banner)
+56. [Section 56 — Waiting Animation + Mark-as-Wrong Feedback](#section-56--waiting-animation--mark-as-wrong-feedback)
+57. [Section 57 — Phase A1: PostgreSQL Database Layer (Enterprise Auth Foundation)](#section-57--phase-a1-postgresql-database-layer-enterprise-auth-foundation)
+58. [Section 58 — Phase A2: JWT Authentication System (Register, Login, Tokens, RBAC)](#section-58--phase-a2-jwt-authentication-system-register-login-tokens-rbac)
+59. [Section 59 — Full Annotated `gatekeeper.py`: Every Line Explained](#section-59--full-annotated-gatekeeperpy--every-line-explained)
+60. [Section 60 — Full Annotated `historian.py`: Every Line Explained](#section-60--full-annotated-historianpy--every-line-explained)
+61. [Section 61 — Frontend: `store.ts` + `CoinUploader.tsx` From Blank Files](#section-61--frontend--storets--coinuploadertsx-from-blank-files)
 
 ---
 
