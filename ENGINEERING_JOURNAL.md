@@ -7,7 +7,7 @@
 **Period**: PFE (Final Year Engineering Internship), Feb–July 2026  
 **GitHub**: https://github.com/ChaiebDhia/DeepCoin-Core  
 **Author**: Dhia Chaïeb  
-**Status as of**: March 2026 — Phase A1+A2+A3 complete: PostgreSQL ORM (6 tables: User, Classification, Feedback, AuditLog, EmailVerification, RefreshToken), Alembic migration 001_initial_schema, full JWT auth system (8 endpoints, bcrypt work-factor-12, HS256 JWT, refresh-token rotation, RBAC with 3 roles). Phase A3: shared `src/api/db/audit.py`, per-user rate-limiting key (`user_or_ip_key`), AuditLog writes on classify + delete. Frontend fully live through Phase 4 UX (CN links, delete, filter bar, stats strip, copy link, screenshot warning, mark-as-wrong feedback). Sections 59–62 added. Table of Contents expanded to all 62 sections. HEAD: to-be-updated after commit. 46/46 unit tests passing.  
+**Status as of**: March 2026 — Phase A1+A2+A3 complete: PostgreSQL ORM (6 tables: User, Classification, Feedback, AuditLog, EmailVerification, RefreshToken), Alembic migration 001_initial_schema, full JWT auth system (8 endpoints, bcrypt work-factor-12, HS256 JWT, refresh-token rotation, RBAC with 3 roles). Phase A3: shared `src/api/db/audit.py`, per-user rate-limiting key (`user_or_ip_key`), AuditLog writes on classify + delete. Frontend fully live through Phase 4 UX (CN links, delete, filter bar, stats strip, copy link, screenshot warning, mark-as-wrong feedback). Sections 59–62 added. Table of Contents expanded to all 62 sections. HEAD: e61ed57. 46/46 unit tests passing.  
 
 ---
 
