@@ -29,6 +29,10 @@ import type {
   HistoryListResponse,
   HistorySummary,
   HealthResponse,
+  ExploreListResponse,
+  AdminFeedbackResponse,
+  AdminAnalysesResponse,
+  ChatResponse,
 } from "@/types/api";
 
 // ── Axios instance ────────────────────────────────────────────────────────────
@@ -302,4 +306,95 @@ export function pdfDownloadUrl(pdfUrl: string): string {
   if (pdfUrl.startsWith("http")) return pdfUrl;
   // Relative — works because /api/* is proxied by Next.js rewrites
   return pdfUrl;
+}
+// ── Public explore ────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/explore
+ *
+ * Public gallery — returns recent analyses with NO authentication.
+ * Used by the /explore page for anonymous visitors.
+ *
+ * @param skip   Pagination offset
+ * @param limit  Page size (max 50)
+ * @param route  Optional route filter ("historian" | "validator" | "investigator")
+ */
+export async function explorePublic(
+  skip   = 0,
+  limit  = 12,
+  route?: string,
+): Promise<ExploreListResponse> {
+  try {
+    const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
+    if (route && route !== "all") params.set("route", route);
+    const { data } = await apiClient.get<ExploreListResponse>(`/explore?${params}`);
+    return data;
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+// ── Admin endpoints ───────────────────────────────────────────────────────────
+
+/**
+ * GET /api/admin/feedback (via Next.js proxy at /api/admin/feedback)
+ *
+ * Fetch paginated user corrections. Requires admin or curator role.
+ * Calls the Next.js route handler which server-side proxies to FastAPI.
+ */
+export async function getAdminFeedback(skip = 0, limit = 20): Promise<AdminFeedbackResponse> {
+  try {
+    const { data } = await apiClient.get<AdminFeedbackResponse>(
+      `/admin/feedback?skip=${skip}&limit=${limit}`,
+    );
+    return data;
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+/**
+ * GET /api/admin/analyses
+ *
+ * Paginated full analyses list for all users. Requires admin or curator role.
+ */
+export async function getAdminAnalyses(
+  skip   = 0,
+  limit  = 20,
+  route?: string,
+  search?: string,
+): Promise<AdminAnalysesResponse> {
+  try {
+    const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
+    if (route && route !== "all") params.set("route", route);
+    if (search && search.trim())  params.set("search", search.trim());
+    const { data } = await apiClient.get<AdminAnalysesResponse>(`/admin/analyses?${params}`);
+    return data;
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+// ── AI Chat ───────────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/chat
+ *
+ * Ask the DeepCoin AI a natural-language numismatic question.
+ * The answer is grounded in the 9,541-type Corpus Nummorum knowledge base.
+ * NO authentication required.
+ *
+ * @param query     The question (max 500 chars)
+ * @param nSources  Number of KB chunks to retrieve (default 5)
+ */
+export async function chatQuery(query: string, nSources = 5): Promise<ChatResponse> {
+  try {
+    const { data } = await apiClient.post<ChatResponse>("/chat", {
+      query,
+      n_sources: nSources,
+    });
+    return data;
+  } catch (err) {
+    throw toApiError(err);
+  }
 }

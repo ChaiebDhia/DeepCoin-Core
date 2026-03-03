@@ -4,32 +4,36 @@
  * app/explore/page.tsx — Explore CN Coin Types
  * ===============================================
  * WHAT: A public gallery of all analyses ever run on DeepCoin.
- *       Browsable by anyone, no login required.
+ *       Browsable by anyone — no login required.
  *
  * WHY PUBLIC:
  *   This is the "window display" of the platform. Showing real analyses
  *   (with routes, confidence levels, and coin labels) builds credibility
  *   for new visitors before they sign up.
  *
+ * WHY it now uses /api/explore (not /api/history):
+ *   /api/history requires authentication — anonymous users get 401 and
+ *   the gallery showed nothing.  /api/explore is intentionally unauthenticated.
+ *   It returns only public-safe fields (no user identity, no file paths).
+ *
  * FEATURES:
- *   - Infinite-scroll pagination (page size 12)
- *   - Filter by route (historian / validator / investigator)
- *   - Search by coin label / CN type ID
+ *   - Server-side route filter (historian / validator / investigator)
+ *   - Client-side search by coin label
+ *   - Pagination (page size 12)
  *   - Each card links to the full analysis (/history/:id)
  *   - Corpus Nummorum external link for each coin type
  *
  * WHY "use client":
- *   Uses useState for filter state, useQuery for data fetching,
- *   useDebounce for search input debouncing.
+ *   Uses useState for filter state, useQuery for data fetching.
  */
 
 import { useState, useMemo }       from "react";
 import { useQuery }                from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import Link                        from "next/link";
-import { ExternalLink, Search, FlaskConical, BookOpen, ShieldCheck, Loader2 } from "lucide-react";
-import { getHistory }              from "@/lib/api";
-import type { HistorySummary }     from "@/types/api";
+import { ExternalLink, Search, FlaskConical, BookOpen, ShieldCheck, Loader2, Sparkles } from "lucide-react";
+import { explorePublic }           from "@/lib/api";
+import type { ExploreItem }        from "@/types/api";
 
 /* ── types ────────────────────────────────────────────────────────────────── */
 
@@ -86,33 +90,32 @@ export default function ExplorePage() {
   const PAGE_SIZE = 12;
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["explore", page, PAGE_SIZE],
-    queryFn:  () => getHistory((page - 1) * PAGE_SIZE, PAGE_SIZE),
+    queryKey: ["explore-public", page, PAGE_SIZE, routeFilter],
+    queryFn:  () => explorePublic(
+      (page - 1) * PAGE_SIZE,
+      PAGE_SIZE,
+      routeFilter !== "all" ? routeFilter : undefined,
+    ),
     staleTime: 60_000,
   });
 
-  /** Client-side filter on top of the current page */
   const filtered = useMemo(() => {
-    let items: HistorySummary[] = data?.items ?? [];
-    if (routeFilter !== "all") {
-      items = items.filter(i => i.route_taken === routeFilter);
-    }
+    let items: ExploreItem[] = data?.items ?? [];
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       items = items.filter(i =>
         (i.label ?? "").toLowerCase().includes(q) ||
-        (i.id ?? "").toLowerCase().includes(q),
+        (i.id    ?? "").toLowerCase().includes(q),
       );
     }
     return items;
-  }, [data, routeFilter, search]);
+  }, [data, search]);
 
   const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 1;
 
   return (
     <div className="py-10 max-w-5xl space-y-8">
 
-      {/* Header */}
       <div className="space-y-2">
         <p className="text-xs font-black uppercase tracking-widest" style={{ color: "var(--brand-gold)" }}>
           Community Gallery
@@ -121,34 +124,23 @@ export default function ExplorePage() {
           Explore Analyses
         </h1>
         <p className="text-sm max-w-xl" style={{ color: "var(--text-secondary)" }}>
-          Browse all coin analyses run on DeepCoin. Each card shows the AI route taken, confidence
-          level, and links to the full professional report.
+          Browse all coin analyses run on DeepCoin — no account needed.
+          Each card shows the AI route taken, confidence level, and links to the full report.
         </p>
       </div>
 
-      {/* Filters bar */}
+      {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
-        {/* Search */}
         <div className="relative flex-1 max-w-sm">
-          <Search
-            size={14}
-            className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
-            style={{ color: "var(--text-muted)" }}
-          />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--text-muted)" }} />
           <input
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }}
             placeholder="Search by coin type or label…"
             className="w-full pl-8 pr-4 py-2 text-sm rounded-xl outline-none transition-colors"
-            style={{
-              backgroundColor: "var(--surface-1)",
-              border:          "1px solid var(--border)",
-              color:           "var(--text-primary)",
-            }}
+            style={{ backgroundColor: "var(--surface-1)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
           />
         </div>
-
-        {/* Route pills */}
         <div className="flex flex-wrap gap-2">
           {(["all", "historian", "validator", "investigator"] as RouteFilter[]).map(r => {
             const cfg   = ROUTE_CONFIG[r];
@@ -161,7 +153,7 @@ export default function ExplorePage() {
                 className="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
                 style={{
                   backgroundColor: active ? (cfg?.bg ?? "var(--brand-gold)") : "var(--surface-1)",
-                  color:           active ? (cfg?.color ?? "#0d1520")         : "var(--text-secondary)",
+                  color:           active ? (cfg?.color ?? "#0d1520")        : "var(--text-secondary)",
                   border:          "1px solid var(--border)",
                 }}
               >
@@ -172,14 +164,12 @@ export default function ExplorePage() {
         </div>
       </div>
 
-      {/* Summary line */}
       {data && (
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-          {data.total} total analyses · showing page {page} of {totalPages}
+          {data.total} total analyses · page {page} of {totalPages}
         </p>
       )}
 
-      {/* Grid */}
       {isLoading && (
         <div className="flex items-center justify-center py-20">
           <Loader2 size={28} className="animate-spin" style={{ color: "var(--brand-gold)" }} />
@@ -196,72 +186,52 @@ export default function ExplorePage() {
         {!isLoading && !isError && (
           <motion.div
             key={`${page}-${routeFilter}-${search}`}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{    opacity: 0 }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5"
           >
             {filtered.map((item, i) => {
               const cnId   = item.label?.match(/\d+/)?.[0];
               const cnHref = cnId ? `https://www.corpus-nummorum.eu/types/${cnId}` : null;
-
               return (
                 <motion.div
                   key={item.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
+                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.03 }}
                   className="rounded-2xl border overflow-hidden"
                   style={{ borderColor: "var(--border)", backgroundColor: "var(--surface-1)" }}
                 >
-                  {/* Card header stripe */}
-                  <div
-                    className="h-1 w-full"
-                    style={{
-                      backgroundColor:
-                        item.route_taken === "historian"    ? "#3b82f6" :
-                        item.route_taken === "validator"    ? "#f59e0b" :
-                        item.route_taken === "investigator" ? "#8b5cf6" : "var(--border)",
-                    }}
-                  />
+                  <div className="h-1 w-full" style={{
+                    backgroundColor:
+                      item.route_taken === "historian"    ? "#3b82f6" :
+                      item.route_taken === "validator"    ? "#f59e0b" :
+                      item.route_taken === "investigator" ? "#8b5cf6" : "var(--border)",
+                  }} />
                   <div className="p-5 space-y-3">
-                    {/* Label + CN link */}
                     <div className="flex items-start justify-between gap-2">
-                      <p
-                        className="text-sm font-bold leading-snug truncate"
-                        style={{ color: "var(--text-primary)" }}
-                        title={item.label ?? item.id}
-                      >
+                      <p className="text-sm font-bold leading-snug truncate" style={{ color: "var(--text-primary)" }} title={item.label ?? item.id}>
                         {item.label ?? "Unclassified"}
                       </p>
                       {cnHref && (
-                        <a
-                          href={cnHref}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="shrink-0 text-[10px] flex items-center gap-0.5 hover:underline"
-                          style={{ color: "var(--text-muted)" }}
-                        >
+                        <a href={cnHref} target="_blank" rel="noopener noreferrer"
+                           className="shrink-0 text-[10px] flex items-center gap-0.5 hover:underline"
+                           style={{ color: "var(--text-muted)" }}>
                           CN <ExternalLink size={9} />
                         </a>
                       )}
                     </div>
-
-                    {/* Route + confidence */}
                     <div className="flex items-center justify-between">
                       {item.route_taken && <RoutePill route={item.route_taken} />}
                       <ConfidenceBadge conf={item.confidence} />
                     </div>
-
-                    {/* View link */}
+                    {item.created_at && (
+                      <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+                        {new Date(item.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+                      </p>
+                    )}
                     <Link
                       href={`/history/${item.id}`}
                       className="block w-full text-center text-xs font-semibold py-2 rounded-lg transition-colors hover:opacity-80"
-                      style={{
-                        backgroundColor: "var(--surface-2)",
-                        color:           "var(--text-secondary)",
-                        border:          "1px solid var(--border)",
-                      }}
+                      style={{ backgroundColor: "var(--surface-2)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
                     >
                       View full analysis →
                     </Link>
@@ -269,59 +239,60 @@ export default function ExplorePage() {
                 </motion.div>
               );
             })}
-
-            {filtered.length === 0 && (
+            {filtered.length === 0 && !isLoading && (
               <div className="col-span-full text-center py-14">
-                <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-                  No analyses match the current filter.
-                </p>
+                <p className="text-sm" style={{ color: "var(--text-muted)" }}>No analyses match the current filter.</p>
               </div>
             )}
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex justify-center gap-2">
-          <button
-            disabled={page === 1}
-            onClick={() => setPage(p => p - 1)}
+          <button disabled={page === 1} onClick={() => setPage(p => p - 1)}
             className="px-4 py-2 text-xs rounded-lg transition-opacity disabled:opacity-30"
-            style={{ backgroundColor: "var(--surface-1)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
-          >
+            style={{ backgroundColor: "var(--surface-1)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
             ← Previous
           </button>
           <span className="flex items-center px-4 text-xs" style={{ color: "var(--text-muted)" }}>
             {page} / {totalPages}
           </span>
-          <button
-            disabled={page === totalPages}
-            onClick={() => setPage(p => p + 1)}
+          <button disabled={page === totalPages} onClick={() => setPage(p => p + 1)}
             className="px-4 py-2 text-xs rounded-lg transition-opacity disabled:opacity-30"
-            style={{ backgroundColor: "var(--surface-1)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
-          >
+            style={{ backgroundColor: "var(--surface-1)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
             Next →
           </button>
         </div>
       )}
 
-      {/* CTA for new visitors */}
-      <div
-        className="rounded-2xl border p-8 text-center space-y-4"
-        style={{ borderColor: "rgba(212,168,83,0.3)", backgroundColor: "rgba(212,168,83,0.04)" }}
-      >
-        <h2 className="font-bold text-base" style={{ color: "var(--text-primary)" }}>
-          Have a coin to identify?
-        </h2>
+      {/* AI Chat CTA */}
+      <div className="rounded-2xl border p-6 flex flex-col sm:flex-row items-center gap-5"
+           style={{ borderColor: "rgba(139,92,246,0.3)", backgroundColor: "rgba(139,92,246,0.04)" }}>
+        <Sparkles size={28} style={{ color: "#8b5cf6", flexShrink: 0 }} />
+        <div className="flex-1 space-y-1 text-center sm:text-left">
+          <h2 className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>Ask the DeepCoin AI</h2>
+          <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+            Curious about a dynasty, mint city, or material?  Our AI searches 9,541 Corpus Nummorum
+            coin types and answers in natural language — no account needed.
+          </p>
+        </div>
+        <Link href="/chat" className="shrink-0 px-5 py-2.5 rounded-xl font-bold text-xs transition-opacity hover:opacity-80"
+              style={{ backgroundColor: "#8b5cf6", color: "#fff" }}>
+          Try AI Chat →
+        </Link>
+      </div>
+
+      {/* Sign-up CTA */}
+      <div className="rounded-2xl border p-8 text-center space-y-4"
+           style={{ borderColor: "rgba(212,168,83,0.3)", backgroundColor: "rgba(212,168,83,0.04)" }}>
+        <h2 className="font-bold text-base" style={{ color: "var(--text-primary)" }}>Have a coin to identify?</h2>
         <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
           Upload a photo and get a full historical report — denomination, mint, period, and provenance.
         </p>
-        <Link
-          href="/login?callbackUrl=/analyse"
-          className="inline-block px-7 py-2.5 rounded-xl font-bold text-sm transition-opacity hover:opacity-80"
-          style={{ backgroundColor: "var(--brand-gold)", color: "#0d1520" }}
-        >
+        <Link href="/login?callbackUrl=/analyse"
+              className="inline-block px-7 py-2.5 rounded-xl font-bold text-sm transition-opacity hover:opacity-80"
+              style={{ backgroundColor: "var(--brand-gold)", color: "#0d1520" }}>
           Start analysing →
         </Link>
       </div>

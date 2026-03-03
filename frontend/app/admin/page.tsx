@@ -20,6 +20,7 @@
  *   - Direct URL: /admin
  */
 
+import { useState }                    from "react";
 import { useSession }                  from "next-auth/react";
 import { useQuery }                    from "@tanstack/react-query";
 import { motion }                      from "framer-motion";
@@ -28,10 +29,11 @@ import { redirect }                    from "next/navigation";
 import {
   Activity, Database, Cpu, FileText, Github, ExternalLink,
   Users, Clock, CheckCircle, AlertTriangle, XCircle, BarChart3,
-  BookOpen, Shield, Mail, Download, UserCheck,
+  BookOpen, Shield, Mail, Download, UserCheck, MessageSquareWarning,
+  Search, ChevronLeft, ChevronRight,
 } from "lucide-react";
-import { getHealth, getHistory }       from "@/lib/api";
-import type { HistorySummary }         from "@/types/api";
+import { getHealth, getHistory, getAdminFeedback, getAdminAnalyses } from "@/lib/api";
+import type { HistorySummary, FeedbackItem, AdminAnalysisItem }             from "@/types/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -121,6 +123,32 @@ export default function AdminPage() {
   });
 
   const isPrivileged = (user?.role === "admin" || user?.role === "curator");
+
+  // ── admin panels state ────────────────────────────────────────────────────
+  const [feedbackPage,   setFeedbackPage]   = useState(1);
+  const [analysesPage,   setAnalysesPage]   = useState(1);
+  const [analysesRoute,  setAnalysesRoute]  = useState("");
+  const [analysesSearch, setAnalysesSearch] = useState("");
+  const PAGE_SIZE = 20;
+
+  const { data: feedbackData } = useQuery({
+    queryKey: ["admin", "feedback", feedbackPage],
+    queryFn:  () => getAdminFeedback((feedbackPage - 1) * PAGE_SIZE, PAGE_SIZE),
+    enabled:  isPrivileged,
+    staleTime: 30_000,
+  });
+
+  const { data: analysesData } = useQuery({
+    queryKey: ["admin", "analyses", analysesPage, analysesRoute, analysesSearch],
+    queryFn:  () => getAdminAnalyses(
+      (analysesPage - 1) * PAGE_SIZE,
+      PAGE_SIZE,
+      analysesRoute || undefined,
+      analysesSearch || undefined,
+    ),
+    enabled:  isPrivileged,
+    staleTime: 30_000,
+  });
 
   const { data: subscribers = [] } = useQuery<Subscriber[]>({
     queryKey: ["admin", "subscribers"],
@@ -235,7 +263,7 @@ export default function AdminPage() {
         </motion.div>
       </div>
 
-      {/* Recent analyses */}
+      {/* Recent analyses (everyone) */}
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
@@ -245,12 +273,8 @@ export default function AdminPage() {
       >
         <div className="flex items-center gap-2 px-6 py-4 border-b" style={{ borderColor: "var(--border)" }}>
           <FileText size={15} style={{ color: "var(--brand-gold)" }} />
-          <h2 className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>Recent Analyses</h2>
-          <Link
-            href="/history"
-            className="ml-auto text-xs hover:underline"
-            style={{ color: "var(--text-muted)" }}
-          >
+          <h2 className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>Recent Analyses (My Account)</h2>
+          <Link href="/history" className="ml-auto text-xs hover:underline" style={{ color: "var(--text-muted)" }}>
             View all →
           </Link>
         </div>
@@ -288,6 +312,216 @@ export default function AdminPage() {
           <p className="px-6 py-4 text-xs" style={{ color: "var(--text-muted)" }}>No analyses yet.</p>
         )}
       </motion.div>
+
+      {/* All analyses — admin / curator only */}
+      {isPrivileged && (
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.22 }}
+          className="rounded-2xl border"
+          style={{ borderColor: "var(--border)", backgroundColor: "var(--surface-1)" }}
+        >
+          <div className="flex flex-wrap items-center gap-2 px-6 py-4 border-b" style={{ borderColor: "var(--border)" }}>
+            <BarChart3 size={15} style={{ color: "#3b82f6" }} />
+            <h2 className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>All Analyses</h2>
+            {analysesData && (
+              <span className="text-[10px] font-black px-2 py-0.5 rounded-full tabular-nums"
+                    style={{ backgroundColor: "#3b82f620", color: "#3b82f6" }}>
+                {analysesData.total}
+              </span>
+            )}
+            {/* filters */}
+            <div className="ml-auto flex flex-wrap gap-2">
+              <div className="relative">
+                <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--text-muted)" }} />
+                <input
+                  value={analysesSearch}
+                  onChange={e => { setAnalysesSearch(e.target.value); setAnalysesPage(1); }}
+                  placeholder="Search label…"
+                  className="pl-6 pr-3 py-1.5 text-xs rounded-lg outline-none"
+                  style={{ backgroundColor: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text-primary)", width: 140 }}
+                />
+              </div>
+              <select
+                value={analysesRoute}
+                onChange={e => { setAnalysesRoute(e.target.value); setAnalysesPage(1); }}
+                className="text-xs px-2 py-1.5 rounded-lg outline-none"
+                style={{ backgroundColor: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+              >
+                <option value="">All routes</option>
+                <option value="historian">Historian</option>
+                <option value="validator">Validator</option>
+                <option value="investigator">Investigator</option>
+              </select>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                  {["Date", "Label", "Conf", "Route", "User", "PDF"].map(h => (
+                    <th key={h} className="px-4 py-3 text-left font-medium" style={{ color: "var(--text-muted)" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {analysesData?.items?.length ? analysesData.items.map((row: AdminAnalysisItem) => (
+                  <tr key={row.id} className="border-b last:border-b-0 hover:bg-[var(--surface-2)] transition-colors" style={{ borderColor: "var(--border)" }}>
+                    <td className="px-4 py-2.5 tabular-nums" style={{ color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+                      {row.created_at ? new Date(row.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "2-digit" }) : "—"}
+                    </td>
+                    <td className="px-4 py-2.5 font-mono" style={{ color: "var(--text-secondary)" }}>
+                      <Link href={`/history/${row.id}`} className="hover:underline">{row.label ?? "—"}</Link>
+                    </td>
+                    <td className="px-4 py-2.5 tabular-nums font-bold" style={{
+                      color: row.confidence >= 0.7 ? "#22c55e" : row.confidence >= 0.4 ? "#f59e0b" : "#8b5cf6"
+                    }}>
+                      {Math.round(row.confidence * 100)}%
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium" style={{
+                        backgroundColor:
+                          row.route_taken === "historian" ? "#3b82f620" :
+                          row.route_taken === "validator" ? "#f59e0b20" : "#8b5cf620",
+                        color:
+                          row.route_taken === "historian" ? "#3b82f6" :
+                          row.route_taken === "validator" ? "#f59e0b" : "#8b5cf6",
+                      }}>
+                        {row.route_taken}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5" style={{ color: "var(--text-muted)" }}>{row.user_email}</td>
+                    <td className="px-4 py-2.5">
+                      {row.pdf_url
+                        ? <a href={row.pdf_url} target="_blank" rel="noopener noreferrer"
+                             className="flex items-center gap-1 text-[10px] hover:underline" style={{ color: "#3b82f6" }}>
+                            <FileText size={10} /> PDF
+                          </a>
+                        : <span style={{ color: "var(--text-muted)" }}>—</span>
+                      }
+                    </td>
+                  </tr>
+                )) : (
+                  <tr><td colSpan={6} className="px-4 py-8 text-center" style={{ color: "var(--text-muted)" }}>No analyses yet.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          {/* pagination */}
+          {analysesData && analysesData.pages > 1 && (
+            <div className="flex items-center justify-between px-6 py-3 border-t" style={{ borderColor: "var(--border)" }}>
+              <span className="text-xs" style={{ color: "var(--text-muted)" }}>Page {analysesPage} of {analysesData.pages}</span>
+              <div className="flex gap-2">
+                <button disabled={analysesPage === 1} onClick={() => setAnalysesPage(p => p - 1)}
+                  className="p-1.5 rounded-lg transition-opacity disabled:opacity-30"
+                  style={{ backgroundColor: "var(--surface-2)", border: "1px solid var(--border)" }}>
+                  <ChevronLeft size={12} style={{ color: "var(--text-secondary)" }} />
+                </button>
+                <button disabled={analysesPage >= analysesData.pages} onClick={() => setAnalysesPage(p => p + 1)}
+                  className="p-1.5 rounded-lg transition-opacity disabled:opacity-30"
+                  style={{ backgroundColor: "var(--surface-2)", border: "1px solid var(--border)" }}>
+                  <ChevronRight size={12} style={{ color: "var(--text-secondary)" }} />
+                </button>
+              </div>
+            </div>
+          )}
+        </motion.div>
+      )}
+
+      {/* User corrections (feedback) — admin / curator only */}
+      {isPrivileged && (
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.24 }}
+          className="rounded-2xl border"
+          style={{ borderColor: "var(--border)", backgroundColor: "var(--surface-1)" }}
+        >
+          <div className="flex items-center gap-2 px-6 py-4 border-b" style={{ borderColor: "var(--border)" }}>
+            <MessageSquareWarning size={15} style={{ color: "#ef4444" }} />
+            <h2 className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>User Corrections</h2>
+            {feedbackData && (
+              <span className="ml-1 text-[10px] font-black px-2 py-0.5 rounded-full tabular-nums"
+                    style={{ backgroundColor: "#ef444420", color: "#ef4444" }}>
+                {feedbackData.total}
+              </span>
+            )}
+            <span className="ml-auto text-[10px]" style={{ color: "var(--text-muted)" }}>
+              "Mark as Wrong" reports from users
+            </span>
+          </div>
+          {feedbackData?.items?.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                    {["Date", "Coin (CNN)", "Conf", "Route", "Suggested Fix", "Note", "By"].map(h => (
+                      <th key={h} className="px-4 py-3 text-left font-medium" style={{ color: "var(--text-muted)" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {feedbackData.items.map((fb: FeedbackItem) => (
+                    <tr key={fb.id} className="border-b last:border-b-0 hover:bg-[var(--surface-2)] transition-colors" style={{ borderColor: "var(--border)" }}>
+                      <td className="px-4 py-2.5 tabular-nums" style={{ color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+                        {fb.created_at ? new Date(fb.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—"}
+                      </td>
+                      <td className="px-4 py-2.5 font-mono" style={{ color: "var(--text-secondary)" }}>
+                        <Link href={`/history/${fb.classification_id}`} className="hover:underline">
+                          {fb.coin_label ?? "—"}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-2.5 tabular-nums" style={{ color: "var(--text-muted)" }}>
+                        {fb.confidence != null ? `${Math.round(fb.confidence * 100)}%` : "—"}
+                      </td>
+                      <td className="px-4 py-2.5" style={{ color: "var(--text-muted)" }}>{fb.route_taken ?? "—"}</td>
+                      <td className="px-4 py-2.5">
+                        {fb.correct_type_id
+                          ? <a href={`https://www.corpus-nummorum.eu/types/${fb.correct_type_id}`}
+                               target="_blank" rel="noopener noreferrer"
+                               className="flex items-center gap-1 hover:underline" style={{ color: "#3b82f6" }}>
+                              CN {fb.correct_type_id} <ExternalLink size={9} />
+                            </a>
+                          : <span style={{ color: "var(--text-muted)" }}>—</span>
+                        }
+                      </td>
+                      <td className="px-4 py-2.5 max-w-[180px] truncate" style={{ color: "var(--text-muted)" }}
+                          title={fb.note ?? ""}>
+                        {fb.note ?? "—"}
+                      </td>
+                      <td className="px-4 py-2.5" style={{ color: "var(--text-muted)" }}>{fb.submitted_by}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="px-6 py-8 text-center">
+              <MessageSquareWarning size={20} className="mx-auto mb-2" style={{ color: "var(--text-muted)" }} />
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>No corrections submitted yet.</p>
+            </div>
+          )}
+          {/* pagination */}
+          {feedbackData && feedbackData.pages > 1 && (
+            <div className="flex items-center justify-between px-6 py-3 border-t" style={{ borderColor: "var(--border)" }}>
+              <span className="text-xs" style={{ color: "var(--text-muted)" }}>Page {feedbackPage} of {feedbackData.pages}</span>
+              <div className="flex gap-2">
+                <button disabled={feedbackPage === 1} onClick={() => setFeedbackPage(p => p - 1)}
+                  className="p-1.5 rounded-lg transition-opacity disabled:opacity-30"
+                  style={{ backgroundColor: "var(--surface-2)", border: "1px solid var(--border)" }}>
+                  <ChevronLeft size={12} style={{ color: "var(--text-secondary)" }} />
+                </button>
+                <button disabled={feedbackPage >= feedbackData.pages} onClick={() => setFeedbackPage(p => p + 1)}
+                  className="p-1.5 rounded-lg transition-opacity disabled:opacity-30"
+                  style={{ backgroundColor: "var(--surface-2)", border: "1px solid var(--border)" }}>
+                  <ChevronRight size={12} style={{ color: "var(--text-secondary)" }} />
+                </button>
+              </div>
+            </div>
+          )}
+        </motion.div>
+      )}
 
       {/* Subscriber management — admin / curator only */}
       {isPrivileged && (

@@ -65,6 +65,9 @@ from src.api.logging_config  import configure_logging
 from src.api.routes.classify     import router as classify_router
 from src.api.routes.history      import router as history_router
 from src.api.routes.subscribers  import router as subscribers_router
+from src.api.routes.explore      import router as explore_router
+from src.api.routes.admin        import router as admin_router
+from src.api.routes.chat         import router as chat_router
 
 from src import __version__
 
@@ -84,16 +87,23 @@ _START_TIME = time.time()
 
 # ── file cleanup helper ────────────────────────────────────────────────────────
 
-def _cleanup_old_files(max_age_hours: int = 24) -> None:
+def _cleanup_old_files(
+    uploads_max_age_hours: int = 24,
+    reports_max_age_hours: int = 720,   # 30 days — PDF links stay valid for a month
+) -> None:
     """
-    Delete uploaded images and generated PDFs older than max_age_hours.
+    Delete uploaded images and generated PDFs older than their respective TTLs.
 
     WHAT: Iterates uploads/ and reports/ directories, removes files whose
-    last-modified time is older than the cutoff.
+    last-modified time is older than the cutoff for that directory.
 
-    WHY: Without cleanup, a long-running server accumulates gigabytes of
-    coin images and PDFs. At 500 KB average per upload pair, 10,000 analyses
-    = 5 GB disk usage. 24-hour TTL keeps disk usage bounded.
+    WHY separate TTLs:
+        - Uploaded coin images are temporary (used during analysis only).
+          24 hours is plenty. 10,000 uploads × ~200 KB = ~2 GB — clean fast.
+        - Generated PDF reports must stay available so users can download
+          them from /history/{id}. Deleting after 24h caused the "report not
+          found" JSON error. 30 days (720h) keeps disk usage bounded while
+          ensuring any report generated in the past month is still accessible.
 
     WHY called at startup (not scheduled):
         A cron job or APScheduler adds a dependency and complexity.
@@ -101,9 +111,13 @@ def _cleanup_old_files(max_age_hours: int = 24) -> None:
         the admin is watching the logs. Sufficient for current scale.
     """
     import datetime
-    cutoff = datetime.datetime.now() - datetime.timedelta(hours=max_age_hours)
     deleted = 0
-    for directory in (_UPLOADS_DIR, _REPORTS_DIR):
+    dir_ttls = [
+        (_UPLOADS_DIR, uploads_max_age_hours),
+        (_REPORTS_DIR, reports_max_age_hours),
+    ]
+    for directory, max_age_hours in dir_ttls:
+        cutoff = datetime.datetime.now() - datetime.timedelta(hours=max_age_hours)
         if not directory.exists():
             continue
         for f in directory.iterdir():
@@ -146,7 +160,7 @@ async def lifespan(app: FastAPI):
     ensure_store()
 
     # Clean up stale files from previous runs (uploads + reports > 24h old)
-    _cleanup_old_files(max_age_hours=24)
+    _cleanup_old_files(uploads_max_age_hours=24, reports_max_age_hours=720)
 
     # Load the full pipeline once
     from src.agents.gatekeeper import Gatekeeper
@@ -233,6 +247,9 @@ app.include_router(auth_router)                                                #
 app.include_router(classify_router,   prefix="/api", tags=["Classification"])   # /api/classify
 app.include_router(history_router,    prefix="/api", tags=["History"])           # /api/history
 app.include_router(subscribers_router)                                          # /api/subscribers
+app.include_router(explore_router)                                              # /api/explore  (public)
+app.include_router(admin_router)                                                # /api/admin/*  (privileged)
+app.include_router(chat_router)                                                 # /api/chat     (AI Q&A)
 
 
 # ── PDF report serving ────────────────────────────────────────────────────────

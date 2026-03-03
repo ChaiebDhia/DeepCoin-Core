@@ -32,6 +32,7 @@ export function NavLinks() {
     <nav className="flex items-center gap-1">
       <Link href="/#features" className={linkCls}>Features</Link>
       <Link href="/explore"   className={linkCls}>Explore</Link>
+      <Link href="/chat"      className={linkCls}>AI Chat</Link>
       <Link href="/about"     className={linkCls}>About</Link>
       <Link href="/docs"      className={linkCls}>Docs</Link>
     </nav>

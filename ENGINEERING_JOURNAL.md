@@ -23989,3 +23989,879 @@ All layers 0–6 are complete and enterprise-grade.
 *Section 76: RegisterForm server-driven success message + Zustand module-level singleton deep-dive.*
 *Section 77: Full project state — 5 commits, 12 new files, 4 bugs fixed, Layer 7 roadmap.*
 *HEAD: 8a820b4 → origin/main.*
+
+---
+
+## Section 78 — Auth-Guarded Analyse CTA + Real Subscriber Endpoint + NavLinks Server Component
+
+**Commits:** `47245da`, `391e62e`
+**Date:** March 3, 2026
+
+### 78.1  Auth-Guarding the Analyse CTA in HeroSection
+
+**File:** `frontend/components/home/HeroSection.tsx`
+
+Before this commit, the hero section's primary call-to-action button always linked to `/analyse`, regardless of whether the user was logged in. The analyser itself does not require auth (it's intentionally public), but allowing untargeted visitors to jump straight to the analyser before understanding the product led to a high bounce rate from the analyser: users uploaded a photo, got a result they didn't understand, and left.
+
+**New behaviour — session-conditional CTA:**
+```tsx
+// HeroSection.tsx
+const { status } = useSession();
+const isAuthed   = status === "authenticated";
+
+<Link href={isAuthed ? "/analyse" : "/login?callbackUrl=/analyse"}>
+  {isAuthed ? "Analyse your coin →" : "Get started — it's free"}
+</Link>
+```
+
+- **Authenticated user**: goes straight to `/analyse` — shortest path.
+- **Anonymous user**: goes to `/login?callbackUrl=/analyse` — after login, NextAuth redirects them to `/analyse` automatically. The `callbackUrl` parameter means they lose zero steps.
+
+**WHY not just let them click Analyse without logging in:**
+The analyser will work (no auth enforcement), but the analysis result won't appear in their history unless they're logged in. Showing an unattributed result with no way to reference it later creates a poor experience. Requiring login first ensures every analysis is saved and the user can find it again.
+
+### 78.2  Health Dot Moved Left of Auth Controls
+
+**File:** `frontend/components/ui/header.tsx`
+
+The `HealthDot` component shows a green/red pulsing dot indicating FastAPI health. It was previously placed inside the auth control group (right side of header). Visually, it looked like part of the login/logout UI.
+
+The fix moves it to the left of the auth controls, aligned with the navigation links. This makes it a "system status indicator" at a glance, clearly separated from user identity.
+
+**WHY health dot in header:**
+Unlike the admin dashboard (which shows detailed component-by-component health), the header dot is the zero-click health check. Any developer looking at the site immediately knows if the backend is reachable. In a 1-person PFE project where the developer IS the operator, a persistent always-visible indicator has high value.
+
+### 78.3  Real Subscriber POST Endpoint
+
+**File:** `src/api/routes/subscribers.py` (partially new — the POST was already wired, GET was added)
+
+The `EmailCapture` component on the homepage sends a `POST /api/subscribers`. Before this commit, the endpoint was a stub returning hardcoded `200 OK`. Now it actually writes to `data/subscribers.json`:
+
+```python
+# Thread-safe append with idempotency
+with _lock:
+    records = load_existing()
+    if not any(r["email"] == req.email for r in records):
+        records.append({"email": req.email, "subscribed_at": utcnow()})
+        write(records)
+return SubscribeResponse(ok=True, message="You're on the list!")
+```
+
+**Design decisions:**
+1. **JSON file, not DB table** — Subscriber list is operational outreach data, not application data. Keeping it out of the PostgreSQL schema means it's trivially exportable without SQL and survives DB migrations without migration scripts.
+2. **Threading lock** — FastAPI runs async with a thread pool. Without `threading.Lock()`, two concurrent POSTs both read the empty file before either writes, causing a dropped record.
+3. **Idempotency** — Re-submitting the same email returns the same success response. No "email already registered" error. This prevents leaking existence information and avoids confusing re-submit scenarios (double-click, form re-submission after refresh).
+4. **`data/subscribers.json` in `.gitignore`** — Commit `391e62e` added this gitignore rule. Email addresses are PII and must never be committed to a public Git repo. The JSON file exists only on the server disk.
+
+### 78.4  NavLinks — Dropped to Server Component
+
+**File:** `frontend/components/ui/NavLinks.tsx` (rewritten, 42 lines)
+
+The old `NavLinks.tsx` had `"use client"` because it used `useSession` to conditionally render the "Analyse" and "History" links. This meant the entire nav bar hydrated on the client — shipping React hooks + session state for what is ultimately just a list of `<a>` tags.
+
+**New architecture — strict separation of concerns:**
+
+```
+Public nav (NavLinks — Server Component):
+  Features · Explore · AI Chat · About · Docs
+
+Auth nav (UserMenu — Client Component, only if logged in):
+  Analyse a Coin · My History · Admin · Sign Out
+```
+
+**Why "Analyse" and "History" moved to UserMenu:**
+These are workspace actions — they're only useful to logged-in users. Showing them to anonymous visitors either (a) leads to a confusing 401 or (b) requires auth-checking in the nav which forces `"use client"`. Moving them to UserMenu means:
+- NavLinks is always a Server Component (zero hydration JS)
+- Anonymous visitors see a clean "informational" nav
+- Authenticated users see their actions in the logical dropdown
+
+**WHY Server Component for navigation links:**
+Static links have no runtime behaviour. Every `"use client"` component in the layout ships its code to every visitor's browser. A Server Component renders on the server and arrives as plain HTML — no JS cost. For a nav bar with 4 links, this saves ~8 KB of hydration bundle.
+
+---
+
+## Section 79 — Three New Public Pages + Subscriber Admin Panel + Next.js Route Handler
+
+**Commit:** `932a67f`
+**Date:** March 3, 2026
+
+### 79.1  `/about` — Project Story Page
+
+**File:** `frontend/app/about/page.tsx` (261 lines — Server Component)
+
+**Purpose:** Turn DeepCoin from a single-feature tool into a product with a story. The about page targets:
+- **Academic evaluators** (PFE committee, encadrant) — they see the technical depth and academic context
+- **Museum curators** — they understand the use case and the graceful degradation philosophy
+- **Developers** — they see the tech stack and the open-source invitation
+
+**Content structure:**
+```
+Header: Mission + ESPRIT/YEBNI context
+Pipeline Steps: 4 cards — Upload → CNN → Routing → RAG+LLM
+Metrics grid: 6 key numbers (80.03%, 7,677 images, 438 classes, 9,541 KB types, 47,705 chunks, <500ms PDF)
+Team: Dhia Chaieb (student), YEBNI (host), ESPRIT (institution), PFE (programme)
+GitHub CTA: link to ChaiebDhia/DeepCoin-Core
+```
+
+**WHY Server Component:**
+All content is static — pipeline step descriptions, metric values, team names. No browser APIs, no state, no session. Zero JavaScript shipped. The page reaches Google's crawler as raw HTML → excellent SEO with no cost.
+
+**WHY metrics are hardcoded, not fetched:**
+The CNN accuracy (80.03%), training image count (7,677), and KB size (47,705) are facts from the training run — they don't change at runtime. Fetching them from an API would add a loading state, a potential failure path, and network latency to a page that has none of those problems as a static component.
+
+### 79.2  `/explore` — Public Analysis Gallery
+
+**File:** `frontend/app/explore/page.tsx` (330 lines → later revised to 302 lines — Client Component)
+
+**Purpose:** A "window display" of real analyses — coin labels, routes, confidence levels — browsable by anyone without an account. This addresses the discovery problem: a new visitor can see what DeepCoin actually produces before committing to signing up.
+
+**Original implementation (932a67f):** Called `getHistory()` from `lib/api.ts`, which uses `apiClient`. With no auth token, `apiClient` sends no `Authorization` header, FastAPI's `get_current_user` dependency returns 401, TanStack Query fails, and the grid renders empty.
+
+**This is Bug 23** — detailed in Section 82.2. The page was built with the wrong API call.
+
+**Final implementation (after current session fix):** Uses `explorePublic()` which calls the new public `GET /api/explore` endpoint (no auth). Full details in Section 82.
+
+### 79.3  `/docs` — Developer API Reference
+
+**File:** `frontend/app/docs/page.tsx` (433 lines — Server Component)
+
+**Purpose:** A self-contained API reference that explains every endpoint, its parameters, response schema, and cURL examples. Target audience: developers integrating DeepCoin, and the PFE committee evaluating the API design.
+
+**Endpoints documented:**
+```
+POST /api/classify      — main inference (file upload + use_tta flag)
+GET  /api/history       — paginated list (skip, limit)
+GET  /api/history/:id   — single analysis detail
+GET  /api/health        — liveness + component status
+GET  /api/explore       — public gallery (no auth)
+GET  /api/reports/:file — PDF download
+POST /api/chat          — AI numismatic Q&A
+POST /api/subscribers   — email waitlist
+```
+
+**Key design choices:**
+- **Routing logic explainer** — A dedicated section explains how the 3-agent routing works (>85% → Historian, 40–85% → Validator, <40% → Investigator). This is the most common question from non-technical evaluators.
+- **cURL examples** — Copy-pasteable commands are the fastest way to integrate an API. No SDK setup required.
+- **Python examples** — For the CN academic community, Python is the lingua franca.
+- **Static Server Component** — All content is static. Zero JS shipped.
+
+### 79.4  Subscriber Admin Panel in `/admin`
+
+**File:** `frontend/app/admin/page.tsx` (105 lines added in this commit)
+
+Added an `isPrivileged` check and a new panel visible only to `admin` and `curator` roles:
+
+```typescript
+const isPrivileged = (user?.role === "admin" || user?.role === "curator");
+
+{isPrivileged && <SubscriberPanel />}
+```
+
+**Panel features:**
+- Shows subscriber count badge
+- Full email table with `subscribed_at` timestamps
+- CSV export button (downloads in-browser with `Blob + URL.createObjectURL`)
+- Empty state with `UserCheck` icon and contextual message
+
+**WHY a separate admin check instead of middleware:**
+Middleware-level route protection requires Edge-compatible JWT verification. The NextAuth `auth()` helper works in server components and route handlers but not yet in Next.js middleware without extra configuration. The per-component `isPrivileged` check is explicit, testable, and requires no Edge configuration. Full middleware protection is Layer 7.
+
+### 79.5  Next.js Route Handler for Subscriber List
+
+**File:** `frontend/app/api/admin/subscribers/route.ts`
+
+**The problem:** The admin panel needs to call `GET /api/subscribers`. This FastAPI endpoint requires `X-API-Key` in the request header. The `DEEPCOIN_API_KEY` is a server-side environment variable — it must NEVER appear in the browser JS bundle.
+
+**Solution — Next.js server-side proxy:**
+```typescript
+export async function GET() {
+  const session = await auth();          // validate NextAuth session
+  if (!session?.user) return 401;
+  if (role !== "admin" && role !== "curator") return 403;
+
+  const res = await fetch(`${apiBase}/api/subscribers`, {
+    headers: { "X-API-Key": process.env.DEEPCOIN_API_KEY },
+    cache: "no-store",
+  });
+  return NextResponse.json(await res.json());
+}
+```
+
+**Why this pattern is secure:**
+- `DEEPCOIN_API_KEY` lives in the server's environment — never in `NEXT_PUBLIC_*`, never in the browser bundle
+- The Next.js Route Handler runs on the server (Node.js, not Edge Runtime) — it can access `process.env`
+- The browser calls `/api/admin/subscribers` (same origin, no CORS), not FastAPI directly
+- Two auth gates: NextAuth session (browser → Next.js) and X-API-Key (Next.js → FastAPI)
+
+**Graceful degradation:** If FastAPI is unreachable, the handler returns `[]` (empty array) with status 200 rather than a 5xx. The admin UI shows an empty state instead of a crash.
+
+---
+
+## Section 80 — Post-Layer-7-Prep Bug Fixes and New Feature Additions (Current Session)
+
+**Date:** March 3, 2026
+**Commits:** uncommitted (pre-push batch)
+
+This session addressed five user-reported problems in a single engineering pass:
+1. PDF download returning JSON (Bug 24)
+2. Explore page empty for anonymous users (Bug 23)
+3. "Mark as Wrong" corrections invisible in admin (Bug 25)
+4. Admin page missing a global analyses view
+5. No conversational interface to the knowledge base
+
+Plus: the explore page content was described as "useless" — the fix is detailed in Section 82.
+
+---
+
+### Bug 24 — PDF Download Returns JSON Instead of PDF File
+
+**File:** `src/api/main.py` — `_cleanup_old_files()`
+**When:** Any report older than 24 hours
+
+**Symptom:** Clicking "See Full Report" opens a JSON response:
+```json
+{"detail": "Report 'cn_analysis_abc123.pdf' not found."}
+```
+instead of the PDF file.
+
+**Root cause:**
+```python
+# BROKEN — original _cleanup_old_files()
+def _cleanup_old_files(max_age_hours: int = 24):
+    """Delete uploads AND reports older than max_age_hours."""
+    for path in uploads_dir.glob("*"):
+        if age(path) > max_age_hours: path.unlink()
+    for path in reports_dir.glob("*.pdf"):
+        if age(path) > max_age_hours: path.unlink()   # ← deleted PDFs after 24h
+```
+
+The cleanup function was written when reports were meant to be ephemeral (like uploads). But PDF reports are the **primary output** of the pipeline — the user's end product. Deleting them after 24 hours breaks the history page (where analysis records reference the PDF by path) and makes "See full report" fail silently for any analysis older than a day.
+
+**Fix — separate TTLs:**
+```python
+def _cleanup_old_files(
+    uploads_max_age_hours: int = 24,
+    reports_max_age_hours: int = 720,   # 30 days
+):
+    for path in uploads_dir.glob("*"):
+        if age(path) > uploads_max_age_hours: path.unlink(missing_ok=True)
+    for path in reports_dir.glob("*.pdf"):
+        if age(path) > reports_max_age_hours: path.unlink(missing_ok=True)
+```
+
+**WHY 720 hours (30 days) for PDFs:**
+- Uploads are transient — the analysis is complete, the file has no further value
+- PDFs are permanent from the user's perspective: "I analysed this coin three weeks ago; let me re-read the report"
+- 30 days matches common "recent history" expectations without growing the disk indefinitely
+- A future improvement would be to never delete PDFs (use object storage in production), but 30 days is safe for the current local-disk setup
+
+**Call site updated in lifespan:**
+```python
+await asyncio.to_thread(_cleanup_old_files, 24, 720)
+```
+
+---
+
+### Bug 23 — `/explore` Page Shows Nothing for Anonymous Users
+
+**File:** `frontend/app/explore/page.tsx`
+**When:** Any visitor not logged in
+
+**Symptom:** The explore gallery renders an empty grid with no error message.
+
+**Root cause trace:**
+```
+explorePublic()                   ← wrong: used getHistory() which calls apiClient
+apiClient.get("/history")         ← sends Authorization: Bearer <empty>
+FastAPI get_current_user()        ← sees no token → raises HTTP 401
+TanStack Query receives 401       ← isError: true (or silently fails)
+filtered = []                     ← empty render, no error surfaced
+```
+
+The original explore page called `getHistory()` — the per-user, auth-required history endpoint. Without a token, FastAPI rejects the request with 401. TanStack Query's `onError` was not configured to show a message, so the gallery appeared empty with no explanation.
+
+**Fix — two-part:**
+
+**Part 1 — New public FastAPI endpoint:**
+```python
+# src/api/routes/explore.py
+@router.get("/explore")
+async def list_public_analyses(skip, limit, route, db):
+    """Returns id, label, confidence, route_taken, timestamp ONLY.
+    No auth required. No user_id, no pdf_path, no PII."""
+```
+
+**Part 2 — New TypeScript API function:**
+```typescript
+// lib/api.ts
+export async function explorePublic(skip, limit, route?): Promise<ExploreListResponse> {
+  const { data } = await apiClient.get<ExploreListResponse>(`/explore?${params}`);
+  return data;
+}
+```
+
+The explore page now calls `explorePublic()` instead of `getHistory()`. Anonymous visitors get real data. Authenticated users get the same data (no difference — the endpoint is always public).
+
+**GDPR note:** The `/api/explore` endpoint intentionally omits `user_id` and `user_email` from every response. Analyses are surfaced as "community data" — the coin label and route are not PII. This design means the endpoint is GDPR-safe by default without requiring consent management.
+
+---
+
+### Bug 25 — "Mark as Wrong" Corrections Invisible to Admins
+
+**File:** No admin endpoint existed
+**When:** Any admin opens `/admin`
+
+**Symptom:** Users click "Mark as Wrong" → the feedback form submits → data is saved to the `Feedback` PostgreSQL table. But the admin dashboard had no way to view these corrections. They were written and never read.
+
+**Root cause:** The `POST /api/history/:id/feedback` endpoint was implemented in Layer 5 (commit `9f8ce0d`). It writes `Feedback` rows. But no GET endpoint was ever created to retrieve them. The feedback table was write-only from the admin's perspective.
+
+**Fix — `GET /api/admin/feedback`:**
+```python
+# src/api/routes/admin.py
+@router.get("/feedback")
+async def list_feedback(skip, limit, db, current_user):
+    _require_privileged(current_user)  # 403 if not admin/curator
+    rows = await db.execute(
+        select(Feedback)
+        .options(joinedload(Feedback.classification), joinedload(Feedback.user))
+        .order_by(desc(Feedback.created_at))
+        .offset(skip).limit(limit)
+    )
+    # return: id, created_at, coin_label, confidence, route_taken,
+    #          correct_type_id, note, submitted_by
+```
+
+**Why feedback is valuable (the active learning loop):**
+When a user marks an analysis as wrong and suggests the correct CN type, this is a **labelled training example**. The CNN misidentified coin X as type 1015 but the user says it's type 3987. If 10 users report the same pair, that's strong evidence of a systematic confusion in the CNN weights — a candidate for targeted retraining. The admin feedback table is the data collection layer for this active learning pipeline.
+
+---
+
+## Section 81 — Five New Backend Routes (explore, admin feedback, admin analyses, chat + PDF fix)
+
+**Files:** `src/api/routes/explore.py`, `src/api/routes/admin.py`, `src/api/routes/chat.py`, `src/api/main.py`
+**Date:** March 3, 2026
+
+### 81.1  `GET /api/explore` — Public Gallery Endpoint
+
+**File:** `src/api/routes/explore.py` (116 lines)
+
+```python
+router = APIRouter(prefix="/api", tags=["Explore"])
+
+@router.get("/explore")
+async def list_public_analyses(skip, limit, route, db):
+    base_q = select(Classification).order_by(desc(Classification.timestamp))
+    if route in ("historian", "validator", "investigator"):
+        base_q = base_q.where(Classification.route_taken == route)
+    rows   = await paginate(db, base_q, skip, limit)
+    total  = await count(db, Classification)
+    return {"items": [_public_row(r) for r in rows], "total": total, "skip": skip, "limit": limit}
+```
+
+`_public_row()` strips: `user_id`, `pdf_path`, `image_filename`, `payload`. Returns only: `id`, `label`, `confidence`, `route_taken`, `created_at`.
+
+**Rate limit:** None currently (it's read-only, public). A `10/min` per-IP limit should be added in Layer 7 when SlowAPI is extended.
+
+### 81.2  `GET /api/admin/feedback` and `GET /api/admin/analyses`
+
+**File:** `src/api/routes/admin.py` (220 lines)
+
+Both endpoints follow the same auth pattern:
+```python
+def _require_privileged(current_user: User) -> None:
+    if current_user.role not in (UserRole.admin, UserRole.curator):
+        raise HTTPException(status_code=403, detail="Requires admin or curator role.")
+```
+
+**`GET /api/admin/feedback`:**
+- Joins `Feedback → Classification → User` via `joinedload` (single SQL query, no N+1)
+- Returns: coin label, CNN confidence, route taken, user's suggested correction, free-text note, submitter email
+- Pages: 20 per page, newest first
+- Response includes `pages: int` = `ceil(total / limit)` for the frontend pagination indicator
+
+**`GET /api/admin/analyses`:**
+- Full cross-user history (all users, all coin types)
+- Supports `?route=` filter (historian/validator/investigator)
+- Supports `?search=` partial match on `label` using `ilike` (case-insensitive SQL LIKE)
+- Returns `pdf_url` as `/api/reports/{filename}` — the admin can directly download any analysis PDF
+- Returns `user_email` — the admin can see who ran each analysis
+
+**WHY joinedload instead of separate queries:**
+```python
+# Without joinedload (N+1 problem):
+# 1 query → all Feedback rows (N rows)
+# N queries → one User per Feedback row
+# Total: N+1 queries for N feedback items
+
+# With joinedload (1 query):
+# 1 query with LEFT JOIN → all Feedback + User + Classification in one round trip
+select(Feedback).options(
+    joinedload(Feedback.classification),
+    joinedload(Feedback.user),
+)
+# Total: 1 query regardless of N
+```
+On a feedback table with 100 rows and 20 per page, the difference is:
+- Without joinedload: 41 queries (1 list + 20 user lookups + 20 classification lookups)
+- With joinedload: 1 query (one SQL JOIN)
+
+### 81.3  `POST /api/chat` — AI Numismatic Knowledge Chat
+
+**File:** `src/api/routes/chat.py` (239 lines)
+
+This is the most architecturally novel endpoint. It makes the 47,705-chunk Corpus Nummorum knowledge base conversational.
+
+**Pipeline (per request):**
+```
+1. RAG search
+   query → BM25 + vector hybrid → top-N coin type chunks
+   implemented: get_rag_engine().search(query, n=n_sources)
+
+2. Context injection
+   chunks → [CONTEXT 1 — identity] ... [CONTEXT N — material]
+   The same format used by the historian agent
+
+3. LLM call (blocking, in asyncio.to_thread)
+   provider priority:
+     Ollama (gemma3:4b, local GPU)
+     → GitHub Models (Gemini 2.5 Flash, token-gated)
+     → Google AI Studio (Gemini 2.5 Flash, API key)
+     → structured-fallback (context prose, no LLM)
+
+4. Grounded prompt
+   "Using ONLY the contexts above (cite [CONTEXT N]),
+    answer the question in 2-3 concise paragraphs.
+    Do not add facts not present in the context."
+
+5. Response
+   {answer: string, sources: ChatSource[], provider: string}
+```
+
+**Why reuse `_get_llm()` from `historian.py`:**
+```python
+# chat.py
+from src.agents.historian import _get_llm    # same 4-provider chain
+```
+The LLM provider selection logic is non-trivial (env var detection, model availability probing, timeout handling). Duplicating it in `chat.py` would create two places to update when a provider changes. Importing from `historian.py` is the DRY solution.
+
+**Why `asyncio.to_thread`:**
+```python
+result = await asyncio.to_thread(_run_chat, body.query, body.n_sources)
+```
+LLM inference (ChromaDB read + network call to Ollama/GitHub) is synchronous and blocking. Calling it directly in an `async def` handler would block the entire FastAPI event loop — no other requests could be processed while this one runs. `asyncio.to_thread` offloads the blocking work to a thread pool, freeing the event loop.
+
+**Fallback when no LLM is available:**
+```python
+def _structured_fallback(sources):
+    """Concatenate context chunks into readable prose, no LLM."""
+    lines = ["Based on the Corpus Nummorum knowledge base:\n"]
+    for i, src in enumerate(sources, 1):
+        lines.append(f"[{i}] {src['chunk_type'].title()}: {src['snippet']}")
+    return "\n".join(lines), "structured-fallback"
+```
+The fallback ensures the chat endpoint never returns an empty answer. Even without an LLM, the RAG search results are formatted as readable text. The `provider: "structured-fallback"` field tells the frontend to render the answer differently (no attribution badge needed).
+
+**ChatSource schema:**
+```python
+class ChatSource(BaseModel):
+    type_id:    str     # CN type ID, e.g. "1015"
+    chunk_type: str     # "identity" | "obverse" | "reverse" | "material" | "context"
+    snippet:    str     # first 200 chars of the chunk
+    score:      float   # RRF score, normalised 0.0–1.0
+```
+The frontend renders these as expandable source chips with links to `corpus-nummorum.eu/types/{type_id}` — full transparency about what the AI cited.
+
+### 81.4  Router Registration in main.py
+
+Three `include_router()` calls added at the bottom of `main.py`:
+
+```python
+app.include_router(explore_router)    # GET /api/explore  (public)
+app.include_router(admin_router)      # GET /api/admin/*  (admin/curator only)
+app.include_router(chat_router)       # POST /api/chat    (public)
+```
+
+**WHY ordering matters:** FastAPI uses first-match routing for path conflicts. The order of `include_router()` only matters when two routes have ambiguous paths. These three routers have completely distinct prefixes (`/api/explore`, `/api/admin`, `/api/chat`) so ordering is irrelevant here.
+
+---
+
+## Section 82 — Frontend: Explore Rewrite, Admin Panels, AI Chat Page, Chat in NavLinks
+
+**Date:** March 3, 2026
+
+### 82.1  `/explore` Rewrite — Anonymous-Friendly Public Gallery
+
+**File:** `frontend/app/explore/page.tsx` (rewritten — 302 lines)
+
+**The core change:**
+```typescript
+// BEFORE (broken for anon users):
+const { data } = useQuery({
+  queryKey: ["history", page, PAGE_SIZE],
+  queryFn:  () => getHistory((page - 1) * PAGE_SIZE, PAGE_SIZE),  // 401 for anon
+});
+
+// AFTER (works for all users):
+const { data } = useQuery({
+  queryKey: ["explore-public", page, PAGE_SIZE, routeFilter],
+  queryFn:  () => explorePublic(
+    (page - 1) * PAGE_SIZE,
+    PAGE_SIZE,
+    routeFilter !== "all" ? routeFilter : undefined,
+  ),
+  staleTime: 60_000,   // cache for 1 min — public data changes slowly
+});
+```
+
+**UI features:**
+- **Route filter pills**: "All routes / Historian / Validator / Investigator" — server-side filter (`?route=historian`)
+- **Client-side label search**: `useMemo` filter over the current page — instant, no API call
+- **Card design**: coloured top stripe by route (blue/amber/purple), coin label, CN external link, route pill, confidence badge (green/amber/purple), date, "View full analysis →" link to `/history/:id`
+- **Pagination**: prev/next with page counter, disabled states
+- **AI Chat CTA** (purple): "Ask the DeepCoin AI — 9,541 CN types, answers grounded in data" → `/chat`
+- **Sign-up CTA** (gold): "Have a coin to identify? Start analysing →" → `/login?callbackUrl=/analyse`
+
+**WHY two CTAs at the bottom:**
+The explore page is a funnel. A visitor lands here curious about what DeepCoin does:
+1. They browse analyses → they see real results → they're curious about the KB → AI Chat CTA
+2. They have a coin → they want their own analysis → Sign-up CTA
+
+Both CTAs have different colours to signal different actions (purple = exploratory, gold = action/conversion). The ordering (Chat first, Sign-up second) reflects that most visitors are researchers before they're users.
+
+**Note on the `ConfidenceBadge` colour scheme:**
+```typescript
+const color = pct >= 70 ? "#22c55e" : pct >= 40 ? "#f59e0b" : "#8b5cf6";
+```
+- Green (≥70%): CNN identified it confidently — historian route territory
+- Amber (40–70%): Mid-range — validator route, needs forensic check
+- Purple (<40%): Low confidence — investigator route, visual analysis used
+
+This matches the route colour coding in the rest of the app (blue = historian, amber = validator, purple = investigator), but uses the confidence percentage as the primary signal since route information is already shown separately.
+
+### 82.2  Admin Page — All Analyses Table (Privileged)
+
+**File:** `frontend/app/admin/page.tsx` (expanded)
+
+New "All Analyses" table — visible only to `admin` and `curator` role users:
+
+```typescript
+const { data: analysesData } = useQuery({
+  queryKey: ["admin", "analyses", analysesPage, analysesRoute, analysesSearch],
+  queryFn:  () => getAdminAnalyses(
+    (analysesPage - 1) * PAGE_SIZE, PAGE_SIZE, analysesRoute || undefined, analysesSearch || undefined,
+  ),
+  enabled: isPrivileged,
+});
+```
+
+**Table columns:** Date · Label (linked to `/history/:id`) · Conf (coloured) · Route (pill) · User email · PDF (direct download link)
+
+**Filters:**
+- Search input with debounce-ready (currently updates on every keystroke, queryKey handles deduplication)
+- Route dropdown: All / Historian / Validator / Investigator
+- Triggers `setAnalysesPage(1)` on change to reset to page 1
+
+**Pagination:** chevron buttons with page count indicator, disabled at boundaries.
+
+**WHY SQL-level search (ilike) instead of client-side:**
+The admin may have thousands of analyses. Fetching all to the client to filter in-browser would be slow and wasteful. The `?search=` parameter passes through to `WHERE label ILIKE '%term%'` in SQL — the database handles filtering efficiently with its index.
+
+### 82.3  Admin Page — User Corrections (Feedback) Panel
+
+**File:** `frontend/app/admin/page.tsx` (expanded)
+
+New "User Corrections" table after the analyses table:
+
+```typescript
+const { data: feedbackData } = useQuery({
+  queryKey: ["admin", "feedback", feedbackPage],
+  queryFn:  () => getAdminFeedback((feedbackPage - 1) * PAGE_SIZE, PAGE_SIZE),
+  enabled:  isPrivileged,
+});
+```
+
+**Table columns:** Date · Coin (CNN) linked to the analysis · Conf · Route · Suggested Fix (CN external link) · Note (truncated, full on hover) · Submitted by
+
+**Red accent:** The feedback panel uses `#ef4444` (red) for its icon and count badge — corrections are a signal of a problem. Admins should treat them as action items.
+
+**Active learning note:**
+Each row in this table is a training signal:
+- `coin_label` = what the CNN predicted
+- `correct_type_id` = what the user believes is correct
+
+When the same `(coin_label, correct_type_id)` pair appears many times, it indicates a systematic confusion in the CNN. A future training loop would:
+1. Query feedback table for high-frequency pairs
+2. Find the original images
+3. Re-annotate with the correct label
+4. Fine-tune the CNN on those specific examples
+
+This feedback infrastructure makes DeepCoin a living system — not just a trained model, but a model that improves with use.
+
+### 82.4  `/chat` — AI Numismatic Q&A Page
+
+**File:** `frontend/app/chat/page.tsx` (295 lines — Client Component)
+
+**Architecture:**
+```
+User types → handleSubmit() → chatQuery() → POST /api/chat
+                                          ← {answer, sources, provider}
+New message appended to thread → auto-scroll
+```
+
+**Components:**
+```
+ChatPage
+├── Header (Sparkles icon + KB size info + link to explore)
+├── Empty state
+│   ├── Sparkles mascot
+│   └── Grid of 6 starter question chips
+│       (click → handleSubmit(question))
+├── Message thread (scrollable flex-1)
+│   ├── MessageBubble (user — gold bg)
+│   ├── MessageBubble (assistant — surface-1 bg)
+│   │   ├── Answer text
+│   │   ├── Provider badge ("ollama:gemma3:4b" / "github:gemini-2.5-flash")
+│   │   └── Sources toggle (collapsed by default)
+│   │       └── SourceChip × N
+│   │           (type_id, chunk_type, snippet, score %, CN external link)
+│   └── Typing indicator (3 bouncing purple dots)
+└── Input form (fixed bottom, Send button → purple)
+```
+
+**Sources toggle design:**
+Sources are collapsed by default. Every answer shows "N sources from Corpus Nummorum" which the user can expand. This keeps the interface clean while maintaining full transparency about what the AI cited. The collapse animation uses Framer Motion `height: 0 → "auto"` for a smooth reveal.
+
+**Provider badge:**
+```typescript
+<span>{msg.provider}</span>
+// Shows: "ollama:gemma3:4b" | "github:gemini-2.5-flash" | 
+//        "google:gemini-2.5-flash" | "structured-fallback"
+```
+This follows the explainability principle central to the whole system: the user always knows WHICH AI generated their answer.
+
+**Starter questions:**
+```
+"What silver coins were minted in Athens?"
+"Tell me about tetradrachms from the Seleucid empire"
+"What are bronze coins from Maroneia, Thrace?"
+"Describe Roman denarii from the time of Augustus"
+"What coin types show an eagle on the reverse?"
+"Tell me about electrum coins from ancient Lydia"
+```
+These are representative queries from the KB's strongest areas. They serve as both UX onboarding ("here's what you can ask") and a de-facto smoke test for the LLM pipeline.
+
+**Full-height layout:**
+```tsx
+<div className="flex flex-col h-[calc(100vh-80px)]">
+  <Header />             {/* shrink-0 */}
+  <MessageThread />       {/* flex-1, overflow-y-auto */}
+  <InputForm />           {/* shrink-0 */}
+</div>
+```
+The `calc(100vh-80px)` subtracts the header height. `flex-1 overflow-y-auto` on the thread makes it scrollable within the viewport — the input form is always visible without the user needing to scroll down.
+
+### 82.5  AI Chat Added to NavLinks
+
+**File:** `frontend/components/ui/NavLinks.tsx`
+
+```tsx
+// BEFORE
+<Link href="/#features">Features</Link>
+<Link href="/explore">Explore</Link>
+<Link href="/about">About</Link>
+<Link href="/docs">Docs</Link>
+
+// AFTER
+<Link href="/#features">Features</Link>
+<Link href="/explore">Explore</Link>
+<Link href="/chat">AI Chat</Link>    ← new
+<Link href="/about">About</Link>
+<Link href="/docs">Docs</Link>
+```
+
+**Position:** Between Explore and About. The ordering reflects user journey: discover (Features) → browse (Explore) → interact (AI Chat) → learn more (About) → integrate (Docs).
+
+**WHY in public NavLinks and not just in UserMenu:**
+The chat is public — no account required. It's a discovery feature that builds trust before signing up. Hiding it in UserMenu would make it invisible to exactly the visitors who benefit most from it (anonymous researchers exploring the KB).
+
+---
+
+## Section 83 — Admin Access Guide + New TypeScript Types + Project State
+
+**Date:** March 3, 2026
+
+### 83.1  Admin Access Guide — Step by Step
+
+**How to create an admin account:***
+
+**Step 1 — Register:**
+```
+Go to http://localhost:3000/register
+Enter email + password (any values — dev mode auto-activates)
+Click "Create Account"
+```
+
+**Step 2 — Promote to admin via SQL (psql):**
+```powershell
+# Connect to the database
+psql postgresql://deepcoin:deepcoin@localhost:5432/deepcoin
+
+# Inside psql:
+UPDATE users SET role='admin' WHERE email='your@email.com';
+\q
+```
+
+**Step 3 — Re-authenticate (force session refresh):**
+```
+Go to http://localhost:3000
+Sign out (UserMenu → Sign Out)
+Sign in again with the same email/password
+```
+
+**Step 4 — Verify:**
+```
+Go to http://localhost:3000/admin
+You should see your role badge showing [admin] in gold
+The subscriber management panel, all-analyses table, and user corrections table should be visible
+```
+
+**Alternative — Python seed script:**
+```python
+# Quick admin seed without psql
+import asyncio, asyncpg
+
+async def make_admin(email: str):
+    conn = await asyncpg.connect("postgresql://deepcoin:deepcoin@localhost:5432/deepcoin")
+    await conn.execute("UPDATE users SET role='admin' WHERE email=$1", email)
+    await conn.close()
+    print(f"\u2713 {email} is now admin")
+
+asyncio.run(make_admin("dhia.chaieb@esprit.tn"))
+```
+
+**WHY role promotion requires SQL (not a UI):**
+There is no "self-promotion" endpoint. If anyone could set their own role to admin via an API call, the entire RBAC system would be bypassed. SQL access requires either direct server access or knowledge of the DB credentials — an administrative gate that is appropriate for a privileged operation like role assignment.
+
+**Role hierarchy reference:**
+```
+admin    > curator > analyst
+gold badge  blue badge  green badge
+
+admin   — sees all analyses (all users), feedback corrections, subscriber list, /api/metrics
+curator — sees all analyses, feedback corrections, subscriber list (not metrics)
+analyst — sees only own analyses and history (default for new registrations)
+```
+
+### 83.2  New TypeScript Interfaces Added in This Session
+
+**File:** `frontend/types/api.ts` (extended)
+
+```typescript
+// Public explore gallery
+interface ExploreItem        { id, created_at, route_taken, label, confidence }
+interface ExploreListResponse { items: ExploreItem[], total, skip, limit }
+
+// Admin feedback (corrections)
+interface FeedbackItem {
+  id, created_at, classification_id,
+  coin_label, confidence, route_taken,
+  correct_type_id, note, submitted_by
+}
+interface AdminFeedbackResponse { items: FeedbackItem[], total, skip, limit, pages }
+
+// Admin full analyses
+interface AdminAnalysisItem { id, created_at, label, confidence, route_taken, pdf_url, user_email }
+interface AdminAnalysesResponse { items: AdminAnalysisItem[], total, skip, limit, pages }
+
+// AI Chat
+interface ChatSource { type_id, chunk_type, snippet, score }
+interface ChatResponse { answer, sources: ChatSource[], provider }
+```
+
+### 83.3  New API Functions Added in lib/api.ts
+
+**File:** `frontend/lib/api.ts` (extended)
+
+```typescript
+// Public gallery — no auth, uses apiClient (/api/explore)
+explorePublic(skip, limit, route?) → ExploreListResponse
+
+// Admin endpoints — auth via JWT Bearer (interceptor auto-injects)
+getAdminFeedback(skip, limit)          → AdminFeedbackResponse
+getAdminAnalyses(skip, limit, route?, search?) → AdminAnalysesResponse
+
+// AI chat — no auth, uses apiClient (/api/chat POST)
+chatQuery(query, nSources=5) → ChatResponse
+```
+
+**WHY admin endpoints use apiClient (not Next.js route handlers):**
+The subscriber endpoint required a server-side proxy because it needed the `DEEPCOIN_API_KEY` secret. The admin feedback and analyses endpoints use JWT Bearer authentication — the token is already in the browser (stored by NextAuth in the session, injected by the Axios interceptor). No server secret is needed. The browser calls FastAPI directly through the Next.js rewrite proxy → JWT is validated by FastAPI's `get_current_user` dependency. No intermediate Next.js handler needed.
+
+### 83.4  Files Added / Modified in This Session
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `src/api/main.py` | Modified | PDF cleanup 720h TTL, 3 new router registrations |
+| `src/api/routes/explore.py` | NEW | `GET /api/explore` public gallery |
+| `src/api/routes/admin.py` | NEW | `GET /api/admin/feedback`, `GET /api/admin/analyses` |
+| `src/api/routes/chat.py` | NEW | `POST /api/chat` AI numismatic Q&A |
+| `frontend/types/api.ts` | Modified | 8 new interfaces |
+| `frontend/lib/api.ts` | Modified | 4 new API functions |
+| `frontend/app/explore/page.tsx` | Rewritten | Uses `explorePublic()`, works for anon |
+| `frontend/app/chat/page.tsx` | NEW | AI Chat page, 295 lines |
+| `frontend/app/admin/page.tsx` | Modified | All-analyses table + feedback corrections table |
+| `frontend/components/ui/NavLinks.tsx` | Modified | Added "AI Chat" link |
+
+### 83.5  Bugs Fixed Summary (This Session)
+
+| Bug | Symptom | Root Cause | Fix |
+|-----|---------|-----------|-----|
+| 24 | PDF download returns JSON | `_cleanup_old_files` deleted PDFs after 24h | Separate TTLs: uploads 24h, reports 720h (30 days) |
+| 23 | Explore shows nothing for anon | `/explore` used `getHistory()` → auth-required 401 | New public `/api/explore` + `explorePublic()` |
+| 25 | Feedback corrections invisible | No GET endpoint for Feedback table | `GET /api/admin/feedback` endpoint |
+
+### 83.6  TypeScript Check
+
+```
+tsc --noEmit → EXIT:0   (0 errors across all 25+ frontend files)
+```
+
+### 83.7  Current Layer Status
+
+| Layer | Description | Status |
+|-------|-------------|--------|
+| 0 | CNN Training (EfficientNet-B3, 80.03% TTA) | ✅ Complete |
+| 1 | Inference Engine (CLAHE, auto-crop, 8-pass TTA) | ✅ Complete |
+| 2 | Knowledge Base (47,705 RAG chunks, 9,541 types) | ✅ Complete |
+| 3 | Agent System (Gatekeeper + 4 agents, 3 routes) | ✅ Complete |
+| 4 | FastAPI Backend (auth, rate-limit, SQLite→PostgreSQL) | ✅ Complete |
+| 5 | Next.js Frontend (9 pages, 25+ components) | ✅ Complete |
+| 6 | Docker + Infrastructure (7 services, Nginx, LocalStack) | ✅ Complete |
+| 7 | Tests + CI/CD | 🔲 Pending |
+
+**New pages as of this session:**
+
+```
+app/
+├── page.tsx              ← Server Component homepage (stable)
+├── analyse/page.tsx      ← Dedicated analyser (stable)
+├── admin/page.tsx        ← Dashboard: health + stats + analyses + feedback + subscribers
+├── history/page.tsx      ← Paginated user history (stable)
+├── history/[id]/page.tsx ← Full analysis detail (stable)
+├── explore/page.tsx      ← Public gallery (FIXED — now uses /api/explore)
+├── chat/page.tsx         ← NEW: AI numismatic Q&A over 47,705 KB chunks
+├── about/page.tsx        ← NEW: Project story (Server Component, SEO)
+└── docs/page.tsx         ← NEW: REST API reference (Server Component, SEO)
+```
+
+**Current HEAD: `932a67f` → changes to be committed and pushed.**
+
+---
+
+*Engineering Journal — Sections 78–83 added.*
+*Section 78: Auth-guard CTA, subscriber POST/GET, NavLinks Server Component refactor (commits 47245da + 391e62e).*
+*Section 79: /about + /explore + /docs new pages, subscriber admin panel, Next.js route handler proxy (commit 932a67f).*
+*Section 80: Bug 23 (explore anon) + Bug 24 (PDF TTL) + Bug 25 (feedback invisible) root cause analysis.*
+*Section 81: Five new backend routes — /api/explore, /api/admin/feedback, /api/admin/analyses, /api/chat, main.py cleanup TTL fix.*
+*Section 82: Frontend — explore rewrite, admin analyses table, admin feedback table, /chat page, NavLinks Chat link.*
+*Section 83: Admin access guide, TypeScript interfaces, API functions, file manifest, bug table, layer status, HEAD.*

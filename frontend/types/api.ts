@@ -114,3 +114,77 @@ export interface HealthResponse {
   components: Record<string, string>;
   uptime_s?: number;
 }
+// ── Public explore types ──────────────────────────────────────────────────────
+
+/** One analysis item from the public /api/explore gallery (no user PII). */
+export interface ExploreItem {
+  id:          string;
+  created_at:  string | null;
+  route_taken: string;
+  label:       string;
+  confidence:  number | null;
+}
+
+export interface ExploreListResponse {
+  items: ExploreItem[];
+  total: number;
+  skip:  number;
+  limit: number;
+}
+
+// ── Admin types ───────────────────────────────────────────────────────────────
+
+/** One "mark as wrong" correction as seen by admins. */
+export interface FeedbackItem {
+  id:                string;
+  created_at:        string | null;
+  classification_id: string;
+  coin_label:        string | null;
+  confidence:        number | null;
+  route_taken:       string | null;
+  correct_type_id:   string;
+  note:              string | null;
+  submitted_by:      string;
+}
+
+export interface AdminFeedbackResponse {
+  items: FeedbackItem[];
+  total: number;
+  skip:  number;
+  limit: number;
+  pages: number;
+}
+
+/** One analysis row in the admin analyses table. */
+export interface AdminAnalysisItem {
+  id:          string;
+  created_at:  string | null;
+  label:       string;
+  confidence:  number;
+  route_taken: string;
+  pdf_url:     string | null;
+  user_email:  string;
+}
+
+export interface AdminAnalysesResponse {
+  items: AdminAnalysisItem[];
+  total: number;
+  skip:  number;
+  limit: number;
+  pages: number;
+}
+
+// ── Chat types ────────────────────────────────────────────────────────────────
+
+export interface ChatSource {
+  type_id:    string;
+  chunk_type: string;
+  snippet:    string;
+  score:      number;
+}
+
+export interface ChatResponse {
+  answer:   string;
+  sources:  ChatSource[];
+  provider: string;
+}
