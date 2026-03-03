@@ -83,12 +83,51 @@ const nextConfig: NextConfig = {
 
   async rewrites() {
     const apiBase = process.env.DEEPCOIN_API_URL ?? "http://localhost:8000";
-    return [
-      {
-        source:      "/api/:path*",
-        destination: `${apiBase}/api/:path*`,
-      },
-    ];
+    return {
+      /**
+       * beforeFiles: empty — do not intercept anything before route handlers.
+       */
+      beforeFiles: [],
+
+      /**
+       * afterFiles: empty — do not intercept anything after route handlers either.
+       * WHY: keeping this empty is belt-and-suspenders for the Turbopack bug
+       * described below.
+       */
+      afterFiles: [],
+
+      /**
+       * fallback: proxy /api/* → FastAPI only when NO Next.js route matches.
+       *
+       * WHY fallback instead of the previous plain-array (afterFiles):
+       *   Next.js 15 Turbopack has a known ordering bug where "afterFiles"
+       *   rewrites can fire before App Router route handlers are checked.
+       *   The symptom: GET /api/auth/session is proxied to FastAPI (which returns
+       *   {"detail":"Not Found"}) instead of being handled by NextAuth's catch-all
+       *   at app/api/auth/[...nextauth]/route.ts.
+       *
+       *   "fallback" rewrites are the LAST thing checked — after ALL static files,
+       *   all App Router handlers, all Pages Router pages, and all afterFiles
+       *   rewrites. So NextAuth ALWAYS wins for /api/auth/**, and FastAPI ALWAYS
+       *   wins for every other /api/** route that has no Next.js handler.
+       *
+       *   Routing resolution order (Next.js 15):
+       *     1. headers
+       *     2. redirects
+       *     3. beforeFiles rewrites        ← empty
+       *     4. public/ static files
+       *     5. App Router route handlers   ← NextAuth handles /api/auth/**
+       *     6. afterFiles rewrites         ← empty
+       *     7. Dynamic routes
+       *     8. fallback rewrites           ← FastAPI handles /api/health, /api/classify …
+       */
+      fallback: [
+        {
+          source:      "/api/:path*",
+          destination: `${apiBase}/api/:path*`,
+        },
+      ],
+    };
   },
 };
 
