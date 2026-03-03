@@ -62,8 +62,9 @@ from src.api.auth            import require_api_key
 from src.api.auth.router     import router as auth_router
 from src.api.limiter         import limiter
 from src.api.logging_config  import configure_logging
-from src.api.routes.classify import router as classify_router
-from src.api.routes.history  import router as history_router
+from src.api.routes.classify     import router as classify_router
+from src.api.routes.history      import router as history_router
+from src.api.routes.subscribers  import router as subscribers_router
 
 from src import __version__
 
@@ -228,9 +229,10 @@ async def add_request_id(request, call_next):
 #       /*          → Next.js frontend
 #   This is the standard reverse-proxy pattern for monorepo deployments.
 #
-app.include_router(auth_router)                                              # /auth/*
-app.include_router(classify_router, prefix="/api", tags=["Classification"])  # /api/classify
-app.include_router(history_router,  prefix="/api", tags=["History"])         # /api/history
+app.include_router(auth_router)                                                # /auth/*
+app.include_router(classify_router,   prefix="/api", tags=["Classification"])   # /api/classify
+app.include_router(history_router,    prefix="/api", tags=["History"])           # /api/history
+app.include_router(subscribers_router)                                          # /api/subscribers
 
 
 # ── PDF report serving ────────────────────────────────────────────────────────

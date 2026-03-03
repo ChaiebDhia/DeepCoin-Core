@@ -24,6 +24,7 @@
  */
 
 import { motion }         from "framer-motion";
+import { useSession }     from "next-auth/react";
 import Link               from "next/link";
 import { ArrowRight, ChevronDown, Cpu, Database, Zap, FileText } from "lucide-react";
 
@@ -50,6 +51,16 @@ const BADGES = [
 /* ── Component ─────────────────────────────────────────────────────────── */
 
 export function HeroSection() {
+  const { data: session } = useSession();
+
+  /**
+   * If the user is already authenticated, the CTA goes directly to /analyse.
+   * If not (or while the session is loading), it redirects to /login with a
+   * callbackUrl so NextAuth brings them back to /analyse after sign-in.
+   * WHY: /analyse + the classification pipeline are post-auth features.
+   */
+  const analyseHref = session ? "/analyse" : "/login?callbackUrl=/analyse";
+
   return (
     <section
       className="relative min-h-[94vh] flex flex-col items-center justify-center overflow-hidden"
@@ -157,7 +168,7 @@ export function HeroSection() {
           className="flex flex-wrap items-center justify-center gap-4 mb-12"
         >
           <Link
-            href="/analyse"
+            href={analyseHref}
             className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-bold text-sm transition-all duration-200 hover:scale-105 hover:brightness-110 active:scale-100"
             style={{ backgroundColor: "var(--brand-gold)", color: "#0a1628" }}
           >

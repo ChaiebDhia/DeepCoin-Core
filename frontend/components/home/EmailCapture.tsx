@@ -9,19 +9,19 @@
  *       Three states: idle → loading (spinner) → done (checkmark + message).
  *       AnimatePresence handles the form ↔ success swap.
  *
- * WHY include this: Demonstrates full interaction design skill — error state,
- *   loading state, success state, animated transition. The submit currently
- *   simulates a 900 ms delay; the comment explains where to wire a real endpoint.
+ * BACKED BY: POST /api/subscribers
+ *   The FastAPI endpoint stores the address in data/subscribers.json with
+ *   a UTC timestamp. The operation is idempotent — re-submitting the same
+ *   email is silently accepted.
  *
- * NOTE: Data is NOT stored. This is a visual demo of the interaction pattern.
- *   When a real endpoint is ready, replace the `simulateSubmit` call with
- *   `await fetch("/api/subscribers", { method:"POST", body: JSON.stringify({email}) })`.
+ * HONEST MESSAGING: No confirmation email is sent (SMTP is not configured).
+ *   The success state clearly says "you're on the list" without implying
+ *   a transactional email was dispatched.
  *
  * HOW animated border works:
- *   The outer wrapper has a `conic-gradient` rotating pseudo-element.
- *   We replicate it with a CSS class `.animate-border-rotate` (see globals.css).
- *   Here we use an inline Framer Motion approach for the same effect without
- *   requiring a pseudo-element (pure React, no extra CSS needed).
+ *   The outer wrapper uses a linear-gradient border via a p-px wrapper.
+ *   The inner surface is a solid background covering the gradient except
+ *   for a 1px edge — giving the appearance of a gradient border.
  */
 
 import { useState }              from "react";
@@ -44,14 +44,25 @@ export function EmailCapture() {
     setError("");
     setState("loading");
 
-    // ──────────────────────────────────────────────────────────────────
-    // TODO: Replace with real API call when endpoint is available:
-    //   await fetch("/api/subscribers", { method: "POST",
-    //     headers: { "Content-Type": "application/json" },
-    //     body: JSON.stringify({ email })
-    //   });
-    // ──────────────────────────────────────────────────────────────────
-    await new Promise((r) => setTimeout(r, 900));
+    try {
+      const res = await fetch("/api/subscribers", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ email }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { detail?: string };
+        setError(data.detail ?? "Something went wrong. Please try again.");
+        setState("idle");
+        return;
+      }
+    } catch {
+      setError("Could not reach the server. Please try again.");
+      setState("idle");
+      return;
+    }
+
     setState("done");
   }
 
@@ -158,7 +169,7 @@ export function EmailCapture() {
                   You&rsquo;re on the list!
                 </p>
                 <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                  We&rsquo;ll reach out at <strong>{email}</strong> when there&rsquo;s news.
+                  We&rsquo;ll reach out to <strong>{email}</strong> when there&rsquo;s news.
                 </p>
               </motion.div>
             )}

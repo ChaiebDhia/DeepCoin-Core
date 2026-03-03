@@ -4,18 +4,26 @@
  * Top navigation bar — appears on every page.
  * Shows:
  *   - DeepCoin brand mark (links to home)
- *   - Navigation links (home, history)
- *   - Backend health indicator (dots: green=ok, amber=degraded, red=down)
+ *   - Navigation links via NavLinks (auth-aware client component)
+ *   - Backend health indicator (live-polling green/amber/red dot)
+ *   - Auth area: UserMenu (avatar + dropdown) or Sign In / Register
  *
- * WHY server-rendered here but health is client-fetched:
- *   The nav structure is static — it can be server-rendered.
- *   The health dot needs a live API call — it's in a child client component.
+ * WHY HealthDot is LEFT of UserMenu:
+ *   Auth controls (avatar, Sign In, Register) are fixed at the far right —
+ *   the conventional position users reach for. The health dot is a
+ *   secondary indicator, naturally placed just left of the auth cluster.
+ *
+ * WHY NavLinks is a client component but header.tsx is a server component:
+ *   The "Analyse" link must be auth-aware (redirect to login when signed out).
+ *   useSession() requires "use client". Extracting just the nav keeps the
+ *   rest of the header server-rendered.
  */
 
 import Link           from "next/link";
 import { Coins }      from "lucide-react";
 import { HealthDot }  from "@/components/ui/health-dot";
 import { UserMenu }   from "@/components/auth/UserMenu";
+import { NavLinks }   from "@/components/ui/NavLinks";
 
 export function Header() {
   return (
@@ -35,33 +43,17 @@ export function Header() {
           </span>
         </Link>
 
-        {/* Nav */}
-        <nav className="flex items-center gap-1">
-          <Link
-            href="/#features"
-            className="px-3 py-1.5 rounded-md text-sm text-[var(--text-secondary)] hover:text-white hover:bg-[var(--surface-2)] transition-colors"
-          >
-            Features
-          </Link>
-          <Link
-            href="/analyse"
-            className="px-3 py-1.5 rounded-md text-sm text-[var(--text-secondary)] hover:text-white hover:bg-[var(--surface-2)] transition-colors"
-          >
-            Analyse
-          </Link>
-          <Link
-            href="/history"
-            className="px-3 py-1.5 rounded-md text-sm text-[var(--text-secondary)] hover:text-white hover:bg-[var(--surface-2)] transition-colors"
-          >
-            History
-          </Link>
-        </nav>
+        {/* Nav — auth-aware client island */}
+        <NavLinks />
 
-        {/* Auth: user menu when logged in, Sign In link otherwise */}
-        <UserMenu />
+        {/* Right cluster: health dot + auth menu */}
+        <div className="flex items-center gap-3">
+          {/* Health indicator — left of the auth buttons */}
+          <HealthDot />
 
-        {/* Health indicator */}
-        <HealthDot />
+          {/* Auth: avatar dropdown when logged in, Sign In / Register otherwise */}
+          <UserMenu />
+        </div>
       </div>
     </header>
   );
