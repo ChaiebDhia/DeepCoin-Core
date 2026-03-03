@@ -29,6 +29,7 @@ import type { HistorySummary }             from "@/types/api";
 import {
   formatConfidence, formatDate, routeStyle, confidenceBg,
 }                                          from "@/lib/utils";
+import { pdfDownloadUrl }                  from "@/lib/api";
 import { Badge, routeBadgeVariant }        from "@/components/ui/badge";
 import { Button }                          from "@/components/ui/button";
 
@@ -281,7 +282,10 @@ export function HistoryTable({
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      window.open(row.pdf_url!, "_blank", "noopener,noreferrer");
+                      // Bypass Next.js proxy — open PDF directly from FastAPI.
+                      // The proxy's binary-response handling can garble PDF bytes;
+                      // going direct (http://127.0.0.1:8000) always returns the real file.
+                      window.open(pdfDownloadUrl(row.pdf_url!), "_blank", "noopener,noreferrer");
                     }}
                     className="transition-colors"
                     style={{ color: "var(--text-muted)" }}

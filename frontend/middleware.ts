@@ -60,6 +60,7 @@ export const config = {
   matcher: [
     "/history",
     "/history/:path*",
+    "/analyse",               // Analyse page requires an account (tracks usage + stores history)
     "/admin",
     "/admin/:path*",
     "/collections",

@@ -57,8 +57,7 @@ const STEPS: Step[] = [
       "Accepted formats: JPEG · PNG · WebP",
       "Large images are auto-downsized to 1024 px before upload",
       "Enable TTA (Test-Time Augmentation) for +0.78 % accuracy — takes ~5 s extra",
-      "Auto-crop detects the coin boundary and removes background noise",
-    ],
+      "Auto-crop detects the coin boundary and removes background noise",      "Requires a free account — sign up in seconds",    ],
     cta:   { label: "Go to Analyse →", href: "/analyse" },
   },
   {
@@ -98,8 +97,7 @@ const STEPS: Step[] = [
     bullets: [
       "Ask about dynasties, mint cities, iconography, denominations, or dating",
       "Every answer cites CN record IDs — all facts are verifiable",
-      "Paste a CN type ID from an analysis result for instant context",
-      "Domain-specific only — it will not respond to off-topic questions",
+      "Paste a CN type ID from an analysis result for instant context",      "Google Search \u2197 and Google Scholar \u2197 buttons appear next to each answer for deeper academic research",      "Domain-specific only — it will not respond to off-topic questions",
     ],
     cta:   { label: "Open AI Chat →", href: "/chat" },
   },
@@ -247,10 +245,10 @@ export default function TutorialModal() {
               }}
             >
 
-              {/* ── TWO-COLUMN GRID ────────────────────────────────── */}
-              <div className="grid" style={{ gridTemplateColumns: "200px 1fr" }}>
+              {/* ── TWO-COLUMN GRID: left panel hidden on mobile, visible sm+ ── */}
+              <div className="grid grid-cols-1 sm:grid-cols-[200px_1fr]">
 
-                {/* LEFT PANEL — color accent, icon, step map */}
+                {/* LEFT PANEL — hidden on mobile, shown sm+ */}
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={`left-${step}`}
@@ -258,7 +256,7 @@ export default function TutorialModal() {
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.20 }}
-                    className="flex flex-col items-center justify-between gap-5 p-6"
+                    className="hidden sm:flex flex-col items-center justify-between gap-5 p-6"
                     style={{
                       background:   `linear-gradient(160deg, ${current.color}12 0%, ${current.color}06 100%)`,
                       borderRight:  `1px solid ${current.color}22`,
@@ -342,6 +340,37 @@ export default function TutorialModal() {
 
                 {/* RIGHT PANEL — title, body, bullets, navigation */}
                 <div className="flex flex-col" style={{ minHeight: "420px" }}>
+
+                  {/* Mobile-only: icon + step dots (left panel hidden on small screens) */}
+                  <div className="flex sm:hidden items-center justify-between gap-3 px-5 pt-4 pb-0">
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                        style={{ background: `${current.color}16`, border: `1px solid ${current.color}38`, color: current.color }}
+                      >
+                        <span style={{ transform: "scale(0.7)" }}>{current.icon}</span>
+                      </div>
+                      <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: current.color }}>
+                        {current.tag}
+                      </p>
+                    </div>
+                    {/* Mobile dot row */}
+                    <div className="flex items-center gap-1">
+                      {STEPS.map((_, i) => (
+                        <button key={i} onClick={() => setStep(i)}
+                          className="rounded-full transition-all"
+                          style={{
+                            width: i === step ? "14px" : "5px",
+                            height: "5px",
+                            background: i === step ? current.color : i < step ? "#10b981" : "rgba(255,255,255,0.15)",
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Divider on mobile only */}
+                  <div className="block sm:hidden mx-5 mt-3 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
 
                   {/* Header row */}
                   <div className="flex items-start justify-between px-7 pt-6 pb-0 shrink-0">

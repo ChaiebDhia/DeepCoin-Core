@@ -351,8 +351,9 @@ export function AgentPipeline({ onCancel }: AgentPipelineProps) {
       {/* ── Agent stations + connectors ──────────────────────────────── */}
       {/* NOTE: overflow-x-auto was removed intentionally. Setting overflow-x:auto
            forces overflow-y:hidden (CSS spec), which clips the vertical glow
-           box-shadows.  All 5 stations fit inside max-w-2xl at 68px/card.  */}
-      <div className="flex items-center justify-center px-6 py-8 gap-0">
+           box-shadows.  Sizes are made responsive instead so all 5 stations fit
+           at ~343px (375px mobile minus scrollbar and outer padding).  */}
+      <div className="flex items-center justify-center px-2 sm:px-6 py-6 sm:py-8 gap-0">
         {AGENTS.map((agent, i) => {
           const isActive  = activeStage === i;
           const isDone    = doneStages.has(i);
@@ -369,7 +370,7 @@ export function AgentPipeline({ onCancel }: AgentPipelineProps) {
                   y:       0,
                 }}
                 transition={{ delay: i * 0.08, duration: 0.35, ease: "easeOut" }}
-                className="flex flex-col items-center gap-2 rounded-xl px-2.5 py-3 min-w-[68px]"
+                className="flex flex-col items-center gap-1 sm:gap-2 rounded-xl px-1.5 sm:px-2.5 py-2 sm:py-3 min-w-[44px] sm:min-w-[68px]"
                 style={{
                   background:  isActive ? agent.bgActive
                              : isDone   ? "rgba(255,255,255,0.03)"
@@ -381,7 +382,7 @@ export function AgentPipeline({ onCancel }: AgentPipelineProps) {
               >
                 {/* Emoji avatar */}
                 <div
-                  className="w-12 h-12 rounded-full flex items-center justify-center text-xl"
+                  className="w-8 h-8 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-base sm:text-xl"
                   style={{
                     background:  isActive ? agent.bgActive : "rgba(255,255,255,0.04)",
                     border:      `1.5px solid ${isActive ? agent.border : "rgba(255,255,255,0.06)"}`,
@@ -396,7 +397,7 @@ export function AgentPipeline({ onCancel }: AgentPipelineProps) {
                 {/* Name + subtitle */}
                 <div className="text-center">
                   <p
-                    className="text-[11px] font-bold leading-tight"
+                    className="text-[9px] sm:text-[11px] font-bold leading-tight"
                     style={{
                       color:      isActive ? agent.color : isDone ? "var(--text-secondary)" : "var(--text-muted)",
                       transition: "color 0.4s ease",
@@ -405,7 +406,7 @@ export function AgentPipeline({ onCancel }: AgentPipelineProps) {
                     {agent.name}
                   </p>
                   <p
-                    className="text-[9px] leading-snug mt-0.5"
+                    className="hidden sm:block text-[9px] leading-snug mt-0.5"
                     style={{ color: "var(--text-muted)", maxWidth: "76px" }}
                   >
                     {agent.subtitle}
@@ -427,7 +428,7 @@ export function AgentPipeline({ onCancel }: AgentPipelineProps) {
               {/* ── Connector beam ─────────────────────────────────── */}
               {i < AGENTS.length - 1 && (
                 <div
-                  className="relative mx-1 h-0.5 w-8 rounded-full overflow-hidden shrink-0"
+                  className="relative mx-0.5 sm:mx-1 h-0.5 w-3 sm:w-8 rounded-full overflow-hidden shrink-0"
                   style={{ backgroundColor: "rgba(255,255,255,0.06)" }}
                 >
                   {(isActive || doneStages.has(i)) && (
