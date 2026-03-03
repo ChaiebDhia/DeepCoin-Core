@@ -302,7 +302,14 @@ export function CoinUploader() {
 
   // Abort any in-flight request when the component unmounts
   useEffect(() => {
+    // Reset store to idle on mount — ensures the AgentPipeline fullscreen modal
+    // (fixed inset-0 z-50) is never shown when the user navigates to /analyse
+    // after abandoning an analysis mid-way on another page. Without this, the
+    // phase stays "processing" in Zustand (module-level singleton), the modal
+    // renders immediately on mount, and the page appears completely frozen.
+    reset();
     return () => { abortRef.current?.abort(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── File validation ────────────────────────────────────────────────────────

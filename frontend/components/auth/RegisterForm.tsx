@@ -37,6 +37,7 @@ export function RegisterForm() {
   const [confirmPassword,  setConfirmPassword]  = useState("");
   const [error,            setError]            = useState<string | null>(null);
   const [success,          setSuccess]          = useState(false);
+  const [successMsg,       setSuccessMsg]       = useState<string | null>(null);
   const [loading,          setLoading]          = useState(false);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -66,6 +67,8 @@ export function RegisterForm() {
       });
 
       if (res.ok) {
+        const data = await res.json().catch(() => ({})) as { message?: string };
+        setSuccessMsg(data.message ?? null);
         setSuccess(true);
         return;
       }
@@ -103,8 +106,12 @@ export function RegisterForm() {
           Account created!
         </h2>
         <p className="text-sm mb-6" style={{ color: "var(--text-muted)" }}>
-          We sent a verification link to <strong style={{ color: "var(--text-secondary)" }}>{email}</strong>.
-          Click the link to activate your account, then sign in.
+          {successMsg ?? (
+            <>
+              We sent a verification link to <strong style={{ color: "var(--text-secondary)" }}>{email}</strong>.
+              Click the link to activate your account, then sign in.
+            </>
+          )}
         </p>
         <Link
           href="/login"
