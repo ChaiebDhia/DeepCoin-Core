@@ -295,6 +295,7 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
+                  title={`Opens CN type ${item.label} on corpus-nummorum.eu (external site — opens in new tab)`}
                   className="font-mono text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 transition-colors flex-1"
                 >
                   CN {item.label} ↗
@@ -316,6 +317,11 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
               </div>
             ))}
           </div>
+          {/* External site notice */}
+          <p className="mt-1.5 text-[9px] flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
+            <ExternalLink size={9} />
+            All ↗ links open <span className="font-medium">corpus&#8209;nummorum.eu</span> in a new tab. The site may take a few seconds to respond.
+          </p>
         </div>
 
         {/* ── Corpus Nummorum CTA ────────────────────────────────────────────
@@ -638,7 +644,10 @@ export function AnalysisPanel({ result, showLink = false }: AnalysisPanelProps) 
       <div className="flex items-center gap-3 flex-wrap">
         {result.pdf_url && (
           <Button variant="gold" size="md" asChild>
-            <a href={pdfDownloadUrl(result.pdf_url)} download target="_blank" rel="noopener noreferrer">
+            {/* FIX: target="_blank" conflicts with download attribute — browser opens new tab
+                 instead of saving. Remove target to trigger proper file download.
+                 rel="noreferrer" kept to suppress referrer header for the file URL. */}
+            <a href={pdfDownloadUrl(result.pdf_url)} download rel="noreferrer">
               <Download size={15} />
               Download PDF Report
             </a>

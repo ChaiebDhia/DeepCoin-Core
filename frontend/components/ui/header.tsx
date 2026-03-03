@@ -24,6 +24,7 @@ import { Coins }      from "lucide-react";
 import { HealthDot }  from "@/components/ui/health-dot";
 import { UserMenu }   from "@/components/auth/UserMenu";
 import { NavLinks }   from "@/components/ui/NavLinks";
+import { MobileNav }  from "@/components/ui/MobileNav";
 
 export function Header() {
   return (
@@ -46,13 +47,16 @@ export function Header() {
         {/* Nav — auth-aware client island */}
         <NavLinks />
 
-        {/* Right cluster: health dot + auth menu */}
-        <div className="flex items-center gap-3">
+        {/* Right cluster: health dot + auth menu + mobile hamburger */}
+        <div className="flex items-center gap-2">
           {/* Health indicator — left of the auth buttons */}
           <HealthDot />
 
           {/* Auth: avatar dropdown when logged in, Sign In / Register otherwise */}
           <UserMenu />
+
+          {/* Mobile hamburger — far right, only renders below md */}
+          <MobileNav />
         </div>
       </div>
     </header>

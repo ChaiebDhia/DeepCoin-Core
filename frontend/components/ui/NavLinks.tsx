@@ -1,40 +1,39 @@
+"use client";
+
 /**
  * components/ui/NavLinks.tsx
  * ==========================
- * Public navigation links rendered in the site header.
+ * Desktop-only horizontal navigation pill strip (md and wider).
+ * On mobile this renders nothing — the hamburger lives in MobileNav.tsx,
+ * which is placed inside the right cluster so it sits flush with UserMenu.
  *
- * WHAT: Static links to public-facing pages visible to ALL visitors —
- *       logged-in or anonymous, no auth check required.
- *
- * WHY no auth logic here:
- *   Auth-gated actions (Analyse, History) belong in the UserMenu dropdown
- *   so they are only visible to authenticated users. Keeping this component
- *   pure-public makes the nav straightforward for new visitors and removes
- *   the need for "use client" + session hydration overhead in the header.
- *
- * WHY Server Component (no "use client"):
- *   All links are static. There are no React hooks or browser APIs.
- *   Shipping this as a Server Component means zero JS for the nav links —
- *   they render on the server and arrive as plain HTML.
+ * WHY separated: having the hamburger in the middle slot of the header
+ * (between brand and auth) looks unprofessional on small screens.
+ * Placing it in the far-right cluster keeps scannable left→right hierarchy:
+ *   Brand  |  [desktop links]  |  Health · UserMenu · Hamburger
  */
 
 import Link from "next/link";
 
-/* ── Shared link style ────────────────────────────────────────────────── */
-
 const linkCls =
   "px-3 py-1.5 rounded-md text-sm text-[var(--text-secondary)] hover:text-white hover:bg-[var(--surface-2)] transition-colors";
 
-/* ── Component ────────────────────────────────────────────────────────── */
+export const NAV_LINKS = [
+  { href: "/#features", label: "Features" },
+  { href: "/explore",   label: "Explore"  },
+  { href: "/chat",      label: "AI Chat"  },
+  { href: "/about",     label: "About"    },
+  { href: "/docs",      label: "Docs"     },
+];
 
 export function NavLinks() {
   return (
-    <nav className="flex items-center gap-1">
-      <Link href="/#features" className={linkCls}>Features</Link>
-      <Link href="/explore"   className={linkCls}>Explore</Link>
-      <Link href="/chat"      className={linkCls}>AI Chat</Link>
-      <Link href="/about"     className={linkCls}>About</Link>
-      <Link href="/docs"      className={linkCls}>Docs</Link>
+    <nav className="hidden md:flex items-center gap-1">
+      {NAV_LINKS.map(l => (
+        <Link key={l.href} href={l.href} className={linkCls}>
+          {l.label}
+        </Link>
+      ))}
     </nav>
   );
 }

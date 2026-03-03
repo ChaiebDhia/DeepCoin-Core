@@ -15,6 +15,7 @@
  */
 
 import { use, useState }          from "react";
+import { useSession }          from "next-auth/react";
 import { useQuery }           from "@tanstack/react-query";
 import Link                   from "next/link";
 import { ArrowLeft, ExternalLink, FileDown, MapPin, Calendar, Coins, FlaskConical, Link2, Check } from "lucide-react";
@@ -236,11 +237,15 @@ interface PageProps {
 
 export default function HistoryDetailPage({ params }: PageProps) {
   const { id } = use(params);
+  const { status } = useSession();
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["history", id],
     queryFn:  () => getHistoryItem(id),
     staleTime: 5 * 60_000,
+    // Wait until session is resolved before firing — avoids 401 on direct navigation
+    // when the JWT hasn't been written to _authToken yet by SessionSync.
+    enabled:  status !== "loading",
   });
 
   return (

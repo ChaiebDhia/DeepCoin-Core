@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -78,7 +79,7 @@ def _row_to_summary(row: Classification) -> HistorySummary:
     payload = row.payload or {}
     pdf_url = None
     if row.pdf_path:
-        pdf_url = f"/api/reports/{row.pdf_path.rsplit('/', 1)[-1]}"
+        pdf_url = f"/api/reports/{Path(row.pdf_path).name}"
     elif payload.get("pdf_url"):
         pdf_url = payload["pdf_url"]
     return HistorySummary(
@@ -111,7 +112,7 @@ def _row_to_response(row: Classification) -> ClassifyResponse:
 
     pdf_url = None
     if row.pdf_path:
-        pdf_url = f"/api/reports/{row.pdf_path.rsplit('/', 1)[-1]}"
+        pdf_url = f"/api/reports/{Path(row.pdf_path).name}"
     elif payload.get("pdf_url"):
         pdf_url = payload["pdf_url"]
 
