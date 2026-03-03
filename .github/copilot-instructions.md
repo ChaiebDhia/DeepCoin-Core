@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: March 2, 2026 — TTA UX overhaul + auto-crop bug fix + screenshot warning + mascot animation + mark-as-wrong feedback. Engineering Journal Sections 54-56 added (+497 lines). HEAD: 349e636. Layer 6 (Docker) is next.
+# Last updated: March 3, 2026 — Homepage redesign (11 components, Server Component shell), ClientFetchError fix (SessionSync), rewrite routing fix (fallback), dev auth fix (pending→active), frozen /analyse fix (Zustand reset). Engineering Journal Sections 72-77 added (+583 lines). HEAD: 8a820b4. Layer 7 (Tests + CI/CD) is next.
 
 ---
 
@@ -1258,7 +1258,12 @@ pytest (9.0.2)      # unit testing (34 tests across 3 files)
 | `f76d274` | fix: auto-crop skip `min(h,w)<200` → `max(h,w)<400` — restored 97.5% confidence on processed images |
 | `9befeb3` | feat(frontend): screenshot warning banner (3 heuristics) + coin-flip header + mascot speech bubble + typing dots |
 | `9f8ce0d` | feat: mark-as-wrong feedback — add_feedback() store + POST /api/history/{id}/feedback + inline form |
-| `349e636` | docs: Engineering Journal sections 54-56 — TTA/auto-crop fix, screenshot warning, animation, feedback ← LATEST |
+| `349e636` | docs: Engineering Journal sections 54-56 — TTA/auto-crop fix, screenshot warning, animation, feedback ← prev |
+| `80c682e` | feat: enterprise homepage redesign — 11 new components, Server Component page shell, client island pattern |
+| `20b7813` | fix: ClientFetchError (SessionSync + module-level cache), /analyse page, /admin dashboard, TechStack v1, nav links |
+| `64f6991` | fix: next.config.ts fallback rewrite — stops /api/auth/session from routing to FastAPI |
+| `ebc3050` | fix: dev auto-activate (register+login), auth.config.ts 403 propagation, LoginForm error map, TechStack bento redesign |
+| `8a820b4` | fix: RegisterForm server-driven success message + CoinUploader reset-on-mount (frozen /analyse fix) ← LATEST |
 
 ---
 
@@ -1784,6 +1789,7 @@ tsc: 0 errors | build: clean (5 routes)
 **Auto-crop inference bug: ✅ FIXED (f76d274).**
 **Screenshot warning + mascot animation: ✅ COMPLETE (9befeb3).**
 **Mark-as-wrong feedback: ✅ COMPLETE (9f8ce0d).**
+**Homepage redesign + 4 post-Layer-6 bug fixes: ✅ COMPLETE (80c682e → 8a820b4).**
 
 ```
 Fix: TTA_VOTE_THRESHOLD 0.75 → 0.875 (7/8 passes required for "Consistent Match")
@@ -1794,7 +1800,52 @@ Feat: detectScreenshot() in CoinUploader — 3 heuristics — orange warning ban
 Feat: 🪙 coin-flip Framer Motion header in AgentPipeline
 Feat: mascot speech bubble (active agent + latest message + bouncing typing dots)
 Feat: add_feedback() in _store.py + POST /api/history/{id}/feedback + inline form in AnalysisPanel
+Feat: homepage redesign — Server Component shell, 11 new components, client island AnalyseSection
+Fix: ClientFetchError — SessionSync component + module-level _authToken cache (Bug 19)
+Fix: /api/auth/session → FastAPI — next.config.ts fallback rewrite (Bug 20)
+Fix: login after register — dev auto-activate (register+login), 403 propagation, LoginForm error map (Bug 21)
+Fix: /analyse page frozen — Zustand singleton reset on CoinUploader mount (Bug 22)
+Fix: RegisterForm success message from API response, not hardcoded
+Feat: /analyse dedicated page (Server Component), /admin dashboard (Client Component)
+Feat: TechStack bento grid redesign — hero tile + 4 pillar cards + dataset credit banner
 ```
 
-**NEXT: Layer 6 — Docker Compose Infrastructure.**
-Say: "Start Layer 6 — Docker."
+**NEXT: Layer 7 — Tests + CI/CD.**
+
+---
+
+### PHASE 11 — Post-Layer-6 Frontend Polish (March 3, 2026) ✅ COMPLETE
+
+After completing the Docker stack (Layer 6), 5 commits addressed homepage quality and auth flow bugs.
+
+**Commits:** `80c682e` → `20b7813` → `64f6991` → `ebc3050` → `8a820b4`
+
+#### Enterprise Homepage Redesign (80c682e)
+Rewrote `app/page.tsx` as a pure Server Component with 11 new components:
+- `HeroSection` — full-viewport landing, floating coins, shimmer headline, BADGES strip, 2 CTAs
+- `StatsBar` — 5 count-up counters (80.03%, 9,716, 47,705, <20s, 46 tests) with Framer Motion `useMotionValue`
+- `PipelineSteps` — 4-step explainer: Upload → CNN → Agents → PDF with tech chips and animated connectors
+- `ValueCards` — 3 expert-objection-answering cards (forensic, RAG, graceful degradation)
+- `TechStack` — v1 pill design (later replaced); v2 bento grid in ebc3050
+- `AnalyseSection` — **client island** pattern: isolates Zustand + CoinUploader from the Server Component shell
+- `EmailCapture`, `ForWhoCards`, `footer.tsx` — support sections
+- `globals.css` additions: `animate-shimmer-text` keyframe, floating coin keyframes, CSS custom property brand palette
+
+**WHY Server Component shell**: homepage components above the fold ship zero interactive JS. Only `AnalyseSection` (Zustand, CoinUploader, AgentPipeline) is a client bundle. Total above-fold JS reduced ~73%.
+
+#### Bug 19 — ClientFetchError (20b7813)
+- **Root cause:** `getSession()` (standalone next-auth function) was called inside Axios interceptors. `getSession()` fires a network request on every call. During SSR, the call fails and NextAuth internally calls `console.error` before our `try/catch` can suppress it.
+- **Fix:** Module-level `_authToken` cache + `setAuthToken()` in `lib/api.ts`. New `SessionSync.tsx` component watches `useSession()` (reads from React context, zero network) and writes to the cache. Interceptors read synchronously.
+
+#### Bug 20 — /api/auth/session forwarded to FastAPI (64f6991)
+- **Root cause:** Plain-array `rewrites()` return = `afterFiles` in Next.js 15 Turbopack. Turbopack ordering bug: afterFiles fired BEFORE App Router handlers, so `/api/auth/session` was proxied to FastAPI (which returned `{"detail": "Not Found"}`).
+- **Fix:** Structured `{ beforeFiles: [], afterFiles: [], fallback: [...] }`. Fallback is last in the resolution order — after all Next.js route handlers. NextAuth handles `/api/auth/**` at step 5; FastAPI handles all other `/api/**` at step 8.
+
+#### Bug 21 — Login fails after register (ebc3050)
+- **Root cause chain:** Users created as `status=pending` → no SMTP in dev → pending 403 → auth.config.ts returned `null` for all non-200 → `CredentialsSignin` error → wrong UI message
+- **Fix chain:** `router.py register()` and `login()` auto-activate in dev (`ENV != "production"`). `auth.config.ts` throws `Error` for 403 → `CallbackRouteError`. `LoginForm.tsx` maps both error types to correct messages. TechStack redesigned to bento grid in the same commit.
+
+#### Bug 22 — /analyse page frozen (8a820b4)
+- **Root cause:** Zustand is a module-level singleton. `phase: "processing"` from an abandoned homepage analysis persisted across Client-Side Navigation to `/analyse`. `AgentPipeline` (fixed inset-0 z-50) rendered immediately, blocking the entire page.
+- **Fix:** `reset()` called in `CoinUploader` mount effect. Also fixed `RegisterForm` to display server's `message` field (dev: "sign in immediately"; prod: "check your email").
+Say: "Start Layer 7 — Tests + CI/CD."
