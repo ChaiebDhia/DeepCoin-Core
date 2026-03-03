@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: March 3, 2026 — Public /api/explore + /api/admin/feedback+analyses + /api/chat; /chat page; admin All-Analyses + UserCorrections panels; PDF 30-day TTL fix (Bug 24); explore anon fix (Bug 23); feedback visible in admin (Bug 25); NavLinks AI Chat link. Engineering Journal Sections 78-83 added. HEAD: d1a6783. Layer 7 (Tests + CI/CD) is next.
+# Last updated: March 3, 2026 — Enterprise chat page redesign (v2), AI Chat CTA in AnalysisPanel (conf<70%), TutorialModal floating guide, admin access restriction page. HEAD: 06116a5. Layer 7 (Tests + CI/CD) is next.
 
 ---
 
@@ -1267,7 +1267,7 @@ pytest (9.0.2)      # unit testing (34 tests across 3 files)
 | `47245da` | feat: auth-guard Analyse CTA (HeroSection), NavLinks Server Component refactor (public-only links), health dot moved left |
 | `391e62e` | feat: POST/GET /api/subscribers (thread-safe, idempotent), data/subscribers.json gitignored |
 | `932a67f` | feat: /about + /docs pages (Server Components), /explore gallery (Client Component), admin subscriber panel, Next.js route handler proxy for X-API-Key |
-| `d1a6783` | feat: public /api/explore, /api/admin/feedback+analyses, /api/chat; /chat page; admin All-Analyses + UserCorrections panels; PDF 30-day TTL fix; explore anon fix; NavLinks AI Chat ← LATEST |
+| `06116a5` | feat: enterprise chat redesign v2, AI Chat CTA in AnalysisPanel, TutorialModal, admin access guide ← LATEST |
 
 ---
 
@@ -1795,6 +1795,19 @@ tsc: 0 errors | build: clean (5 routes)
 **Mark-as-wrong feedback: ✅ COMPLETE (9f8ce0d).**
 **Homepage redesign + 4 post-Layer-6 bug fixes: ✅ COMPLETE (80c682e → 8a820b4).**
 **Navigation overhaul + subscriber endpoint + new public pages + AI Chat + admin panels + 3 bug fixes: ✅ COMPLETE (47245da → d1a6783).**
+**Enterprise chat redesign v2, AI Chat CTA, TutorialModal, admin access guide: ✅ COMPLETE (06116a5).**
+
+```
+Feat: enterprise chat page redesign (424 lines) — EmptyState, MessageBubble, SourceChip, GoogleSearchCTA,
+      CopyButton, TypingIndicator, animated starter questions, provider badge, stats pills, glow input
+Fix:  chatQuery uses classifyApiClient (direct FastAPI, 180s) -- fixes chat proxy timeout root cause
+Feat: ?q= URL param via useSearchParams + Suspense -- context injected from AnalysisPanel CTA
+Feat: AnalysisPanel purple CTA -- "Continue research in DeepCoin AI" when confidence < 0.70
+      and no TTA consensus -- injects CN label into /chat?q= for context pre-load
+Feat: TutorialModal -- floating gold ? button (bottom-right), 6-step guided tour,
+      Framer Motion AnimatePresence, progress dots, colored icons -- global in layout.tsx
+Feat: admin/page.tsx Access Restricted early-return for analyst role -- psql promotion guide
+```
 
 ```
 Fix: TTA_VOTE_THRESHOLD 0.75 → 0.875 (7/8 passes required for "Consistent Match")
