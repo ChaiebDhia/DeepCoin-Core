@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: March 3, 2026 — Homepage redesign (11 components, Server Component shell), ClientFetchError fix (SessionSync), rewrite routing fix (fallback), dev auth fix (pending→active), frozen /analyse fix (Zustand reset). Engineering Journal Sections 72-77 added (+583 lines). HEAD: 8a820b4. Layer 7 (Tests + CI/CD) is next.
+# Last updated: March 3, 2026 — Public /api/explore + /api/admin/feedback+analyses + /api/chat; /chat page; admin All-Analyses + UserCorrections panels; PDF 30-day TTL fix (Bug 24); explore anon fix (Bug 23); feedback visible in admin (Bug 25); NavLinks AI Chat link. Engineering Journal Sections 78-83 added. HEAD: d1a6783. Layer 7 (Tests + CI/CD) is next.
 
 ---
 
@@ -1263,7 +1263,11 @@ pytest (9.0.2)      # unit testing (34 tests across 3 files)
 | `20b7813` | fix: ClientFetchError (SessionSync + module-level cache), /analyse page, /admin dashboard, TechStack v1, nav links |
 | `64f6991` | fix: next.config.ts fallback rewrite — stops /api/auth/session from routing to FastAPI |
 | `ebc3050` | fix: dev auto-activate (register+login), auth.config.ts 403 propagation, LoginForm error map, TechStack bento redesign |
-| `8a820b4` | fix: RegisterForm server-driven success message + CoinUploader reset-on-mount (frozen /analyse fix) ← LATEST |
+| `8a820b4` | fix: RegisterForm server-driven success message + CoinUploader reset-on-mount (frozen /analyse fix) |
+| `47245da` | feat: auth-guard Analyse CTA (HeroSection), NavLinks Server Component refactor (public-only links), health dot moved left |
+| `391e62e` | feat: POST/GET /api/subscribers (thread-safe, idempotent), data/subscribers.json gitignored |
+| `932a67f` | feat: /about + /docs pages (Server Components), /explore gallery (Client Component), admin subscriber panel, Next.js route handler proxy for X-API-Key |
+| `d1a6783` | feat: public /api/explore, /api/admin/feedback+analyses, /api/chat; /chat page; admin All-Analyses + UserCorrections panels; PDF 30-day TTL fix; explore anon fix; NavLinks AI Chat ← LATEST |
 
 ---
 
@@ -1790,6 +1794,7 @@ tsc: 0 errors | build: clean (5 routes)
 **Screenshot warning + mascot animation: ✅ COMPLETE (9befeb3).**
 **Mark-as-wrong feedback: ✅ COMPLETE (9f8ce0d).**
 **Homepage redesign + 4 post-Layer-6 bug fixes: ✅ COMPLETE (80c682e → 8a820b4).**
+**Navigation overhaul + subscriber endpoint + new public pages + AI Chat + admin panels + 3 bug fixes: ✅ COMPLETE (47245da → d1a6783).**
 
 ```
 Fix: TTA_VOTE_THRESHOLD 0.75 → 0.875 (7/8 passes required for "Consistent Match")
@@ -1811,6 +1816,30 @@ Feat: TechStack bento grid redesign — hero tile + 4 pillar cards + dataset cre
 ```
 
 **NEXT: Layer 7 — Tests + CI/CD.**
+
+```
+Fix: auth-guard Analyse CTA (HeroSection) — authed→/analyse, anon→/login?callbackUrl=/analyse
+Fix: health dot moved left of auth controls in header
+Fix: POST /api/subscribers — thread-safe, idempotent, JSON file, data/subscribers.json gitignored
+Feat: /about page — Server Component, pipeline steps, metrics, team (932a67f)
+Feat: /explore page — Client gallery, route filter pills, ConfidenceBadge, CN links, AI Chat CTA
+Feat: /docs page — Server Component, 8 REST endpoints documented, cURL + Python examples
+Feat: admin subscriber panel — email table, count badge, CSV export, Next.js route handler proxy
+Bug 23: explore empty for anon → /api/explore public endpoint + explorePublic() → FIXED
+Bug 24: PDF download returns JSON → reports TTL raised 24h→720h (30 days) → FIXED
+Bug 25: feedback corrections invisible → GET /api/admin/feedback endpoint → FIXED
+Feat: /api/explore (public, no auth, GDPR: strips user_id + pdf_path)
+Feat: /api/admin/feedback (admin/curator, joinedload, 20/page, pages field)
+Feat: /api/admin/analyses (admin/curator, route+search filter, pdf_url, user_email)
+Feat: /api/chat (public, RAG search → LLM → ChatSource[], provider badge, asyncio.to_thread)
+Feat: /chat page — MessageBubble, SourceChip, starter questions, typing indicator, no auth
+Feat: admin AllAnalyses table — paginated, search, route filter, PDF links, user email
+Feat: admin UserCorrections panel — feedback table, red badge, CN links, active learning framing
+Feat: NavLinks AI Chat link — between Explore and About
+Feat: 8 new TypeScript interfaces (ExploreItem, FeedbackItem, AdminAnalysisItem, ChatResponse…)
+Feat: 4 new API functions (explorePublic, getAdminFeedback, getAdminAnalyses, chatQuery)
+Docs: Engineering Journal sections 78-83 (+6 sections)
+```
 
 ---
 
@@ -1849,3 +1878,17 @@ Rewrote `app/page.tsx` as a pure Server Component with 11 new components:
 - **Root cause:** Zustand is a module-level singleton. `phase: "processing"` from an abandoned homepage analysis persisted across Client-Side Navigation to `/analyse`. `AgentPipeline` (fixed inset-0 z-50) rendered immediately, blocking the entire page.
 - **Fix:** `reset()` called in `CoinUploader` mount effect. Also fixed `RegisterForm` to display server's `message` field (dev: "sign in immediately"; prod: "check your email").
 Say: "Start Layer 7 — Tests + CI/CD."
+
+**New pages as of d1a6783:**
+```
+app/
+├── page.tsx              ← Server Component homepage (stable)
+├── analyse/page.tsx      ← Dedicated analyser (stable)
+├── admin/page.tsx        ← All-analyses + feedback + subscriber panels
+├── history/page.tsx      ← Paginated user history (stable)
+├── history/[id]/page.tsx ← Full analysis detail (stable)
+├── explore/page.tsx      ← Public gallery (fixed — /api/explore, no auth)
+├── chat/page.tsx         ← NEW: AI numismatic Q&A over 47,705 KB chunks
+├── about/page.tsx        ← NEW: Project story (Server Component, SEO)
+└── docs/page.tsx         ← NEW: REST API reference (Server Component, SEO)
+```
