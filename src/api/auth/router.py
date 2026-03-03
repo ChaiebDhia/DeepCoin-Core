@@ -215,24 +215,33 @@ async def register(
         )
 
     # 2+3. Create user
+    # WHY dev-mode auto-activation:
+    #   In development there is no SMTP server, so verification emails are only
+    #   printed to the console. Requiring email verification would block every
+    #   test login. When ENV != "production", we set status=active immediately
+    #   and stamp email_verified_at so the user can sign in right away.
+    is_dev = os.getenv("ENV", "development") != "production"
+    now    = datetime.now(timezone.utc)
     user = User(
         email=body.email,
         hashed_password=hash_password(body.password),
         display_name=body.display_name or body.email.split("@")[0],
         role=UserRole.analyst,
-        status=UserStatus.pending,
+        status=UserStatus.active if is_dev else UserStatus.pending,
+        email_verified_at=now if is_dev else None,
     )
     db.add(user)
     await db.flush()   # populate user.id without committing
 
-    # 4. Create email verification token
-    raw_token = secrets.token_urlsafe(48)   # 64-char URL-safe string
-    verification = EmailVerification(
-        user_id=user.id,
-        token=raw_token,
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
-    )
-    db.add(verification)
+    if not is_dev:
+        # 4. Create email verification token (production only)
+        raw_token = secrets.token_urlsafe(48)   # 64-char URL-safe string
+        verification = EmailVerification(
+            user_id=user.id,
+            token=raw_token,
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+        )
+        db.add(verification)
 
     # 5. Write audit log (before commit so it's in the same transaction)
     await write_audit(
@@ -246,10 +255,16 @@ async def register(
     )
 
     # 6. Send email (after audit is written; does NOT block the commit)
-    await send_verification_email(user.email, raw_token)
+    if not is_dev:
+        await send_verification_email(user.email, raw_token)  # type: ignore[possibly-undefined]
 
-    logger.info("New user registered: id=%s email=%s", user.id, user.email)
-    return MessageResponse(message="Account created. Please check your email to verify your address.")
+    msg = (
+        "Account created. You can sign in immediately."
+        if is_dev
+        else "Account created. Please check your email to verify your address."
+    )
+    logger.info("New user registered: id=%s email=%s dev_auto_active=%s", user.id, user.email, is_dev)
+    return MessageResponse(message=msg)
 
 
 # ── POST /auth/login ──────────────────────────────────────────────────────────
@@ -307,10 +322,19 @@ async def login(
             detail="Your account has been suspended. Contact an administrator.",
         )
     if user.status == UserStatus.pending:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Please verify your email address before logging in. Check your inbox.",
-        )
+        is_dev = os.getenv("ENV", "development") != "production"
+        if is_dev:
+            # In development there is no SMTP server, so verification emails are
+            # only printed to the console.  Auto-activate here so any user that
+            # registered before this fix existed can still sign in immediately.
+            user.status = UserStatus.active
+            user.email_verified_at = datetime.now(timezone.utc)
+            logger.info("Dev mode: auto-activated pending user id=%s", user.id)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Please verify your email address before logging in. Check your inbox.",
+            )
 
     # 4. Access token
     access_expire_minutes = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))

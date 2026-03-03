@@ -106,8 +106,14 @@ export const authConfig: NextAuthConfig = {
           });
 
           if (!res.ok) {
-            // 401 Bad credentials | 403 Account suspended | 404 Not found
-            // Return null → next-auth surfaces "CredentialsSignin" error
+            if (res.status === 403) {
+              // Account exists but is not yet verified / suspended.
+              // throw causes result.error = "CallbackRouteError" in the browser,
+              // which LoginForm distinguishes from a plain bad-credentials 401.
+              const body: { detail?: string } = await res.json().catch(() => ({}));
+              throw new Error(body.detail ?? "Please verify your email before signing in.");
+            }
+            // 401 — wrong email or password → return null → CredentialsSignin
             return null;
           }
 

@@ -45,9 +45,9 @@ export function LoginForm() {
   // ── friendly error messages ────────────────────────────────────────────────
 
   const ERROR_MESSAGES: Record<string, string> = {
-    CredentialsSignin: "Invalid email or password. Please try again.",
-    CallbackRouteError: "Authentication failed. Please try again.",
-    Default: "Something went wrong. Please try again.",
+    CredentialsSignin:   "Incorrect email or password. Please try again.",
+    CallbackRouteError:  "Please verify your email address before signing in. Check your inbox for a verification link.",
+    Default:             "Something went wrong. Please try again.",
   };
 
   // ── submit handler ─────────────────────────────────────────────────────────
