@@ -2,7 +2,7 @@
 End-to-end test of the full Layer 3 pipeline.
 Tests all three routing paths:
 
-  Route 1 — historian    (conf > 85%)  : type 1015, conf ~ 91%
+  Route 1 — historian    (conf > 85%)  : type 1017, conf ~ 97%
   Route 2 — validator    (40-85%)      : type 21027 image, conf ~ 43%
   Route 3 — investigator (conf < 40%)  : type 544 image, conf ~ 21%
 
@@ -22,7 +22,7 @@ from src.agents.gatekeeper import Gatekeeper
 TESTS = [
     {
         "name":           "Route 1 — HISTORIAN (high confidence)",
-        "image":          "data/processed/1015/CN_type_1015_cn_coin_5943_p.jpg",
+        "image":          "data/processed/1017/CN_type_1017_BNF_Platzhalter_cn_coin_12474_o.jpg",
         "expected_route": "historian",
         "min_conf":        0.85,
     },
