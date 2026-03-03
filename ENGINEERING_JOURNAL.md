@@ -7,7 +7,7 @@
 **Period**: PFE (Final Year Engineering Internship), Feb–July 2026  
 **GitHub**: https://github.com/ChaiebDhia/DeepCoin-Core  
 **Author**: Dhia Chaïeb  
-**Status as of**: March 2026 — Phase A1+A2+A3 complete: PostgreSQL ORM (6 tables: User, Classification, Feedback, AuditLog, EmailVerification, RefreshToken), Alembic migration 001_initial_schema, full JWT auth system (8 endpoints, bcrypt work-factor-12, HS256 JWT, refresh-token rotation, RBAC with 3 roles). Phase A3: shared `src/api/db/audit.py`, per-user rate-limiting key (`user_or_ip_key`), AuditLog writes on classify + delete. Frontend fully live through Phase 4 UX (CN links, delete, filter bar, stats strip, copy link, screenshot warning, mark-as-wrong feedback). Sections 59–62 added. Table of Contents expanded to all 62 sections. HEAD: e61ed57. 46/46 unit tests passing.  
+**Status as of**: March 2026 — Phase A1+A2+A3 complete: PostgreSQL ORM (6 tables: User, Classification, Feedback, AuditLog, EmailVerification, RefreshToken), Alembic migration 001_initial_schema, full JWT auth system (8 endpoints, bcrypt work-factor-12, HS256 JWT, refresh-token rotation, RBAC with 3 roles). Phase A3: shared `src/api/db/audit.py`, per-user rate-limiting key (`user_or_ip_key`), AuditLog writes on classify + delete. Frontend fully live through Phase 4 UX. Section 63: complete testing guide (A1–A3 + all layers). Section 64: enterprise documentation standard. Table of Contents expanded to 64 sections. ToC corrected: entries 23-26 fixed. HEAD: 1e01110. 46/46 unit tests passing. 20,671 lines.  
 
 ---
 
@@ -35,10 +35,11 @@
 20. [Phase 10 — Knowledge Base v1 (Layer 2, First Pass)](#20-phase-10--knowledge-base-v1-layer-2-first-pass)
 21. [Phase 11 — The 5-Agent System: First Working Version (Layer 3)](#21-phase-11--the-5-agent-system-first-working-version-layer-3)
 22. [Phase 12 — Enterprise RAG Upgrade: All 9716 Types (Layer 3 Final)](#22-phase-12--enterprise-rag-upgrade-all-9716-types-layer-3-final)
-23. [Complete Bug Registry: All 13 Problems, Root Causes, and Fixes](#23-complete-bug-registry-all-13-problems-root-causes-and-fixes)
-24. [Every File in the Project — Updated Reference](#24-every-file-in-the-project--updated-reference)
-25. [Git History — Every Commit Explained (Updated)](#25-git-history--every-commit-explained-updated)
-26. [Where We Are and What Comes Next (Updated Roadmap)](#26-where-we-are-and-what-comes-next-updated-roadmap)
+22b. [Commit c5b7f0d: qwen3-vl:4b Activated + Think-Tag Fix](#section-22b--commit-c5b7f0d-qwen3-vl4b-activated--think-tag-fix-february-28-2026)
+23. [Layer 4 — FastAPI Backend (Production API)](#23-layer-4--fastapi-backend-production-api)
+24. [Layer 4 Phase 2 — X-API-Key Authentication](#24-layer-4-phase-2--x-api-key-authentication)
+25. [Layer 4 Phase 2 — Rate Limiting + SQLite WAL Store + Metrics](#25-layer-4-phase-2--rate-limiting-slowapi--sqlite-wal-store--metrics-endpoint)
+26. [Layer 4 Phase 2 — Developer Tooling: pyproject.toml, Makefile, Tests](#26-layer-4-phase-2--developer-tooling-pyprojecttoml-makefile-envexample-and-34-unit-tests)
 27. [Phase 14 — Layer 4 Security Hardening and Production Audit](#27-phase-14--layer-4-security-hardening-and-production-audit)
 28. [Layer 1 Security Patch — weights_only=True](#28-layer-1-security-patch--weights_onlytrue)
 29. [Complete Bug Registry Addendum — Bugs 14 and 15](#29-complete-bug-registry-addendum--bugs-14-and-15)
@@ -75,6 +76,8 @@
 60. [Section 60 — Full Annotated `historian.py`: Every Line Explained](#section-60--full-annotated-historianpy--every-line-explained)
 61. [Section 61 — Frontend: `store.ts` + `CoinUploader.tsx` From Blank Files](#section-61--frontend--storets--coinuploadertsx-from-blank-files)
 62. [Section 62 — Phase A3: Per-User Rate Limiting + AuditLog Writes](#section-62--phase-a3-per-user-rate-limiting--auditlog-writes)
+63. [Section 63 — Complete Testing Guide: From A1 to A3, Every Layer](#section-63--how-to-test-the-entire-deepcoin-system-the-complete-guide)
+64. [Section 64 — Documentation Standard: What Enterprise Grade Really Means](#section-64--documentation-standard-what-enterprise-grade-really-means)
 
 ---
 
@@ -20075,3 +20078,593 @@ and see exactly how much classification confidence improved (or degraded) since 
 *Engineering Journal  Section 62 added.*
 *Phase A3 complete: shared audit module, per-user rate-limiting, AuditLog writes on classify + delete.*
 *46/46 unit tests passing.*
+
+---
+
+## Section 63  How to Test the Entire DeepCoin System: The Complete Guide
+
+**Date:** March 2026 | **Scope:** Layers 05, Phase A1A3 | **Tests:** 46 unit + manual integration
+
+---
+
+### 63.0  What "Testing" Means at Each Level
+
+There are four levels of testing in this project. You need all four.
+
+| Level | What You Test | Tool | Speed |
+|-------|--------------|------|-------|
+| Unit | One function in isolation, with mocks | pytest | ~1 second |
+| Integration | Two real components talking to each other | pytest + live DB | ~10 seconds |
+| End-to-End | A full user action from browser to PDF | manual + scripts | ~20 seconds |
+| Smoke | "Does it start without crashing?" | shell commands | ~5 seconds |
+
+We currently have:
+-  **46 unit tests** (passing)  `tests/unit/`
+-  **3-route end-to-end script**  `scripts/test_pipeline.py`
+-  **Smoke tests**  described in this guide
+-  Integration tests  Layer 7 (pending Docker Compose)
+
+---
+
+### 63.1  Prerequisites  Set Up Once
+
+Before running anything, you need three things ready.
+
+#### Step 1  Activate the Python Virtual Environment
+
+Every terminal session must start with this:
+
+```powershell
+& C:\Users\Administrator\deepcoin\venv\Scripts\Activate.ps1
+cd C:\Users\Administrator\deepcoin
+```
+
+If the venv is not activated, Python will use the system Python which does not have
+torch, chromadb, fastapi, or any other project dependency installed. Every command
+in this guide assumes the venv is active.
+
+#### Step 2  Environment Variables
+
+Copy `.env.example` to `.env` if you have not already. At minimum you need:
+
+```powershell
+# Check what's in .env.example
+Get-Content .env.example
+```
+
+The minimum `.env` for full system operation:
+
+```
+# At least one LLM provider  pick whichever you have
+GITHUB_TOKEN=ghp_...         # From github.com/settings/tokens  free with Copilot Pro
+GOOGLE_API_KEY=AIza...       # From aistudio.google.com  free tier 1500 req/day
+OLLAMA_HOST=http://localhost:11434  # If Ollama is running locally
+
+# Database (needed for A1/A2/A3 features)
+DATABASE_URL=postgresql+asyncpg://deepcoin:secret@localhost:5432/deepcoin
+
+# Auth secrets (can be anything for local dev)
+SECRET_KEY=any-32-char-random-string-here
+REFRESH_SECRET_KEY=another-32-char-random-string
+
+# Optional  rate limiting and API key auth
+# DEEPCOIN_API_KEY=your-key    # if unset, API key check is bypassed (dev mode)
+```
+
+If you have NO LLM key at all, the system still works: the Historian falls back to
+structured KB output (no narrative), the Investigator uses OpenCV fallback (no VLM).
+PDFs are generated in both cases.
+
+#### Step 3  Check That the Models Exist
+
+```powershell
+Test-Path models\best_model.pth        # must be True
+Test-Path models\class_mapping.pth     # must be True
+```
+
+If they are not there, the CNN cannot run. These files are in `.gitignore` because they
+are 47 MB each. They must be copied from the original training machine.
+
+---
+
+### 63.2  Unit Tests  Run in 1 Second
+
+Unit tests require NO database, NO GPU, NO API keys. They are pure Python with mocks.
+Run them after EVERY code change.
+
+```powershell
+# Run all 46 unit tests
+& "C:\Users\Administrator\deepcoin\venv\Scripts\python.exe" -m pytest tests\unit\ -v
+
+# Expected output:
+# tests/unit/test_api_security.py::...   PASSED  (16 tests  filename sanitization, MIME detection)
+# tests/unit/test_audit.py::...          PASSED  (9 tests   write_audit, client_ip, user_or_ip_key)
+# tests/unit/test_auth.py::...           PASSED  (13 tests  bcrypt hashing, JWT encode/decode, RBAC)
+# tests/unit/test_store.py::...          PASSED  (8 tests   SQLite WAL store CRUD operations)
+# ======================== 46 passed in ~1.0s
+
+# Run just one test file
+& "C:\Users\Administrator\deepcoin\venv\Scripts\python.exe" -m pytest tests\unit\test_audit.py -v
+
+# Run a specific test
+& "C:\Users\Administrator\deepcoin\venv\Scripts\python.exe" -m pytest tests\unit\test_audit.py::test_write_audit_inserts_row -v
+```
+
+#### What Each Test File Covers
+
+**`test_api_security.py`  16 tests**
+Tests the file upload security functions in `routes/classify.py`:
+- `_sanitise_filename()`  strips `../`, null bytes, path separators, non-ASCII from upload filenames
+- `_detect_mime()`  reads the first 512 bytes (magic bytes) to detect real file type regardless of extension
+
+These protect against path traversal attacks (someone uploads `../../etc/passwd` as a "coin photo") and MIME-type spoofing (someone renames `exploit.exe` to `coin.jpg`).
+
+**`test_audit.py`  9 tests (Phase A3)**
+Tests the shared audit helpers:
+- `write_audit()`  constructs the correct ORM row, nullable user_id works
+- `client_ip()`  X-Forwarded-For extraction, fallback to request.client.host
+- `user_or_ip_key()`  valid JWT  `user:<uuid>`, any token error  IP fallback, NEVER raises
+
+**`test_auth.py`  13 tests (Phase A2)**
+Tests the authentication cryptographic operations:
+- `hash_password()` / `verify_password()`  bcrypt work factor 12, correct verify/reject
+- `create_access_token()` / `decode_token()`  HS256 JWT creation and validation
+- `require_api_key()`  X-API-Key header validation, hmac.compare_digest timing resistance
+- Role checks  `require_role(["admin"])` rejects analyst and viewer
+
+**`test_store.py`  8 tests (Layer 4)**
+Tests the SQLite WAL history store in `src/api/_store.py`:
+- `ensure_store()`  creates the DB file and table if not present, idempotent
+- `append()`  inserts a record, upserts (replaces) on duplicate ID
+- `load_page()`  returns newest-first ordering
+- `get_by_id()`  exact lookup, returns None for missing IDs
+
+---
+
+### 63.3  CNN Inference  Single Coin Prediction
+
+This tests the deep learning core without any agents.
+
+```powershell
+# Single prediction (no TTA)
+& "C:\Users\Administrator\deepcoin\venv\Scripts\python.exe" scripts\predict.py --image data\processed\1015\CN_type_1015_cn_coin_5943_p.jpg
+
+# Expected output:
+# 
+#  DeepCoin Inference Result       
+# 
+#  Predicted Type : 1015           
+#  Confidence     : 91.1%          
+#  Top-5 Types    : 1015, 1017...  
+#  TTA Used       : No             
+# 
+
+# With TTA (8 forward passes, ~3x slower, more accurate)
+& "C:\Users\Administrator\deepcoin\venv\Scripts\python.exe" scripts\predict.py --image data\processed\1015\CN_type_1015_cn_coin_5943_p.jpg --tta
+
+# Test a low-confidence case
+& "C:\Users\Administrator\deepcoin\venv\Scripts\python.exe" scripts\predict.py --image data\processed\544\CN_type_544_cn_coin_2324_p.jpg
+
+# Expected: confidence below 40%, routes to investigator
+```
+
+If `predict.py` works, the CNN + inference engine (Layer 1) is healthy.
+
+---
+
+### 63.4  Knowledge Base  Verify RAG Engine
+
+```powershell
+& "C:\Users\Administrator\deepcoin\venv\Scripts\python.exe" -c "
+from src.core.rag_engine import get_rag_engine
+rag = get_rag_engine()
+print(f'Corpus size: {rag.corpus_size()} types')
+
+# Test exact lookup
+r = rag.get_by_id(1015)
+print(f'Type 1015: {r[\"denomination\"]} from {r[\"region\"]}')
+
+# Test semantic search
+results = rag.search('silver drachm Thrace', n=3)
+for hit in results:
+    print(f'  score={hit[\"rrf_score\"]:.3f}  type={hit[\"type_id\"]}  {hit[\"denomination\"]}')
+
+# Test context blocks
+blocks = rag.get_context_blocks(1015)
+for b in blocks:
+    print(b[:80])
+"
+```
+
+Expected:
+```
+Corpus size: 9541 types
+Type 1015: drachm from Thrace
+  score=0.721  type=1015  drachm
+  score=0.634  type=1017  ...
+[CONTEXT 1  Identity]  type_id: 1015 | denomination: drachm | ...
+```
+
+If corpus_size is 0 or ChromaDB is missing, run the rebuild:
+```powershell
+& "C:\Users\Administrator\deepcoin\venv\Scripts\python.exe" scripts\rebuild_chroma.py
+# Takes ~9 minutes, ~47,705 vectors
+```
+
+---
+
+### 63.5  Full Pipeline  All 3 Routing Paths
+
+The definitive integration test for Layers 0-3. Tests historian, validator, and investigator paths.
+
+```powershell
+& "C:\Users\Administrator\deepcoin\venv\Scripts\python.exe" scripts\test_pipeline.py
+
+# Expected:
+# [Route 1  HISTORIAN]    type=1015    conf=91.1%  PDF saved  [PASS]
+# [Route 2  VALIDATOR]    label=21027  conf=42.9%  material=consistent  [PASS]
+# [Route 3  INVESTIGATOR] label=544    conf=21.3%  KB_matches=3  [PASS]
+# RESULTS: 3/3 passed
+# EXIT CODE: 0
+Write-Host "Pipeline exit code: $LASTEXITCODE"   # must be 0
+```
+
+A non-zero exit code means at least one routing path is broken.
+
+---
+
+### 63.6  FastAPI Backend  Smoke Test (Without Docker)
+
+Start the server directly (no database required for basic smoke test):
+
+```powershell
+# Terminal 1  Start the API server
+& "C:\Users\Administrator\deepcoin\venv\Scripts\python.exe" -m uvicorn src.api.main:app --port 8000 --log-level info
+```
+
+In a second terminal:
+
+```powershell
+# Health check
+Invoke-WebRequest http://localhost:8000/health | Select-Object -ExpandProperty Content
+
+# Expected (when DB is not running, some components will show degraded):
+# {"status":"healthy","components":{"model":"ok","rag_engine":"ok","database":"degraded",...}}
+# Status will be "degraded" without PostgreSQL  that is expected without Docker
+
+# Metrics endpoint (requires DEEPCOIN_API_KEY if set, otherwise open in dev mode)
+Invoke-WebRequest http://localhost:8000/api/metrics | Select-Object -ExpandProperty Content
+```
+
+---
+
+### 63.7  FastAPI Backend  Full Test (With Docker PostgreSQL)
+
+For A1/A2/A3 features (auth, audit log), PostgreSQL must be running.
+
+```powershell
+# Start PostgreSQL only (not the full stack)
+docker compose up postgres -d
+
+# Wait ~5 seconds, then run the migration
+& "C:\Users\Administrator\deepcoin\venv\Scripts\python.exe" -m alembic upgrade head
+
+# Verify migration created the tables
+docker compose exec postgres psql -U deepcoin -d deepcoin -c "\dt"
+# Expected tables: users, classifications, audit_logs, feedbacks,
+#                  email_verifications, refresh_tokens
+
+# Start the API
+& "C:\Users\Administrator\deepcoin\venv\Scripts\python.exe" -m uvicorn src.api.main:app --port 8000 --log-level info
+```
+
+Now test auth endpoints:
+
+```powershell
+# Register a new user
+$body  = '{"email":"test@test.com","password":"SecurePass123!","full_name":"Test User"}'
+$headers = @{"Content-Type"="application/json"}
+Invoke-WebRequest -Uri http://localhost:8000/api/auth/register -Method POST -Body $body -Headers $headers
+
+# Login
+$creds = '{"email":"test@test.com","password":"SecurePass123!"}'
+$resp  = Invoke-WebRequest -Uri http://localhost:8000/api/auth/login -Method POST -Body $creds -Headers $headers
+$token = ($resp.Content | ConvertFrom-Json).access_token
+Write-Host "Token: $token"
+
+# Classify a coin with auth
+$headers2 = @{"Authorization"="Bearer $token"}
+$form = @{file=Get-Item "data\processed\1015\CN_type_1015_cn_coin_5943_p.jpg"}
+Invoke-WebRequest -Uri http://localhost:8000/api/classify -Method POST -Form $form -Headers $headers2
+
+# Check history (authenticated)
+Invoke-WebRequest -Uri http://localhost:8000/api/history -Headers $headers2 | 
+    Select-Object -ExpandProperty Content | ConvertFrom-Json | Select-Object total, items
+```
+
+---
+
+### 63.8  Rate Limiting  Verify Per-User Bucket
+
+```powershell
+# This tests that authenticated users get their OWN rate bucket
+# Get a token first (see 63.7)
+
+# Send 11 requests as the same user  11th should get 429 Too Many Requests
+# Rate limit is 10/minute on /api/classify
+for ($i = 1; $i -le 12; $i++) {
+    try {
+        $r = Invoke-WebRequest -Uri http://localhost:8000/api/classify -Method POST -Form $form -Headers $headers2 -ErrorAction Stop
+        Write-Host "Request $i : $($r.StatusCode)"
+    } catch {
+        Write-Host "Request $i : $($_.Exception.Response.StatusCode.value__)"
+    }
+}
+# Expected: requests 1-10 return 200, request 11 returns 429
+```
+
+---
+
+### 63.9  AuditLog Writes  Verify Phase A3
+
+After classifying a coin (with the DB running):
+
+```powershell
+# Check audit_logs table directly
+docker compose exec postgres psql -U deepcoin -d deepcoin -c "
+SELECT action, user_id, resource_type, resource_id, ip_address, created_at 
+FROM audit_logs 
+ORDER BY created_at DESC 
+LIMIT 5;"
+
+# Expected rows after classify:
+# action=coin.classify | user_id=<uuid or NULL> | resource_type=classification
+```
+
+---
+
+### 63.10  Frontend  Development Mode
+
+```powershell
+# Terminal 1  Backend (must be running first)
+& "C:\Users\Administrator\deepcoin\venv\Scripts\python.exe" -m uvicorn src.api.main:app --port 8000
+
+# Terminal 2  Frontend
+cd C:\Users\Administrator\deepcoin\frontend
+npm run dev
+# Navigate to: http://localhost:3000
+```
+
+What to manually verify:
+
+| Feature | How to Test | Expected |
+|---------|------------|----------|
+| Health dot | Top right | Green dot "API: Healthy" |
+| Upload a coin photo | Drag or click | Progress shows CNN  Agent  PDF |
+| TTA toggle | Check "TTA" before Analyse | Mission Control shows 8 passes |
+| Cancel button | Start analysis, click Cancel | State resets, ready for next upload |
+| Confidence display | High conf coin (type 1015) | Green "Identified" with % |
+| TTA Consensus | Medium conf coin | Teal badge, "Consistent Match" |
+| Deep Search | Low conf coin | Purple badge, no raw %, "Best Visual Match" |
+| History page | After analysis | Row appears, sortable newest-first |
+| Filter bar | History  type in search box | Filters by label text |
+| Delete | Trash icon  Confirm | Row removed, audit log entry written |
+| CN links in top-5 | Click  links | Opens corpus-nummorum.eu in new tab |
+| Copy link | Detail page  Copy | URL copied to clipboard |
+| Screenshot warning | Upload a screenshot (not a photo) | Orange banner: "Use a direct photo" |
+
+---
+
+### 63.11  Frontend  Production Build Verification
+
+```powershell
+cd C:\Users\Administrator\deepcoin\frontend
+npm run build
+
+# Expected:
+# Route (App)        Size   First Load JS
+#   /              ...    ...
+#   /history       ...    ...
+#  ƒ /history/[id]  ...    ...
+#  Compiled successfully
+# tsc: 0 errors
+```
+
+If `npm run build` fails, there is a TypeScript or build error that must be fixed before deployment.
+
+---
+
+### 63.12  The Makefile  Shortcuts for Common Tasks
+
+```powershell
+# From the project root with venv active:
+
+make api       # Start FastAPI server on port 8000
+make test      # Run all 46 unit tests
+make lint      # Run flake8 linter
+make fmt       # Run black formatter (in-place)
+make pipeline  # Run 3-route end-to-end test
+make train     # Start CNN training (WARNING: ~103 minutes)
+```
+
+`make test` is the fastest daily sanity check. Run it before every commit.
+
+---
+
+### 63.13  Quick Daily Health Check (30 Seconds)
+
+Run this every morning before starting work:
+
+```powershell
+& "C:\Users\Administrator\deepcoin\venv\Scripts\python.exe" -m pytest tests\unit\ -q
+# Expected: 46 passed in ~1s
+
+& "C:\Users\Administrator\deepcoin\venv\Scripts\python.exe" scripts\predict.py --image data\processed\1015\CN_type_1015_cn_coin_5943_p.jpg 2>$null
+Write-Host "CNN exit: $LASTEXITCODE"
+# Expected: CNN exit: 0
+```
+
+Two commands, 10 seconds, tells you immediately if something broke overnight.
+
+---
+
+## Section 64  Documentation Standard: What Enterprise Grade Really Means
+
+---
+
+### 64.1  What Documentation We Already Have
+
+| Document | Location | Purpose | Status |
+|----------|----------|---------|--------|
+| Engineering Journal | `ENGINEERING_JOURNAL.md` | Complete chronological record  every decision, bug, and lesson |  20,000+ lines |
+| API docs (Swagger) | `http://localhost:8000/docs` | Auto-generated from Pydantic schemas  all endpoints, schemas, responses |  Auto (FastAPI) |
+| API docs (ReDoc) | `http://localhost:8000/redoc` | Alternative API viewer |  Auto (FastAPI) |
+| Code docstrings | Every `.py` file | Explains WHAT/WHY/HOW for every function |  All functions |
+| `.env.example` | `.env.example` | Template with comments for every env variable |  Complete |
+| `README.md` | `README.md` | Project overview, architecture diagram, quick start |  Enterprise grade |
+| `Makefile` | `Makefile` | Developer task shortcuts with comments |  Complete |
+| `pyproject.toml` | `pyproject.toml` | Build config, tool config, dev dependencies |  Complete |
+| Copilot instructions | `.github/copilot-instructions.md` | Persistent AI context  16 sections, 9,000+ words |  Complete |
+
+### 64.2  What Enterprise Documentation At This Level Requires
+
+For a PFE at ESPRIT  YEBNI, "enterprise-grade documentation" means **four layers**:
+
+**Layer 1  Code-Level Documentation (already done )**
+Every function has a docstring with:
+- `WHAT it does`  the one-sentence purpose
+- `WHY it exists`  the engineering reason, not just "it validates the input"
+- `Args:`  every parameter with type and meaning
+- `Returns:`  what comes back and in what format
+- `Raises:`  what exceptions can be thrown and why
+
+Example of the standard:
+```python
+async def write_audit(
+    db: AsyncSession,
+    *,
+    action: str,
+    user_id: str | None = None,
+    ...
+) -> None:
+    """
+    Append a single audit record to the database session.
+
+    WHAT:  Builds an AuditLog ORM instance and calls db.add().
+    WHY:   Every security-relevant action (classify, delete, login, logout)
+           must be traceable to a user + timestamp + IP.  A forensics query
+           on audit_logs reveals "who deleted classification X at 2am".
+    NOTE:  Does NOT call db.commit()  session lifecycle is owned by get_db().
+           Committing here would violate the unit-of-work pattern and either
+           double-commit or drop the caller's own writes.
+
+    Args:
+        db:             SQLAlchemy AsyncSession from the FastAPI get_db() dep.
+        action:         Dot-namespaced event name, e.g. "coin.classify".
+        user_id:        UUID string of the authenticated user, or None for guest.
+        resource_type:  Type of resource acted on, e.g. "classification".
+        resource_id:    ID of the resource acted on.
+        payload:        Optional JSONB dict with event-specific metadata.
+        ip_address:     Client IP from X-Forwarded-For or request.client.host.
+
+    Returns:
+        None.  The row is pending in the session until the caller's request ends.
+
+    Raises:
+        SQLAlchemyError: If the session is invalid. The caller must wrap in
+                         try/except (see classify.py step 8 pattern).
+    """
+```
+
+**Layer 2  Architecture Documentation (already done )**
+The Engineering Journal sections 47-53 deliver this:
+- Section 47: Complete file inventory with every function in every file
+- Section 48: End-to-end data flow diagram
+- Section 49: Technology choices with rationale
+- Section 50: FastAPI backend architecture deep dive
+- Section 51: Frontend architecture deep dive
+- Section 52: How to rebuild from scratch
+
+**Layer 3  Operational Documentation (this section + Section 63 )**
+- How to start every component
+- How to run every test
+- What to do when something breaks
+- How to run the full pipeline
+
+**Layer 4  Academic Deliverable Documentation (pending, Layer 7/thesis writing)**
+The thesis ("rapport de PFE") is a separate document that:
+- Introduces the problem domain (ancient coin classification)
+- Reviews the literature (CNN approaches, RAG systems, multi-agent frameworks)
+- Describes the system architecture with formal diagrams (UML, C4 model)
+- Presents and discusses the results (80.03% TTA accuracy, 3-route pipeline)
+- Concludes with contribution and future work
+
+**This journal IS the technical content of the thesis. The thesis is the formal presentation of this journal.**
+
+---
+
+### 64.3  Documentation We Still Need to Add
+
+There are three gaps:
+
+**Gap 1  `auth_legacy.py` is undocumented**
+`src/api/auth_legacy.py` exists (111 lines) but has no journal section. It was kept as a compatibility shim when migrating from the old API key auth to JWT. A section explaining why it exists, what it does, and when it should be deleted is needed.
+
+**Gap 2  `src/api/logging_config.py` has no section**
+`logging_config.py` (96 lines) was added in P11 (Deep Hardening). Section 40 mentions it briefly but never shows the full file contents with line-by-line explanation.
+
+**Gap 3  The `alembic/` directory has no end-to-end walkthrough**
+Section 57.7-57.10 covers the files conceptually. But there is no step-by-step guide showing how to create a SECOND migration when you need to add a column to an existing table. This will be needed for Layer 6 when we add Redis caching and session tracking.
+
+These three gaps are minor relative to the overall documentation quality. They should be filled in the next session.
+
+---
+
+### 64.4  What "Baby-Level" Means in This Journal
+
+Every section in this journal follows these rules:
+
+1. **Analogies before code**  explain what something IS before showing how it WORKS
+2. **"Why" before "How"**  never show code without first explaining the engineering reason
+3. **Every variable name explained**  `T_max=100` is explained as "the total number of epochs the cosine curve spans, not the number of training epochs" 
+4. **Every error explained**  bugs are not just "fixed", they are traced to their root cause
+5. **Decision alternatives listed**  "Why EfficientNet-B3 and not ResNet-50?" is answered
+
+The standard is: **a final-year CS student who has never worked on computer vision or web APIs should be able to read any section and understand exactly what was built, why it was built that way, and how it connects to the rest of the system.**
+
+---
+
+### 64.5  The Relationship Between This Journal and the Code
+
+```
+ENGINEERING_JOURNAL.md
+        
+          is the narrative version of
+        
+        
+All source files in src/ + scripts/ + tests/ + frontend/
+        
+          are the executable version of
+        
+        
+The thesis / rapport de PFE
+        
+          is the academic presentation of
+        
+        
+The final grade
+```
+
+The journal is not a separate thing from the code. It IS the code, explained line by line. 
+When the examiner asks "why did you choose ChromaDB?", Section 20 has the answer.
+When they ask "how does the rate limiting work?", Section 62 has the answer.
+When they ask "what happens when the CNN cannot classify a coin?", Section 1 (architecture) and Section 22 (investigator agent) have the answer.
+
+No question about this system should require you to think on the spot. Every decision is written down.
+
+---
+
+*Engineering Journal  Sections 63 and 64 added.*
+*Complete testing guide (63) and documentation standard (64).*
+*ToC corrected: entries 23-26 now match actual section headings.*
+*46/46 unit tests passing. HEAD: 1e01110.*
