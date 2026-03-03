@@ -41,12 +41,11 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api._store   import append as history_append
 from src.api.auth     import require_api_key
 from src.api.auth.deps import optional_user as optional_user_dep
 from src.api.db.audit  import client_ip, write_audit
+from src.api.db.models  import Classification, User
 from src.api.db.session import get_db
-from src.api.db.models  import User
 from src.api.limiter  import limiter
 from src.api.schemas  import ClassifyResponse, CnnResult, Top5Item
 
@@ -264,22 +263,32 @@ async def classify(
         processing_time_s    = round(elapsed_s, 2),
     )
 
-    # ── 7. Persist to history ──────────────────────────────────────────────────
-    # P14 — call history_append synchronously (no asyncio.to_thread).
-    # WHY: The SQLite WAL insert takes ~1–2 ms and happens AFTER the 15–60s
-    # pipeline. Wrapping it in to_thread spawns a thread for a sub-millisecond
-    # operation, adding more overhead than it saves. Calling it inline in the
-    # thread that already ran gk.analyze() (via asyncio.to_thread) is correct.
-    # The event loop is already free at this point — pipeline is done.
-    history_record = {
-        **response.model_dump(),
-        "cnn": response.cnn.model_dump(),
-        "image_path": str(save_path),
-    }
+    # ── 7. Persist to history (PostgreSQL) ────────────────────────────────────
+    # WHY async INSERT here:
+    #   The pipeline has finished; the event loop is free. We write directly
+    #   to the classifications table using the async SQLAlchemy session that
+    #   FastAPI already opened for this request. No thread spawning needed.
+    #   user_id is NULL for guest (unauthenticated) requests — allowed by the
+    #   schema. Guests can classify but their records are not accessible via
+    #   /api/history (which requires authentication).
     try:
-        history_append(history_record)
+        cls_row = Classification(
+            id             = record_id,
+            user_id        = current_user.id if current_user else None,
+            label          = cnn.label,
+            confidence     = cnn.confidence,
+            route_taken    = route,
+            image_filename = safe_name,
+            pdf_path       = str(pdf_path) if pdf_path else None,
+            payload        = response.model_dump(),
+        )
+        db.add(cls_row)
+        await db.commit()
+        logger.debug("Persisted classification %s to PostgreSQL (user=%s)",
+                     record_id, current_user.id if current_user else "guest")
     except Exception as hist_exc:
-        logger.error("history_append failed (non-fatal): %s", hist_exc, exc_info=True)
+        await db.rollback()
+        logger.error("classification persist failed (non-fatal): %s", hist_exc, exc_info=True)
 
     # ── 8. Write audit row (PostgreSQL, non-fatal) ────────────────────────────
     # WHY after history_append:

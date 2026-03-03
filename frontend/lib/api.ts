@@ -23,6 +23,7 @@
  */
 
 import axios, { type AxiosError } from "axios";
+import { getSession }              from "next-auth/react";
 
 import type {
   ClassifyResponse,
@@ -63,8 +64,13 @@ const classifyApiClient = axios.create({
   timeout: 600_000,   // 10 minutes — covers battery-throttled Ollama (gemma3:4b can take 5+ min on low power)
 });
 
-// ── Shared request interceptor (inject X-API-Key if configured) ───────────────
+// ── Shared request interceptors ─────────────────────────────────────────────
 
+/**
+ * applyKeyInterceptor — injects the static X-API-Key header if configured.
+ * WHY NEXT_PUBLIC_: Next.js only exposes env vars to the browser when they
+ *   are prefixed NEXT_PUBLIC_. Server-only vars are inaccessible at runtime.
+ */
 function applyKeyInterceptor(client: typeof apiClient) {
   client.interceptors.request.use((config) => {
     const key = process.env.NEXT_PUBLIC_API_KEY;
@@ -73,8 +79,36 @@ function applyKeyInterceptor(client: typeof apiClient) {
   });
 }
 
+/**
+ * applyAuthInterceptor — injects the JWT Bearer token from the NextAuth session.
+ *
+ * WHY async interceptor:
+ *   getSession() is async — it reads the session cookie / JWT from the
+ *   browser. It resolves immediately when the session is cached (no network
+ *   call), so the interceptor adds negligible latency.
+ *
+ * WHY only inject when a token exists:
+ *   Guest users (not logged in) still use the API (anonymous classify).
+ *   If no session, the header is omitted and FastAPI treats the request as
+ *   unauthenticated (rate-limited, no history write to a user account).
+ *
+ * WHY "Bearer" scheme:
+ *   FastAPI's auth.deps.get_current_user reads `Authorization: Bearer <jwt>`.
+ *   The scheme must match exactly — no "Token" or "JWT" prefix.
+ */
+function applyAuthInterceptor(client: typeof apiClient) {
+  client.interceptors.request.use(async (config) => {
+    const session = await getSession();
+    const token   = (session?.user as { access_token?: string })?.access_token;
+    if (token) config.headers["Authorization"] = `Bearer ${token}`;
+    return config;
+  });
+}
+
 applyKeyInterceptor(apiClient);
 applyKeyInterceptor(classifyApiClient);
+applyAuthInterceptor(apiClient);
+applyAuthInterceptor(classifyApiClient);
 
 // ── Normalised error type ─────────────────────────────────────────────────────
 

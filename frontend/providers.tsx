@@ -22,6 +22,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools }               from "@tanstack/react-query-devtools";
 import { useState, type ReactNode }         from "react";
 import { Toaster }                          from "react-hot-toast";
+import { SessionProvider }                  from "next-auth/react";
+
+/**
+ * WHY SessionProvider here:
+ *   useSession() and signOut() (used in UserMenu) are React Context hooks.
+ *   They need a <SessionProvider> ancestor to read the session JWT.
+ *   We add it at the root providers level so every page/component can call
+ *   useSession() without wrapping pages individually.
+ *   The session object is populated by NextAuth's /api/auth/* route.
+ */
 
 interface ProvidersProps {
   children: ReactNode;
@@ -47,6 +57,7 @@ export default function Providers({ children }: ProvidersProps) {
   );
 
   return (
+    <SessionProvider>
     <QueryClientProvider client={queryClient}>
       {children}
 
@@ -70,5 +81,6 @@ export default function Providers({ children }: ProvidersProps) {
       {/* DevTools — only visible in development */}
       <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
+    </SessionProvider>
   );
 }

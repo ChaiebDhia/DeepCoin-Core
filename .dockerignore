@@ -1,0 +1,76 @@
+# .dockerignore — root project (applies to Dockerfile.api)
+# ==========================================================
+# Exclude files from the Docker build context.
+# Smaller build context = faster `docker build` (less data sent to Docker daemon).
+#
+# WHY this matters:
+#   The data/ and models/ directories are several GB.  Without this file,
+#   `docker build .` would upload them all to the daemon just to ignore them.
+#   .dockerignore works like .gitignore — patterns are matched against the
+#   build context path.
+
+# ── Python virtual environment (never copy into image — has wrong paths)
+venv/
+.venv/
+env/
+
+# ── Git history (large, not needed in the image)
+.git/
+.github/
+
+# ── Large data and model files (mounted as volumes at runtime)
+data/
+models/
+
+# ── Python bytecode and caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# ── Test files (not needed to run the API)
+tests/
+
+# ── Notebooks (dev-only)
+notebooks/
+augmentation_test.png
+
+# ── Frontend app (built separately in its own Docker image)
+frontend/
+
+# ── Development logs and temporary files
+*.log
+server.log
+server_err.log
+uvicorn.log
+uvicorn_err.log
+logs/
+
+# ── IDE and OS files
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# ── Secrets (NEVER bake .env into the image)
+.env
+.env.local
+.env.*
+!.env.example
+
+# ── Documentation (not needed at runtime)
+ENGINEERING_JOURNAL.md
+CLAUDE.md
+README.md
+NOTES.md
+"The Project.md"
+
+# ── Reports output directory (runtime-generated, mounted as volume)
+reports/
+
+# ── Scripts (not needed by the running API)
+scripts/

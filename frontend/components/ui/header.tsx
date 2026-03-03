@@ -15,6 +15,7 @@
 import Link           from "next/link";
 import { Coins }      from "lucide-react";
 import { HealthDot }  from "@/components/ui/health-dot";
+import { UserMenu }   from "@/components/auth/UserMenu";
 
 export function Header() {
   return (
@@ -49,6 +50,9 @@ export function Header() {
             History
           </Link>
         </nav>
+
+        {/* Auth: user menu when logged in, Sign In link otherwise */}
+        <UserMenu />
 
         {/* Health indicator */}
         <HealthDot />

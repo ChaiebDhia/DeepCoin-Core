@@ -57,6 +57,15 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // output: "standalone" — produces .next/standalone for Docker deployments.
+  // WHY: The standalone build traces all imports and copies only the code +
+  //   node_modules the app actually uses.  The result is a self-contained
+  //   Node.js server (~40 MB) versus the full source + node_modules (~300 MB).
+  //   Required by frontend/Dockerfile Stage 3 runner (CMD node server.js).
+  // NOTE: In dev (`next dev`) standalone output is ignored — only active on
+  //   `next build`.  Development hot-reload works identically with or without it.
+  output: "standalone",
+
   // Hide the Next.js dev overlay icons (build spinner bottom-right,
   // framework logo bottom-left). They are purely cosmetic in dev mode
   // and add visual clutter to the UI during testing.

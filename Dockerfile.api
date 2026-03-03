@@ -1,0 +1,126 @@
+# Dockerfile.api
+# ================
+# Multi-stage build for the DeepCoin FastAPI service.
+#
+# WHY multi-stage:
+#   Stage 1 (builder) uses full build toolchain to compile C extensions (e.g.
+#   tokenizers, Pillow, psycopg).  Stage 2 (runtime) copies only the finished
+#   venv — no compilers, no headers.  The final image is ~70% smaller.
+#
+# WHY python:3.11-slim (not alpine):
+#   Alpine uses musl libc.  PyTorch, NumPy, and OpenCV expect glibc.  Using
+#   alpine for ML images requires custom wheel builds — not worth it on a PFE.
+#   python:3.11-slim-bookworm is glibc-based and lean (~50 MB base).
+#
+# GPU NOTE:
+#   This image is CPU-only (torch==2.5.0 from requirements.txt is the pip CPU build).
+#   To enable CUDA inference in production, change the base to:
+#     FROM nvidia/cuda:12.4-runtime-ubuntu22.04
+#   and add --runtime=nvidia to the compose service / Docker run command.
+#
+# SECURITY:
+#   - Non-root user (appuser uid 1001) — container compromise cannot write host files
+#   - Read-only volume mounts for models/ and data/ in compose
+#   - No .env file baked in — secrets injected via compose environment
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 1: builder — install all Python dependencies into a virtual env
+# ─────────────────────────────────────────────────────────────────────────────
+FROM python:3.11-slim-bookworm AS builder
+
+# System build deps:
+#   build-essential — gcc/g++ for Python C extensions (psycopg binary, pydantic)
+#   libgl1-mesa-glx — OpenCV's cv2.so links against libGL at compile time
+#   libglib2.0-0    — OpenCV also needs libglib (GLib2)
+#   libpq-dev       — libpq headers needed by asyncpg wheel builder
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        libgl1-mesa-glx \
+        libglib2.0-0 \
+        libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Upgrade pip first (older pip has poor dependency resolver for ML stacks)
+RUN python -m venv /opt/venv \
+ && /opt/venv/bin/pip install --upgrade pip setuptools wheel
+
+# Copy requirements before source so Docker layer-caches the dep install.
+# Only changes to requirements.txt bust this layer (not source code changes).
+COPY requirements.txt .
+
+RUN /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 2: runtime — lean image, no build tools
+# ─────────────────────────────────────────────────────────────────────────────
+FROM python:3.11-slim-bookworm AS runtime
+
+LABEL org.opencontainers.image.title="DeepCoin API" \
+      org.opencontainers.image.description="FastAPI + EfficientNet-B3 + LangGraph pipeline" \
+      org.opencontainers.image.authors="Dhia Chaieb <dhia.chaieb@esprit.tn>"
+
+# Runtime-only system libs (no compilers, no headers)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libgl1-mesa-glx \
+        libglib2.0-0 \
+        libpq5 \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the finished venv from the builder stage
+COPY --from=builder /opt/venv /opt/venv
+
+# Environment:
+#   PATH      — venv binaries first (uvicorn, alembic, python)
+#   PYTHONPATH— so `from src.api.main import app` resolves without install
+#   PYTHONDONTWRITEBYTECODE — no .pyc clutter in the container layer
+#   PYTHONUNBUFFERED       — stdout/stderr flushed immediately (structured logs)
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONPATH="/app" \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Copy application source code.
+# .dockerignore excludes: venv/, data/, models/, .env, __pycache__, *.pth
+COPY src/      ./src/
+COPY alembic/  ./alembic/
+COPY alembic.ini .
+
+# Create directories that will be used at runtime.
+# models/ and data/metadata/ are mounted as volumes from docker-compose.
+# reports/ and /tmp/deepcoin_uploads/ are writable at runtime.
+RUN mkdir -p /app/reports /tmp/deepcoin_uploads
+
+# Non-root user — least-privilege principle.
+# WHY uid 1001: avoids collision with common system UIDs (root=0, nobody=65534).
+RUN groupadd --gid 1001 appgroup \
+ && useradd  --uid 1001 --gid appgroup --no-create-home --shell /bin/false appuser \
+ && chown -R appuser:appgroup /app /tmp/deepcoin_uploads
+
+USER appuser
+
+EXPOSE 8000
+
+# Container health check — mirrors the Compose healthcheck.
+# FastAPI's /api/health returns HTTP 200 when all components are ready.
+# start-period 30s gives slow machines time to load the 80 MB EfficientNet weights.
+HEALTHCHECK --interval=15s --timeout=10s --retries=3 --start-period=30s \
+    CMD curl -sf http://localhost:8000/api/health || exit 1
+
+# Start uvicorn with a single worker.
+# WHY single worker:
+#   The EfficientNet-B3 model is loaded once in the app lifespan and shared
+#   across requests via the global CoinInference singleton.  Multiple uvicorn
+#   workers would each load the model independently — 4 workers × 350 MB = 1.4 GB.
+#   On a PFE server (4–8 GB RAM) a single async worker handles bursts fine.
+#   Scale horizontally (multiple containers) rather than vertically (forked workers).
+CMD ["uvicorn", "src.api.main:app", \
+     "--host", "0.0.0.0", \
+     "--port", "8000", \
+     "--workers", "1", \
+     "--log-level", "info", \
+     "--no-access-log"]

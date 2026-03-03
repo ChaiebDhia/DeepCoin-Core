@@ -1,6 +1,21 @@
 """
 src/api/_store.py
 ==================
+.. deprecated:: 0.5.0
+    This module (SQLite-backed history store) is superseded by the
+    `classifications` and `feedback` PostgreSQL tables in
+    `src/api/db/models.py` (A4 migration, March 2026).
+
+    The routes POST /api/classify, GET /api/history, DELETE /api/history/{id},
+    and POST /api/history/{id}/feedback now write/read directly from PostgreSQL
+    via SQLAlchemy async sessions.
+
+    This module is retained for:
+      - Unit tests that verify the SQLite store in isolation
+      - Any legacy data migration scripts (read old SQLite → write to PostgreSQL)
+
+    DO NOT add new callers to this module.
+
 Classification history store backed by SQLite (stdlib sqlite3).
 
 WHY SQLite OVER the previous JSON FILE store
