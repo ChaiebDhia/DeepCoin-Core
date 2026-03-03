@@ -32,11 +32,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # ── Enum types ── must be created before the columns that use them
-    op.execute("CREATE TYPE user_role AS ENUM ('admin', 'curator', 'analyst')")
-    op.execute("CREATE TYPE user_status AS ENUM ('pending', 'active', 'suspended')")
-
     # ── 1. users ──────────────────────────────────────────────────────────────
+    # NOTE: sa.Enum with a named type creates the PostgreSQL ENUM automatically
+    # via CREATE TYPE ... AS ENUM when passed to op.create_table().
+    # Do NOT call op.execute("CREATE TYPE ...") separately — that creates a
+    # duplicate and raises DuplicateObjectError in asyncpg.
     op.create_table(
         "users",
         sa.Column("id",                 UUID(as_uuid=False), primary_key=True,   server_default=sa.text("gen_random_uuid()")),
