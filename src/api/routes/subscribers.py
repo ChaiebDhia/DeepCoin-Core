@@ -26,8 +26,9 @@ import threading
 from datetime import datetime, timezone
 from pathlib  import Path
 
-from fastapi   import APIRouter
-from pydantic  import BaseModel, field_validator
+from fastapi            import APIRouter, Depends
+from pydantic           import BaseModel, field_validator
+from src.api.auth       import require_api_key
 
 # ── Router ────────────────────────────────────────────────────────────────────
 
@@ -68,12 +69,50 @@ class SubscribeRequest(BaseModel):
         return v
 
 
+class SubscriberRecord(BaseModel):
+    """A single subscriber entry returned by the admin list endpoint."""
+    email:         str
+    subscribed_at: str
+
+
 class SubscribeResponse(BaseModel):
     ok:      bool
     message: str
 
 
 # ── Endpoint ──────────────────────────────────────────────────────────────────
+
+@router.get(
+    "",
+    response_model=list[SubscriberRecord],
+    summary="List all subscribers (admin-only)",
+    description="Returns the full subscriber list. Requires X-API-Key header.",
+    dependencies=[Depends(require_api_key)],
+)
+async def list_subscribers() -> list[SubscriberRecord]:
+    """
+    Return all email subscribers in chronological order.
+
+    WHAT: Reads data/subscribers.json and returns the full list.
+    WHY protected: subscriber emails are PII — only admins should access them.
+    Auth: X-API-Key header (same key as /api/metrics).
+    """
+    with _lock:
+        if not _DATA_FILE.exists():
+            return []
+        try:
+            records = json.loads(_DATA_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return []
+    return [
+        SubscriberRecord(
+            email=r.get("email", ""),
+            subscribed_at=r.get("subscribed_at", ""),
+        )
+        for r in records
+        if r.get("email")
+    ]
+
 
 @router.post("", response_model=SubscribeResponse, status_code=200)
 async def subscribe(req: SubscribeRequest) -> SubscribeResponse:

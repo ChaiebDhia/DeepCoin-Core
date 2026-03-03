@@ -1,35 +1,24 @@
-"use client";
-
 /**
  * components/ui/NavLinks.tsx
  * ==========================
- * Client-side navigation links that are aware of auth status.
+ * Public navigation links rendered in the site header.
  *
- * WHAT: Renders the main nav links in the header. The "Analyse" link
- *       is auth-gated: unauthenticated users are sent to the login page
- *       with a callbackUrl so they land on /analyse after signing in.
+ * WHAT: Static links to public-facing pages visible to ALL visitors —
+ *       logged-in or anonymous, no auth check required.
  *
- * WHY a separate client component (not inline in header.tsx):
- *   header.tsx is a Server Component — it contains no React hooks.
- *   useSession() is a React hook that requires "use client" context.
- *   Extracting just the nav into a client component keeps the rest of
- *   the header server-rendered and avoids shipping unnecessary JS.
+ * WHY no auth logic here:
+ *   Auth-gated actions (Analyse, History) belong in the UserMenu dropdown
+ *   so they are only visible to authenticated users. Keeping this component
+ *   pure-public makes the nav straightforward for new visitors and removes
+ *   the need for "use client" + session hydration overhead in the header.
  *
- * WHY redirect to login instead of /analyse directly:
- *   /analyse runs the full classification pipeline and hits the FastAPI
- *   backend. Authentication ensures requests are associated with a user,
- *   results are saved to history, and the classify endpoint can apply
- *   per-user rate limiting. The login redirect is UX, not a security
- *   gate — but it sets the right expectation for new visitors.
- *
- * BEHAVIOUR during loading:
- *   While useSession() hydrates, "Analyse" defaults to the login redirect.
- *   This is the safest fallback — an unauthenticated click goes to login,
- *   never to /analyse unexpectedly.
+ * WHY Server Component (no "use client"):
+ *   All links are static. There are no React hooks or browser APIs.
+ *   Shipping this as a Server Component means zero JS for the nav links —
+ *   they render on the server and arrive as plain HTML.
  */
 
-import { useSession } from "next-auth/react";
-import Link           from "next/link";
+import Link from "next/link";
 
 /* ── Shared link style ────────────────────────────────────────────────── */
 
@@ -39,20 +28,12 @@ const linkCls =
 /* ── Component ────────────────────────────────────────────────────────── */
 
 export function NavLinks() {
-  const { data: session } = useSession();
-
-  /**
-   * If the user is authenticated, "Analyse" goes straight to /analyse.
-   * If not (or while loading), it goes to the login page with a callbackUrl
-   * so NextAuth redirects them back to /analyse after a successful sign-in.
-   */
-  const analyseHref = session ? "/analyse" : "/login?callbackUrl=/analyse";
-
   return (
     <nav className="flex items-center gap-1">
-      <Link href="/#features"  className={linkCls}>Features</Link>
-      <Link href={analyseHref} className={linkCls}>Analyse</Link>
-      <Link href="/history"    className={linkCls}>History</Link>
+      <Link href="/#features" className={linkCls}>Features</Link>
+      <Link href="/explore"   className={linkCls}>Explore</Link>
+      <Link href="/about"     className={linkCls}>About</Link>
+      <Link href="/docs"      className={linkCls}>Docs</Link>
     </nav>
   );
 }

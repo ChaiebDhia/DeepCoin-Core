@@ -26,7 +26,7 @@ import { useState, useRef, useEffect } from "react";
 import { useSession, signOut }         from "next-auth/react";
 import Link                            from "next/link";
 import { motion, AnimatePresence }     from "framer-motion";
-import { LogOut, ChevronDown, ShieldCheck, User2 } from "lucide-react";
+import { LogOut, ChevronDown, ShieldCheck, Coins, History } from "lucide-react";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -137,8 +137,11 @@ export function UserMenu() {
           <span className="text-sm font-medium truncate max-w-[120px]" style={{ color: "var(--text-primary)" }}>
             {label}
           </span>
-          <span className="text-xs px-1.5 py-0 rounded-full"
-                style={{ background: ROLE_COLOURS[role], color: ROLE_TEXT[role] }}>
+          <span
+            className="text-xs px-1.5 py-0 rounded-full cursor-default"
+            style={{ background: ROLE_COLOURS[role], color: ROLE_TEXT[role] }}
+            title={role === "analyst" ? "All new accounts start as Analyst. Contact an admin to upgrade." : undefined}
+          >
             {ROLE_LABELS[role] ?? role}
           </span>
         </div>
@@ -185,12 +188,21 @@ export function UserMenu() {
                 </Link>
               )}
               <Link
+                href="/analyse"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-[var(--surface-2)] transition-colors"
+                style={{ color: "var(--brand-gold)" }}
+              >
+                <Coins size={15} />
+                Analyse a Coin
+              </Link>
+              <Link
                 href="/history"
                 onClick={() => setOpen(false)}
                 className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-[var(--surface-2)] transition-colors"
                 style={{ color: "var(--text-secondary)" }}
               >
-                <User2 size={15} />
+                <History size={15} />
                 My History
               </Link>
             </div>

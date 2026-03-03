@@ -28,7 +28,7 @@ import { redirect }                    from "next/navigation";
 import {
   Activity, Database, Cpu, FileText, Github, ExternalLink,
   Users, Clock, CheckCircle, AlertTriangle, XCircle, BarChart3,
-  BookOpen, Shield,
+  BookOpen, Shield, Mail, Download, UserCheck,
 } from "lucide-react";
 import { getHealth, getHistory }       from "@/lib/api";
 import type { HistorySummary }         from "@/types/api";
@@ -41,6 +41,24 @@ type SessionUser = {
   role?:         string;
   access_token?: string;
 };
+
+type Subscriber = {
+  email:         string;
+  subscribed_at: string;
+};
+
+// ── CSV export helper ─────────────────────────────────────────────────────────
+
+function downloadCSV(data: Subscriber[]) {
+  const rows = [["Email", "Subscribed At"], ...data.map(r => [r.email, r.subscribed_at])];
+  const csv  = rows.map(r => r.map(c => `"${c}"`).join(",")).join("\n");
+  const url  = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const a    = document.createElement("a");
+  a.href = url;
+  a.download = `subscribers_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 const ROLE_COLORS: Record<string, string> = {
   admin:    "#d4a853",
@@ -100,6 +118,15 @@ export default function AdminPage() {
   const { data: historyData } = useQuery({
     queryKey: ["history", 1, 5],
     queryFn:  () => getHistory(0, 5),
+  });
+
+  const isPrivileged = (user?.role === "admin" || user?.role === "curator");
+
+  const { data: subscribers = [] } = useQuery<Subscriber[]>({
+    queryKey: ["admin", "subscribers"],
+    queryFn:  () => fetch("/api/admin/subscribers").then(r => r.ok ? r.json() : []),
+    enabled:  isPrivileged,
+    staleTime: 60_000,
   });
 
   if (sessionStatus === "loading") {
@@ -261,6 +288,82 @@ export default function AdminPage() {
           <p className="px-6 py-4 text-xs" style={{ color: "var(--text-muted)" }}>No analyses yet.</p>
         )}
       </motion.div>
+
+      {/* Subscriber management — admin / curator only */}
+      {isPrivileged && (
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.23 }}
+          className="rounded-2xl border"
+          style={{ borderColor: "var(--border)", backgroundColor: "var(--surface-1)" }}
+        >
+          <div
+            className="flex items-center gap-2 px-6 py-4 border-b"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <Mail size={15} style={{ color: "#3b82f6" }} />
+            <h2 className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>
+              Subscribers
+            </h2>
+            <span
+              className="ml-1 text-[10px] font-black px-2 py-0.5 rounded-full tabular-nums"
+              style={{ backgroundColor: "#3b82f620", color: "#3b82f6" }}
+            >
+              {subscribers.length}
+            </span>
+            {subscribers.length > 0 && (
+              <button
+                onClick={() => downloadCSV(subscribers)}
+                className="ml-auto flex items-center gap-1.5 text-xs px-3 py-1 rounded-lg hover:bg-[var(--surface-2)] transition-colors"
+                style={{ color: "var(--text-secondary)", border: "1px solid var(--border)" }}
+              >
+                <Download size={12} />
+                Export CSV
+              </button>
+            )}
+          </div>
+          {subscribers.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                    <th className="px-6 py-3 text-left font-medium" style={{ color: "var(--text-muted)" }}>
+                      Email
+                    </th>
+                    <th className="px-6 py-3 text-right font-medium" style={{ color: "var(--text-muted)" }}>
+                      Subscribed
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {subscribers.map((s, i) => (
+                    <tr
+                      key={s.email}
+                      className="border-b last:border-b-0 hover:bg-[var(--surface-2)] transition-colors"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      <td className="px-6 py-3 font-mono" style={{ color: "var(--text-secondary)" }}>
+                        {s.email}
+                      </td>
+                      <td className="px-6 py-3 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>
+                        {new Date(s.subscribed_at).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="px-6 py-8 text-center">
+              <UserCheck size={20} className="mx-auto mb-2" style={{ color: "var(--text-muted)" }} />
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                No subscribers yet. The waitlist will appear here once users sign up.
+              </p>
+            </div>
+          )}
+        </motion.div>
+      )}
 
       {/* Quick links */}
       <motion.div
