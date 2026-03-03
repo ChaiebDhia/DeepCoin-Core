@@ -20,7 +20,7 @@ import Link                                         from "next/link";
 import { useState, useEffect, FormEvent }            from "react";
 import { AnimatePresence, motion }                   from "framer-motion";
 import CountUp                                       from "react-countup";
-import { Download, Clock, Cpu, BookOpen, Shield, Search, ExternalLink, ThumbsDown, CheckCircle, X } from "lucide-react";
+import { Download, Clock, Cpu, BookOpen, Shield, Search, ExternalLink, ThumbsDown, CheckCircle, X, Sparkles } from "lucide-react";
 
 import type { ClassifyResponse, Top5Item }           from "@/types/api";
 import {
@@ -605,6 +605,29 @@ export function AnalysisPanel({ result, showLink = false }: AnalysisPanelProps) 
 
       {/* ── CNN card ── */}
       <CnnSection cnn={result.cnn} />
+
+      {/* ── Continue Research in AI Chat (low-confidence only) ─────────────── */}
+      {result.cnn.confidence < DISPLAY_CONF_THRESHOLD
+        && !(result.cnn.vote_fraction != null && result.cnn.vote_fraction >= TTA_VOTE_THRESHOLD)
+        && (
+          <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
+            <Link
+              href={`/chat?q=${encodeURIComponent(`CN ${result.cnn.label} ancient coin numismatics`.trim())}`}
+              className="group flex items-center justify-between rounded-xl px-4 py-3.5 border transition-all hover:border-purple-500/50"
+              style={{ background: "linear-gradient(135deg, rgba(139,92,246,0.10) 0%, rgba(99,102,241,0.05) 100%)", borderColor: "rgba(139,92,246,0.25)" }}
+            >
+              <div>
+                <p className="text-xs font-bold text-purple-300 group-hover:text-purple-200 transition-colors">
+                  🔍 Continue research in DeepCoin AI
+                </p>
+                <p className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
+                  Ask follow-up questions about CN {result.cnn.label} · context pre-loaded
+                </p>
+              </div>
+              <Sparkles size={15} className="shrink-0 ml-3 text-purple-400 opacity-60 group-hover:opacity-100 transition-all" />
+            </Link>
+          </motion.div>
+        )}
 
       {/* ── Agent-specific card ── */}
       {result.route_taken === "historian"    && <HistorianSection    result={result} />}

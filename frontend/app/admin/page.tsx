@@ -165,6 +165,50 @@ export default function AdminPage() {
     );
   }
 
+  // Show a clear access-restriction guide for authenticated users without admin/curator role
+  if (sessionStatus === "authenticated" && !isPrivileged) {
+    const userEmail = user?.email ?? "your@email.com";
+    return (
+      <div className="py-16 max-w-2xl mx-auto flex flex-col items-center gap-8">
+        <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
+             style={{ background: "rgba(239,68,68,0.10)", border: "1px solid rgba(239,68,68,0.30)" }}>
+          <Shield size={28} style={{ color: "#f87171" }} />
+        </div>
+        <div className="text-center">
+          <h2 className="text-2xl font-black" style={{ color: "var(--text-primary)" }}>Access Restricted</h2>
+          <p className="text-sm mt-2" style={{ color: "var(--text-secondary)" }}>
+            The Admin Dashboard requires the <strong>admin</strong> or <strong>curator</strong> role.
+          </p>
+          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
+            Your current role: <span className="font-bold" style={{ color: "#f59e0b" }}>{user?.role ?? "analyst"}</span>
+          </p>
+        </div>
+        <div className="w-full rounded-xl p-6 space-y-4"
+             style={{ background: "var(--surface-1)", border: "1px solid var(--border)" }}>
+          <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+            How to promote your account to admin:
+          </p>
+          <ol className="text-sm space-y-2 list-decimal list-inside" style={{ color: "var(--text-secondary)" }}>
+            <li>Open a terminal on the DeepCoin server</li>
+            <li>Connect to the PostgreSQL database</li>
+            <li>Run the SQL command below</li>
+            <li>Sign out and sign back in — your role will update</li>
+          </ol>
+          <div className="rounded-lg p-4 font-mono text-xs overflow-x-auto"
+               style={{ background: "rgba(0,0,0,0.35)", border: "1px solid rgba(255,255,255,0.06)", color: "#86efac" }}>
+            {`-- Connect: psql -U postgres -d deepcoin`}<br />
+            {`UPDATE users SET role='admin' WHERE email='${userEmail}';`}<br />
+            {`-- Verify:`}<br />
+            {`SELECT email, role FROM users WHERE email='${userEmail}';`}
+          </div>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            Available roles: <strong>analyst</strong> (default) · <strong>curator</strong> (can label data) · <strong>admin</strong> (full access)
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="py-8 max-w-5xl space-y-8">
 

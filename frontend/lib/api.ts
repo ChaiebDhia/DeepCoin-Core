@@ -388,8 +388,10 @@ export async function getAdminAnalyses(
  * @param nSources  Number of KB chunks to retrieve (default 5)
  */
 export async function chatQuery(query: string, nSources = 5): Promise<ChatResponse> {
+  // Uses classifyApiClient (direct to FastAPI, 180 s timeout) — same reason as
+  // classifyCoin: the LLM call can take 8–20 s; the Next.js proxy would time out.
   try {
-    const { data } = await apiClient.post<ChatResponse>("/chat", {
+    const { data } = await classifyApiClient.post<ChatResponse>("/chat", {
       query,
       n_sources: nSources,
     });
