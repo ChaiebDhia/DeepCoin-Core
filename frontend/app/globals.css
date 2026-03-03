@@ -112,3 +112,102 @@ body {
 
 .animate-particle   { animation: particle-flow 1.4s linear infinite; }
 .animate-cursor     { animation: typewriter-blink 1s step-end infinite; }
+
+/* ── Homepage futuristic animations ─────────────────────────────────────── */
+
+/**
+ * float: gentle vertical bob + slight rotation — used on decorative coin circles
+ * in the Hero section background. Staggered delays create depth illusion.
+ */
+@keyframes float {
+  0%, 100% { transform: translateY(0px)   rotate(0deg); }
+  50%       { transform: translateY(-14px) rotate(3deg); }
+}
+
+/**
+ * glow-pulse: pulsating outer glow — used on feature card icons.
+ * Low opacity keeps it subtle; not distracting during reading.
+ */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 18px rgba(212, 168, 83, 0.08); }
+  50%       { box-shadow: 0 0 38px rgba(212, 168, 83, 0.22); }
+}
+
+/**
+ * shimmer: gradient sweep — applied to the hero headline text.
+ * Runs on background-position so no layout reflow occurs.
+ * WHY linear: the sweep should feel mechanical / scanning, not ease-in.
+ */
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+/**
+ * border-rotate: rotating conic-gradient border — used on the email capture
+ * form container to create an "active scan" effect.
+ * Implemented as a pseudo-element so the inner content layout is unaffected.
+ */
+@keyframes border-rotate {
+  from { --border-angle: 0deg; }
+  to   { --border-angle: 360deg; }
+}
+
+/**
+ * scan-beam: a glowing horizontal line that sweeps top-to-bottom.
+ * Used in the CoinScanVisual component in the hero right panel.
+ */
+@keyframes scan-beam {
+  0%   { top: 0%;    opacity: 0; }
+  5%   { opacity: 0.9; }
+  95%  { opacity: 0.9; }
+  100% { top: 100%;  opacity: 0; }
+}
+
+/**
+ * orbit-ring: a dot orbiting a central element.
+ * Demonstrates the "satellite data" aesthetic common in deep-tech products.
+ */
+@keyframes orbit-ring {
+  from { transform: rotate(0deg)   translateX(52px) rotate(0deg); }
+  to   { transform: rotate(360deg) translateX(52px) rotate(-360deg); }
+}
+
+/* ── Utility classes ─────────────────────────────────────────────────────── */
+
+.animate-float {
+  animation: float 7s ease-in-out infinite;
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+
+/**
+ * animate-shimmer-text:
+ *   Uses background-clip:text so the gradient appears inside the glyphs.
+ *   Works only on browsers that support -webkit-background-clip:text
+ *   (all modern browsers; graceful fallback = var(--text-primary)).
+ */
+.animate-shimmer-text {
+  background: linear-gradient(
+    105deg,
+    var(--text-primary) 0%,
+    var(--brand-gold)   35%,
+    var(--brand-light)  55%,
+    var(--text-primary) 80%
+  );
+  background-size: 250% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 4.5s linear infinite;
+}
+
+.animate-scan-beam {
+  animation: scan-beam 3.2s ease-in-out infinite;
+}
+
+.animate-orbit {
+  animation: orbit-ring 9s linear infinite;
+}

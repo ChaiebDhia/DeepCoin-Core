@@ -98,9 +98,18 @@ function applyKeyInterceptor(client: typeof apiClient) {
  */
 function applyAuthInterceptor(client: typeof apiClient) {
   client.interceptors.request.use(async (config) => {
-    const session = await getSession();
-    const token   = (session?.user as { access_token?: string })?.access_token;
-    if (token) config.headers["Authorization"] = `Bearer ${token}`;
+    // SSR guard — getSession() requires window (browser-only).
+    // During server-side rendering or before hydration the call would throw
+    // ClientFetchError. Skip silently; the request is sent as unauthenticated.
+    if (typeof window === "undefined") return config;
+    try {
+      const session = await getSession();
+      const token   = (session?.user as { access_token?: string })?.access_token;
+      if (token) config.headers["Authorization"] = `Bearer ${token}`;
+    } catch {
+      // Silently ignore — NextAuth not yet ready or session endpoint unreachable.
+      // Request proceeds without Authorization header (treated as guest by FastAPI).
+    }
     return config;
   });
 }

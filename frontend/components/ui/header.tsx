@@ -38,7 +38,13 @@ export function Header() {
         {/* Nav */}
         <nav className="flex items-center gap-1">
           <Link
-            href="/"
+            href="/#features"
+            className="px-3 py-1.5 rounded-md text-sm text-[var(--text-secondary)] hover:text-white hover:bg-[var(--surface-2)] transition-colors"
+          >
+            Features
+          </Link>
+          <Link
+            href="/#analyse"
             className="px-3 py-1.5 rounded-md text-sm text-[var(--text-secondary)] hover:text-white hover:bg-[var(--surface-2)] transition-colors"
           >
             Analyse

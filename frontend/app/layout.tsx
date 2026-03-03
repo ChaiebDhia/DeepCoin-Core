@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Providers    from "@/providers";
 import { Header }  from "@/components/ui/header";
+import { Footer }  from "@/components/ui/footer";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,15 +32,10 @@ export default function RootLayout({
       >
         <Providers>
           <Header />
-          <main className="flex-1 mx-auto w-full max-w-6xl px-5 py-8">
+          <main className="flex-1 mx-auto w-full max-w-6xl px-5">
             {children}
           </main>
-          <footer
-            className="border-t border-[var(--border)] py-4 text-center text-xs"
-            style={{ color: "var(--text-muted)" }}
-          >
-            DeepCoin · ESPRIT × YEBNI · Dhia Chaieb · 2026
-          </footer>
+          <Footer />
         </Providers>
       </body>
     </html>
