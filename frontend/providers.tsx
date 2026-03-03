@@ -23,6 +23,7 @@ import { ReactQueryDevtools }               from "@tanstack/react-query-devtools
 import { useState, type ReactNode }         from "react";
 import { Toaster }                          from "react-hot-toast";
 import { SessionProvider }                  from "next-auth/react";
+import { SessionSync }                      from "@/components/auth/SessionSync";
 
 /**
  * WHY SessionProvider here:
@@ -58,6 +59,11 @@ export default function Providers({ children }: ProvidersProps) {
 
   return (
     <SessionProvider>
+      {/* Keeps the module-level auth token cache in lib/api.ts in sync.
+          This eliminates Console ClientFetchError: getSession() was called
+          in every Axios interceptor; now the token is read synchronously
+          from a cache that SessionSync updates when the session changes. */}
+      <SessionSync />
     <QueryClientProvider client={queryClient}>
       {children}
 

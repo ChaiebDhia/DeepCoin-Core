@@ -44,7 +44,7 @@ export function Header() {
             Features
           </Link>
           <Link
-            href="/#analyse"
+            href="/analyse"
             className="px-3 py-1.5 rounded-md text-sm text-[var(--text-secondary)] hover:text-white hover:bg-[var(--surface-2)] transition-colors"
           >
             Analyse

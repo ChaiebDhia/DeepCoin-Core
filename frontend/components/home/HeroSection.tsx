@@ -157,7 +157,7 @@ export function HeroSection() {
           className="flex flex-wrap items-center justify-center gap-4 mb-12"
         >
           <Link
-            href="#analyse"
+            href="/analyse"
             className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-bold text-sm transition-all duration-200 hover:scale-105 hover:brightness-110 active:scale-100"
             style={{ backgroundColor: "var(--brand-gold)", color: "#0a1628" }}
           >

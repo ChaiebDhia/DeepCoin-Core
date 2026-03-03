@@ -7,7 +7,7 @@
 **Period**: PFE (Final Year Engineering Internship), Feb–July 2026  
 **GitHub**: https://github.com/ChaiebDhia/DeepCoin-Core  
 **Author**: Dhia Chaïeb  
-**Status as of**: March 3, 2026 — Sections 65–67 added: Docker WSL corruption fix (wsl --unregister docker-desktop), PostgreSQL container launch via docker-compose, Alembic DuplicateObjectError migration bug + fix, bcrypt 5.0.0 / passlib incompatibility bug + fix (pin bcrypt==4.0.1), full A2/A3 live demo (register → email-verify bypass → login → JWT → /auth/me → audit_log query). Two new commits pushed: a89115b (migration fix) + bd1826a (bcrypt pin). D:\\ubuntu_backup.tar deleted (19.67 GB recovered). HEAD: bd1826a. 46/46 unit tests passing. Table of Contents expanded to 67 sections.  
+**Status as of**: March 3, 2026 — Sections 65–71 added. A4: classify.py + history.py migrated from SQLite `_store.py` to PostgreSQL Classification/Feedback ORM (user-scoped history, ownership checks, role-based visibility). A5: NextAuth.js v5 installed — Credentials provider calls FastAPI `/auth/login`, JWT session strategy, `auth.config.ts` Edge-compatible, middleware protects /history + /admin. A6: Login/Register pages + `UserMenu` component (initials avatar, role badge, dropdown) wired into Header; `SessionProvider` added to providers; `applyAuthInterceptor` injects `Authorization: Bearer` on every axios request. Layer 6: `Dockerfile.api` (multi-stage python:3.11-slim, non-root appuser), `frontend/Dockerfile` (multi-stage node:20-alpine, standalone output), `nginx/nginx.conf` (routing /api/auth/*→web, /api/*→fastapi, /*→web), `.dockerignore` files, `output: "standalone"` in next.config.ts, `docker-compose.yml` finalized. HEAD: b09d88e. 48/48 unit tests passing. 0 TypeScript errors.  
 
 ---
 
@@ -81,6 +81,10 @@
 65. [Section 65 — Docker WSL Corruption Fix + PostgreSQL Container Launch](#section-65--docker-wsl-corruption-fix--postgresql-container-launch-march-3-2026)
 66. [Section 66 — Alembic Migration Bug: DuplicateObjectError for ENUM Types](#section-66--alembic-migration-bug-duplicateobjecterror-for-enum-types-march-3-2026)
 67. [Section 67 — bcrypt 5.0.0 Incompatibility + Full A2/A3 Live Demo](#section-67--bcrypt-500-incompatibility--full-a2a3-live-demo-march-3-2026)
+68. [Section 68 — A4: Migrate History Routes to PostgreSQL ORM](#section-68--a4-migrate-history-routes-to-postgresql-orm-march-3-2026)
+69. [Section 69 — A5: NextAuth.js v5 — Credentials Provider + JWT Sessions](#section-69--a5-nextauthjs-v5--credentials-provider--jwt-sessions-march-3-2026)
+70. [Section 70 — A6: Frontend Auth UI — Login, Register, UserMenu, SessionProvider](#section-70--a6-frontend-auth-ui--login-register-usermenu-sessionprovider-march-3-2026)
+71. [Section 71 — Layer 6: Docker Infrastructure — Dockerfiles, Nginx, Compose](#section-71--layer-6-docker-infrastructure--dockerfiles-nginx-compose-march-3-2026)
 
 ---
 
@@ -22268,3 +22272,866 @@ Layer 6 will:
 *Two commits pushed: a89115b (migration) + bd1826a (bcrypt pin).*
 *D:\\ubuntu_backup.tar deleted — 87.5 GB free on D:.*
 *HEAD: bd1826a. 46/46 unit tests passing.*
+
+---
+
+## Section 68 — A4: Migrate History Routes to PostgreSQL ORM (March 3, 2026)
+
+### 68.1  Why This Migration Was Needed
+
+Through A1–A3, we built a full PostgreSQL database layer with users, RBAC, JWT auth, audit logs, and a `classifications` table. But at this point, the two routes that actually write and read history — `classify.py` and `history.py` — were still using the old SQLite `_store.py` module. That was a coherence gap:
+
+```
+Users table            — PostgreSQL ✅
+Classifications table  — PostgreSQL, defined in models.py ✅
+classify route         — writes to SQLite _store.py ❌  (should write to Classifications)
+history route          — reads from SQLite _store.py  ❌  (should read from Classifications)
+feedback               — stored as embedded JSON in _store.py ❌ (should be Feedback ORM row)
+```
+
+This section closes that gap completely.
+
+---
+
+### 68.2  What Changed in `classify.py`
+
+**Before A4:**
+```python
+from src.api._store import append as history_append
+# ...
+history_append(history_record)   # writes to SQLite JSON file
+```
+
+**After A4:**
+```python
+from src.api.db.models import Classification
+
+cls_row = Classification(
+    id             = record_id,
+    user_id        = current_user.id if current_user else None,
+    label          = cnn.label,
+    confidence     = cnn.confidence,
+    route_taken    = route,
+    image_filename = safe_name,
+    pdf_path       = str(pdf_path) if pdf_path else None,
+    payload        = response.model_dump(),   # full ClassifyResponse as JSONB
+)
+db.add(cls_row)
+await db.commit()
+```
+
+**Key design decisions:**
+
+**`user_id = current_user.id if current_user else None`**: Guest users (unauthenticated) can still classify. Their record is written with `user_id=NULL`. This is intentional — the system is a research/museum tool; blocking guests from using it reduces its value. The trade-off is that guests have no history view (history requires auth).
+
+**`payload = response.model_dump()`**: The entire `ClassifyResponse` Pydantic model is stored as PostgreSQL JSONB. This is a design pattern called "snapshot storage" — the full structured response is preserved at the moment of classification, even if the schema evolves later. The history page reconstructs the original result from this snapshot without reprocessing.
+
+**The `record_id` UUID** is generated before the pipeline runs (at the top of the `/api/classify` handler) and used for both the response and the DB insert. This ensures the ID in the response matches the ID stored in the DB.
+
+---
+
+### 68.3  What Changed in `history.py`
+
+The file was completely rewritten (from 130 lines to 242 lines). Every route now uses SQLAlchemy async queries instead of `_store.py`.
+
+**New helper functions:**
+
+`_is_privileged(user: User) -> bool`
+```python
+def _is_privileged(user: User) -> bool:
+    """Returns True if the user is admin or curator — can see all classifications."""
+    return user.role in (UserRole.admin, UserRole.curator)
+```
+
+`_row_to_summary(row: Classification) -> HistorySummary`
+Converts a SQLAlchemy ORM row to the compact summary format used in the paginated list endpoint.
+
+`_row_to_response(row: Classification) -> ClassifyResponse`
+Converts an ORM row to the full `ClassifyResponse` by loading from `row.payload` (the JSONB snapshot). Returning a history item is as fast as a single DB row read — no pipeline re-execution.
+
+**Updated endpoints:**
+
+| Endpoint | Before | After |
+|---|---|---|
+| `GET /api/history` | reads all from `_store.load_all()` (in-memory list) | `SELECT ... WHERE user_id=? ORDER BY timestamp DESC LIMIT ? OFFSET ?` |
+| `GET /api/history/{id}` | `_store.load_by_id(id)` (no auth check) | SQL lookup + ownership check (404 if not owned and not admin/curator) |
+| `DELETE /api/history/{id}` | `_store.delete_by_id(id)` | `await db.delete(row); await db.commit()` + ownership check |
+| `POST /api/history/{id}/feedback` | mutates embedded JSON in `_store.py` | `db.add(Feedback(...)); await db.commit()` — writes to `feedback` table |
+
+**Role-based visibility:**
+- `admin` and `curator`: see ALL classifications across all users
+- `analyst`: sees only their own (`WHERE user_id = current_user.id`)
+- Unauthenticated: `401 Unauthorized` — all history routes require auth
+
+**Ownership check — 404 not 403:**
+When an analyst requests a record owned by another user, the endpoint returns `404 Not Found` instead of `403 Forbidden`. This is a deliberate security choice: returning 403 would confirm that the record exists (and is owned by someone else), leaking information. Returning 404 reveals nothing.
+
+---
+
+### 68.4  `_store.py` Deprecation Notice
+
+`_store.py` is retained, not deleted. Deprecation notice added to its module docstring:
+
+```python
+"""
+.. deprecated:: 0.5.0
+   This module is superseded by the Classification / Feedback ORM tables
+   (see src/api/db/models.py).  The SQLite store was the Phase 1–4
+   persistence layer and is retained ONLY for:
+
+     1. Unit tests (tests/unit/test_store.py) — these test the module
+        directly and remain valid since the module still works.
+     2. Migration scripts — if old SQLite data needs to be ported to
+        PostgreSQL, a build_from_store.py script can read from here.
+
+   DO NOT add new callers.  All production writes and reads go through
+   the SQLAlchemy async session.
+"""
+```
+
+The 10 unit tests in `test_store.py` continue to pass unchanged — 48/48 total.
+
+---
+
+## Section 69 — A5: NextAuth.js v5 — Credentials Provider + JWT Sessions (March 3, 2026)
+
+### 69.1  What NextAuth.js Is and Why We Need It
+
+The FastAPI backend issues JWTs. Without a session management library, the Next.js frontend would need to manually:
+1. Read the token from `localStorage`
+2. Parse the JWT payload
+3. Handle token expiry
+4. Redirect to `/login` when 401 is received
+
+That is ~300 lines of boilerplate spread across the entire frontend. NextAuth.js replaces all of it with:
+- A single `useSession()` hook: `{ data: session, status: "loading" | "authenticated" | "unauthenticated" }`
+- Route protection via a single `middleware.ts` file
+- An HTTP-only cookie storing the NextAuth JWT (cross-tab session sharing, no XSS risk)
+
+**Why NextAuth v5 ("beta"), not v4?**
+NextAuth v5 is the App Router-native version. v4 uses `pages/api/auth/[...nextauth].ts` patterns that don't work cleanly with Next.js 15 App Router. v5 introduces `auth.config.ts` (Edge-compatible config) and `auth.ts` (Node.js-only features), aligning with the Next.js 15 Server Action patterns.
+
+---
+
+### 69.2  Installation
+
+```powershell
+npm install next-auth@beta --legacy-peer-deps
+# Result: next-auth@5.0.0-beta.30
+```
+
+`--legacy-peer-deps` is required because some dependencies declare peer requirements for older React versions. It instructs npm to use its v6-style resolver (ignore peer dep conflicts) rather than failing the install.
+
+---
+
+### 69.3  File: `frontend/auth.config.ts` — The Credentials Provider (Edge-compatible)
+
+This file runs in both Node.js and the Edge Runtime (middleware). That means it cannot use Node.js-only APIs like `bcrypt` or database connections.
+
+```typescript
+const FASTAPI_URL = process.env.AUTH_FASTAPI_URL ?? "http://127.0.0.1:8000";
+
+export const authConfig: NextAuthConfig = {
+  session: { strategy: "jwt", maxAge: 3600 },        // 1-hour session lifetime
+  pages:   { signIn: "/login", signOut: "/", error: "/login" },
+
+  providers: [
+    Credentials({
+      async authorize(credentials) {
+        try {
+          const res = await fetch(`${FASTAPI_URL}/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: credentials.email, password: credentials.password }),
+          });
+          if (!res.ok) return null;
+          const data = await res.json();
+          return {
+            id:           data.user_id,
+            email:        data.email,
+            name:         data.display_name,
+            role:         data.role,
+            display_name: data.display_name,
+            access_token: data.access_token,
+          };
+        } catch { return null; }
+      },
+    }),
+  ],
+
+  callbacks: {
+    jwt({ token, user }) {
+      if (user) {
+        token.id           = user.id            as string;
+        token.role         = (user as { role?: string }).role          ?? "analyst";
+        token.display_name = (user as { display_name?: string }).display_name ?? "";
+        token.access_token = (user as { access_token?: string }).access_token ?? "";
+      }
+      return token;
+    },
+    session({ session, token }) {
+      session.user.id           = token.id           as string;
+      (session.user as { role?: string }).role        = token.role         as string;
+      (session.user as { display_name?: string }).display_name = token.display_name as string;
+      (session.user as { access_token?: string }).access_token = token.access_token as string;
+      return session;
+    },
+  },
+};
+```
+
+**WHY `strategy: "jwt"` not `"database"`?**
+Database strategy stores sessions in a NextAuth-specific `sessions` table — requires a NextAuth DB adapter. Our schema is custom (not NextAuth's schema). JWT strategy stores the session in a signed HTTP-only cookie — no extra DB table, no extra queries per request.
+
+**WHY `maxAge: 3600`?**
+This matches FastAPI's `JWT_EXPIRE_MINUTES=60`. If the NextAuth session lasted longer than the FastAPI token, the user would appear "logged in" in the UI while every API call returned 401. Expiry matching avoids that confusing state.
+
+**The two-token architecture:**
+```
+FastAPI issues:
+  access_token    (60 min, short-lived)     — sent in Authorization header
+  refresh_token   (7 days, HttpOnly cookie) — used to get new access_token silently
+
+NextAuth stores:
+  access_token                              — extracted from FastAPI login response
+  NextAuth session cookie (1 hour)          — wraps the access_token + user info
+
+Browser holds:
+  NextAuth session cookie (HttpOnly)        — useSession() reads this
+  FastAPI refresh_token cookie (HttpOnly)   — sent to /auth/refresh automatically
+```
+
+---
+
+### 69.4  File: `frontend/auth.ts`
+
+```typescript
+import NextAuth from "next-auth";
+import { authConfig } from "./auth.config";
+
+export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);
+```
+
+`handlers` — the `{ GET, POST }` object that the catch-all route exposes  
+`auth` — Server Component session getter: `const session = await auth()`  
+`signIn` — Server Action that triggers the credentials flow  
+`signOut` — Server Action that clears the session cookie
+
+---
+
+### 69.5  File: `frontend/middleware.ts`
+
+```typescript
+import { auth } from "./auth";
+
+export default auth((req) => {
+  const isLoggedIn  = !!req.auth;
+  const callbackUrl = encodeURIComponent(req.nextUrl.pathname + req.nextUrl.search);
+  if (!isLoggedIn) {
+    return NextResponse.redirect(new URL(`/login?callbackUrl=${callbackUrl}`, req.url));
+  }
+});
+
+export const config = {
+  matcher: ["/history/:path*", "/admin/:path*", "/collections/:path*"],
+};
+```
+
+The middleware runs at the Edge before the page renders. If an unauthenticated user navigates to `/history`, they are redirected to `/login?callbackUrl=%2Fhistory` before the history page component even starts executing.
+
+**WHY not protect `/`?** The homepage (coin upload + analysis) is intentionally public — guests can classify coins. Only personal data (history) and admin panels require login.
+
+---
+
+### 69.6  File: `frontend/app/api/auth/[...nextauth]/route.ts` — The v5 Pattern Fix
+
+The TypeScript error encountered and resolved:
+
+```typescript
+// ❌ Fails tsc (TS2305): NextAuth v5 does not export GET/POST directly
+export { GET, POST } from "../../../../auth";
+
+// ✅ Correct NextAuth v5 pattern: destructure from handlers
+import { handlers } from "../../../../auth";
+export const { GET, POST } = handlers;
+```
+
+NextAuth v5 exports `handlers` as an object containing the request handler functions. `handlers.GET` and `handlers.POST` are the Request → Response functions Next.js App Router needs for the catch-all route.
+
+---
+
+### 69.7  File: `frontend/types/next-auth.d.ts` — Type Augmentation
+
+NextAuth's built-in `Session.user` only has `name`, `email`, `image`. We extend it:
+
+```typescript
+declare module "next-auth" {
+  interface Session {
+    user: { id: string; email: string; name: string;
+            role: string; display_name: string; access_token: string; };
+  }
+  interface User {
+    id: string; role?: string; display_name?: string; access_token?: string;
+  }
+}
+declare module "next-auth/jwt" {
+  interface JWT {
+    id?: string; role?: string; display_name?: string; access_token?: string;
+  }
+}
+```
+
+Without this, TypeScript reports `Property 'role' does not exist on type 'User'` everywhere `useSession()` is used.
+
+---
+
+### 69.8  `.env.local` Additions
+
+```env
+AUTH_SECRET=dev-nextauth-secret-32chars-minimum!!
+# Signs the NextAuth session cookie JWT. Min 32 chars.
+# Production: generate with `openssl rand -base64 32`
+
+AUTH_FASTAPI_URL=http://127.0.0.1:8000
+# Where authorize() sends login requests. Direct to FastAPI, bypasses Nginx.
+# Docker: overridden to http://api:8000 (internal container DNS).
+```
+
+---
+
+## Section 70 — A6: Frontend Auth UI — Login, Register, UserMenu, SessionProvider (March 3, 2026)
+
+### 70.1  Overview
+
+A5 set up the NextAuth session machinery. A6 builds the user-visible surfaces:
+
+| File | Purpose |
+|---|---|
+| `LoginForm.tsx` | Sign-in form — calls `signIn("credentials")` |
+| `RegisterForm.tsx` | Account creation form — calls FastAPI `/auth/register` directly |
+| `app/login/page.tsx` | Server Component page wrapping `LoginForm` |
+| `app/register/page.tsx` | Server Component page wrapping `RegisterForm` |
+| `UserMenu.tsx` | Header auth island — avatar + dropdown |
+| `Header.tsx` | Updated to include `<UserMenu />` |
+| `providers.tsx` | Updated to wrap with `<SessionProvider>` |
+| `lib/api.ts` | Updated with `applyAuthInterceptor` — injects Bearer token on every request |
+
+---
+
+### 70.2  `LoginForm.tsx`
+
+```typescript
+"use client";
+
+async function handleSubmit(e: React.FormEvent) {
+  const result = await signIn("credentials", {
+    redirect:    false,
+    email,
+    password,
+    callbackUrl: callbackUrl ?? "/",
+  });
+
+  if (result?.error) {
+    setError(
+      result.error === "CredentialsSignin"
+        ? "Invalid email or password."
+        : "Authentication error. Please try again."
+    );
+    return;
+  }
+
+  router.push(result?.url ?? callbackUrl ?? "/");
+  router.refresh();   // invalidates Server Component cache — header re-renders with new session
+}
+```
+
+**`redirect: false`:** Without this, NextAuth performs a full-page redirect to `/login?error=...` on failure — the user loses form input and sees a blank page flash. `redirect: false` returns a result object so inline error messages can be shown.
+
+**`router.refresh()` after success:** Next.js App Router caches page data. After sign-in, cached server-rendered pages still show the unauthenticated state. `router.refresh()` invalidates the cache and re-fetches all Server Components, including the Header which now renders the logged-in `UserMenu`.
+
+**`callbackUrl = useSearchParams().get("callbackUrl") ?? "/"`:** When middleware redirected the user to `/login?callbackUrl=%2Fhistory`, this reads that parameter. After successful login, `router.push(callbackUrl)` returns them to their intended destination.
+
+---
+
+### 70.3  `RegisterForm.tsx`
+
+Registration calls FastAPI directly (not through NextAuth):
+
+```typescript
+const res = await fetch(`${process.env.NEXT_PUBLIC_CLASSIFY_URL}/auth/register`, {
+  method:  "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ email, password, display_name, role: "analyst" }),
+});
+```
+
+**Why not through NextAuth?** NextAuth handles sign-in only — it has no "register" provider. Registration is a CRUD operation on the users table; it belongs in FastAPI. After successful registration, the form shows a success state with a "Go to Sign In" link.
+
+**FastAPI error format handling:**
+```typescript
+const msg = Array.isArray(detail)
+  ? detail.map((d: { msg: string }) => d.msg).join(". ")
+  : String(detail);
+setError(msg);
+```
+FastAPI returns validation errors as `detail: [{msg: "...", type: "..."}]` or as `detail: "string"`. Both cases are handled.
+
+---
+
+### 70.4  `UserMenu.tsx` — The Header Auth Island
+
+The Header is a Server Component (no React hooks). But "is the user logged in?" requires `useSession()`. The solution is a **client island** pattern: Header stays a Server Component; `UserMenu` is a `"use client"` component embedded inside it.
+
+**Three render states:**
+
+| State | Displayed |
+|---|---|
+| `status === "loading"` | Skeleton shimmer (prevents layout shift during hydration) |
+| `!session` | "Sign In" gold button + "Register" outlined button |
+| `session` | Initials avatar + display_name + role badge + ChevronDown |
+
+**Deterministic initials:**
+```typescript
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  return parts.length >= 2
+    ? (parts[0][0] + parts[1][0]).toUpperCase()
+    : name.slice(0, 2).toUpperCase();
+}
+// "Dhia Chaieb" → "DC"   "admin" → "AD"
+```
+
+**Deterministic avatar colour from email:**
+```typescript
+function avatarColor(email: string): string {
+  let hash = 0;
+  for (let i = 0; i < email.length; i++) hash = email.charCodeAt(i) + ((hash << 5) - hash);
+  const colours = ["#b45309","#447a6e","#5b52a3","#a05195","#2f6699","#6b7280"];
+  return colours[Math.abs(hash) % colours.length];
+}
+```
+The same email always produces the same colour — no flicker on re-render. The six colours match the dark navy design palette.
+
+**Role badge colours:**
+```
+admin   → red    (most privileged — stands out visually)
+curator → gold   (matches brand accent colour)
+analyst → grey   (neutral — the default role)
+```
+
+**Dropdown close-on-outside-click:**
+Uses `useRef` + a `mousedown` event listener on `document` — the standard accessible dropdown pattern. Framer Motion `AnimatePresence` handles scale + fade animation.
+
+---
+
+### 70.5  `providers.tsx` — Adding `SessionProvider`
+
+`useSession()` is a React Context hook requiring a `<SessionProvider>` ancestor:
+
+```typescript
+import { SessionProvider } from "next-auth/react";
+
+return (
+  <SessionProvider>
+    <QueryClientProvider client={queryClient}>
+      {children}
+      <Toaster ... />
+      <ReactQueryDevtools ... />
+    </QueryClientProvider>
+  </SessionProvider>
+);
+```
+
+`SessionProvider` is outermost — it wraps everything that might call `useSession()`, including components deep in the tree.
+
+---
+
+### 70.6  `lib/api.ts` — Bearer Token Injection
+
+Every axios request carries the FastAPI access token so protected endpoints can verify the caller:
+
+```typescript
+import { getSession } from "next-auth/react";
+
+function applyAuthInterceptor(client: typeof apiClient) {
+  client.interceptors.request.use(async (config) => {
+    const session = await getSession();
+    const token   = (session?.user as { access_token?: string })?.access_token;
+    if (token) config.headers["Authorization"] = `Bearer ${token}`;
+    return config;
+  });
+}
+
+applyAuthInterceptor(apiClient);
+applyAuthInterceptor(classifyApiClient);
+```
+
+**Why `getSession()` not `useSession()`:** `useSession()` is a React hook — callable only inside components. The interceptor is a module-level function. `getSession()` reads the session from the browser's cookie (or the `/api/auth/session` endpoint) and is callable anywhere.
+
+**Performance:** When the session is cached in memory (after the first call), `getSession()` resolves synchronously from cache — no network call. Latency overhead is negligible.
+
+**Guest users (no session):** `getSession()` returns `null`. The `if (token)` guard means no `Authorization` header is sent. FastAPI treats the request as unauthenticated — classify and health endpoints still work; history endpoints return 401.
+
+---
+
+### 70.7  TypeScript Validation
+
+```
+npx tsc --noEmit → 0 errors
+```
+
+The only TS error encountered (NextAuth route handler — Section 69.6) was resolved before the final check.
+
+---
+
+## Section 71 — Layer 6: Docker Infrastructure — Dockerfiles, Nginx, Compose (March 3, 2026)
+
+### 71.1  What Layer 6 Delivers
+
+Layer 6 transforms the project from "runs on one machine" to "deployable as a reproducible stack":
+
+| File | Purpose |
+|---|---|
+| `Dockerfile.api` | Multi-stage Python image for FastAPI |
+| `frontend/Dockerfile` | Multi-stage Node.js image for Next.js |
+| `nginx/nginx.conf` | Reverse proxy routing, rate limiting, static asset caching |
+| `.dockerignore` | Keeps `data/` and `models/` (several GB) out of the API build context |
+| `frontend/.dockerignore` | Keeps `node_modules/` and `.next/` out of the web build context |
+| `frontend/next.config.ts` | Added `output: "standalone"` for the Docker runner stage |
+| `docker-compose.yml` | All 5 active services wired with correct networking and secrets |
+
+---
+
+### 71.2  `Dockerfile.api` — Multi-Stage Python Build
+
+**Why multi-stage?**
+Building Python C extensions (psycopg2, Pillow, OpenCV, tokenizers) requires `gcc`, `g++`, and system headers (~500 MB of tooling). The running container only needs the compiled `.so` files. Multi-stage build separates the concerns:
+
+```
+Stage 1 (builder):  python:3.11-slim-bookworm + build-essential + libpq-dev + libgl1
+                    → pip install -r requirements.txt into /opt/venv
+Stage 2 (runtime):  python:3.11-slim-bookworm  (no compilers — ~200 MB lighter)
+                    → COPY --from=builder /opt/venv /opt/venv
+                    → COPY src/ alembic/ alembic.ini
+```
+
+**Non-root user:**
+```dockerfile
+RUN groupadd --gid 1001 appgroup \
+ && useradd  --uid 1001 --gid appgroup --no-create-home --shell /bin/false appuser
+USER appuser
+```
+If the container is compromised (e.g., a malicious coin image triggers path traversal), the attacker runs as uid 1001 with no login shell, cannot write to `/etc`, cannot `su`, and cannot bind privileged ports.
+
+**Single uvicorn worker:**
+```dockerfile
+CMD ["uvicorn", "src.api.main:app",
+     "--host", "0.0.0.0",
+     "--port", "8000",
+     "--workers", "1",
+     "--no-access-log"]
+```
+Why one worker? EfficientNet-B3 weights load once in the `lifespan` hook into the `CoinInference` singleton. Multiple workers each load the model independently:
+```
+4 workers × 350 MB (EfficientNet weights) × 4 (PyTorch buffers) ≈ 5.6 GB
+```
+That causes OOM on a 4–8 GB RAM server. One async worker handles concurrency via Python's `asyncio` event loop; simultaneous classify requests are serialised by the `asyncio.Semaphore(1)` GPU guard, not by the worker count. Scale horizontally (multiple API containers behind nginx upstream), not vertically.
+
+**`HEALTHCHECK`:**
+```dockerfile
+HEALTHCHECK --interval=15s --timeout=10s --retries=3 --start-period=30s \
+    CMD curl -sf http://localhost:8000/api/health || exit 1
+```
+`--start-period=30s` gives the container time to load the 80 MB EfficientNet weights and the 180 MB ChromaDB index before Docker marks it unhealthy and restarts it prematurely.
+
+---
+
+### 71.3  `frontend/Dockerfile` — Multi-Stage Next.js Build
+
+**Why `output: "standalone"` in `next.config.ts`:**
+At build time, Next.js traces all imports and produces `.next/standalone` — a self-contained server bundle containing only the Node.js files the app actually uses. Without it:
+```
+Runtime container needs: full node_modules/ ≈ 500 MB
+```
+With it:
+```
+.next/standalone/          ← ~40 MB — a complete runnable Next.js server
+.next/standalone/server.js ← entry point: CMD ["node", "server.js"]
+```
+
+**Three stages:**
+```
+Stage 1 (deps):    node:20-alpine + npm ci → /app/node_modules
+Stage 2 (builder): copy node_modules + source → npm run build → .next/standalone
+Stage 3 (runner):  node:20-alpine (no npm, no node_modules)
+                   COPY .next/standalone → ./
+                   COPY .next/static     → ./.next/static
+                   COPY public           → ./public
+                   CMD node server.js
+```
+
+**`npm ci` not `npm install`:**
+`npm ci` uses `package-lock.json` exactly (deterministic, reproducible). `npm install` may update the lock file. In CI/Docker, reproducibility is non-negotiable.
+
+**Build-time vs runtime environment variables:**
+```dockerfile
+# Build-time — baked into the JS bundle at build (NEXT_PUBLIC_ prefix):
+ARG  NEXT_PUBLIC_CLASSIFY_URL=http://nginx/api
+ENV  NEXT_PUBLIC_CLASSIFY_URL=${NEXT_PUBLIC_CLASSIFY_URL}
+
+# Runtime — injected by docker-compose.yml at container start, NOT here:
+# AUTH_SECRET, NEXTAUTH_SECRET, AUTH_FASTAPI_URL, NODE_ENV
+```
+
+**SECURITY: never put secrets in `ARG`:**
+`ARG` values appear in Docker image layer history as plaintext. `docker history image:tag` reveals every ARG. All secrets (`AUTH_SECRET`, `NEXTAUTH_SECRET`, `JWT_SECRET`) are injected exclusively via the `environment:` block in `docker-compose.yml`.
+
+---
+
+### 71.4  `nginx/nginx.conf` — The Traffic Router
+
+**The critical routing rule — `/api/auth/*` must go to Next.js, NOT FastAPI:**
+
+At first glance, `/api/auth/*` looks like it should go to the FastAPI backend. But these paths are handled by NextAuth.js running inside Next.js:
+
+```
+GET  /api/auth/session              → returns current NextAuth session JSON
+GET  /api/auth/csrf                 → returns CSRF token for form submissions
+POST /api/auth/callback/credentials → processes the credentials sign-in form
+POST /api/auth/signout              → clears the session cookie
+```
+
+FastAPI's auth routes are at `/auth/*` (no `/api` prefix). The nginx location blocks:
+
+```nginx
+# NextAuth routes → Next.js web container (MUST come before /api/)
+location /api/auth/ {
+    proxy_pass  http://nextjs_upstream;
+}
+
+# All other API routes → FastAPI
+location /api/ {
+    proxy_pass  http://fastapi_upstream;
+    limit_req   zone=api_limit  burst=20  nodelay;
+}
+
+# Everything else → Next.js
+location / {
+    proxy_pass  http://nextjs_upstream;
+}
+```
+
+Nginx uses longest-prefix matching: `/api/auth/` beats `/api/` for NextAuth paths. Order of declaration also matters.
+
+**The classify endpoint — special handling:**
+```nginx
+location /api/classify {
+    proxy_read_timeout      600s;   # 10 minutes — covers slow Ollama generation
+    proxy_send_timeout      600s;
+    proxy_buffering         off;    # stream response as FastAPI emits it
+    proxy_request_buffering off;    # don't buffer the upload before forwarding
+    limit_req               zone=classify_limit  burst=2  nodelay;
+}
+```
+
+`proxy_buffering off` is important: without it, Nginx holds the full response in memory before forwarding to the browser. For a 30 KB JSON response that took 20 seconds to generate, the browser wouldn't see any data until fully buffered, negating any streaming benefit.
+
+**Rate limiting — two independent layers:**
+```nginx
+limit_req_zone  $binary_remote_addr  zone=api_limit:10m       rate=10r/s;
+limit_req_zone  $binary_remote_addr  zone=classify_limit:10m  rate=5r/m;
+```
+
+| Layer | Mechanism | When it fires |
+|---|---|---|
+| Nginx (`limit_req`) | before request reaches Python | zero CPU cost on rejected requests |
+| FastAPI (slowapi) | inside application code | catches direct access to port 8000 (bypassing nginx) |
+
+Two independent layers = defence in depth. The Nginx limit is slightly more conservative than FastAPI's `10/minute` — catching abusers at the proxy is cheapest.
+
+**Static asset caching:**
+```nginx
+location /_next/static/ {
+    add_header  Cache-Control "public, max-age=31536000, immutable";
+    proxy_pass  http://nextjs_upstream;
+}
+```
+Next.js fingerprints static asset filenames (e.g., `_next/static/chunks/abc123.js`). The filename changes with every build. `immutable` instructs browsers to never revalidate — the file will never change for that URL. This enables indefinite browser caching with zero cache invalidation issues.
+
+---
+
+### 71.5  `.dockerignore` Files
+
+**Root `.dockerignore` (for `Dockerfile.api` build context):**
+```
+venv/        # wrong Python paths — venv is rebuilt in the container
+data/        # GB-scale dataset + ChromaDB — mounted as volumes at runtime
+models/      # GB-scale model weights — mounted as volumes at runtime
+.git/        # version history — irrelevant at runtime
+frontend/    # Next.js app — has its own image
+*.log        # runtime logs
+.env*        # secrets — never bake secrets into images
+tests/       # not needed to run the API
+```
+
+Without `.dockerignore`, `docker build .` sends the entire project directory (~5–8 GB including data/ and models/) to the Docker daemon as the "build context" before any `COPY` or `RUN` instruction executes. With `.dockerignore`, the build context is ~15 MB.
+
+**`frontend/.dockerignore`:**
+```
+node_modules/   # reinstalled from package-lock.json in the builder stage
+.next/          # rebuilt by `npm run build` in the builder stage
+.env*           # runtime-injected secrets
+```
+
+---
+
+### 71.6  `docker-compose.yml` — Final State
+
+The key additions to the `web` service environment block:
+
+```yaml
+web:
+  build:
+    context: ./frontend
+    dockerfile: Dockerfile
+  environment:
+    NEXT_PUBLIC_API_URL:      http://nginx/api
+    NEXT_PUBLIC_CLASSIFY_URL: http://nginx/api
+    NEXTAUTH_URL:             ${NEXTAUTH_URL:-http://localhost}
+    NEXTAUTH_SECRET:          ${NEXTAUTH_SECRET:-change_me_in_production}
+    AUTH_SECRET:              ${NEXTAUTH_SECRET:-change_me_in_production}
+    AUTH_FASTAPI_URL:         http://api:8000
+    NODE_ENV:                 production
+```
+
+**`AUTH_FASTAPI_URL: http://api:8000`** — The most important addition. When the `web` container's `authorize()` function sends `POST /auth/login`, it uses Docker's internal DNS to reach the `api` container directly. Using `http://api:8000` instead of `http://nginx/api` avoids a round-trip through the reverse proxy — containers communicate directly on the Docker bridge network.
+
+**`AUTH_SECRET` and `NEXTAUTH_SECRET` both set:** NextAuth v5 reads `AUTH_SECRET`. The `NEXTAUTH_SECRET` variable is retained for backwards compatibility with some NextAuth v4 code paths in certain deps. Setting both to the same value ensures nothing breaks.
+
+**The `migrator` service — one-shot Alembic runner:**
+```yaml
+migrator:
+  build:
+    context: .
+    dockerfile: Dockerfile.api
+  command: ["alembic", "upgrade", "head"]
+  profiles:
+    - migration
+```
+`profiles: [migration]` means this service does NOT start with `docker compose up`. It only runs when explicitly invoked:
+```powershell
+docker compose run --rm migrator
+```
+This is the correct production pattern: migrations are controlled, never automatic. Auto-applying Alembic on container start risks starting the app against a half-migrated DB if the migration fails mid-way.
+
+---
+
+### 71.7  How to Run the Full Stack
+
+```powershell
+# Step 1 — Configure environment
+copy .env.example .env
+# Edit .env — set POSTGRES_PASSWORD, JWT_SECRET, NEXTAUTH_SECRET, GITHUB_TOKEN
+
+# Step 2 — Run Alembic migrations (creates all 6 tables + 2 ENUMs)
+docker compose run --rm migrator
+
+# Step 3 — Start the full stack
+docker compose up --build
+
+# Access points:
+#   http://localhost       → Nginx → Next.js frontend
+#   http://localhost/api   → Nginx → FastAPI (health, classify, history, auth)
+#   http://localhost:5432  → PostgreSQL (local queries, Alembic)
+#   http://localhost:6379  → Redis (cache)
+```
+
+**Development (no Docker for app services):**
+```powershell
+# Start only infrastructure
+docker compose up postgres redis
+
+# FastAPI in venv
+& ".\venv\Scripts\Activate.ps1"
+uvicorn src.api.main:app --port 8000 --reload
+
+# Next.js dev server
+cd frontend
+npm run dev
+```
+
+---
+
+### 71.8  Commit Record
+
+All A4 + A5 + A6 + Layer 6 changes committed in one comprehensive commit:
+
+```
+b09d88e — feat: A4+A5+A6+Layer6 -- PostgreSQL history, NextAuth, auth UX, Docker stack
+```
+
+Key files:
+```
+src/api/routes/classify.py                 A4: SQLAlchemy INSERT
+src/api/routes/history.py                  A4: full ORM rewrite
+src/api/_store.py                          A4: deprecation notice
+frontend/auth.config.ts                    A5: NextAuth credentials provider
+frontend/auth.ts                           A5: handlers/auth/signIn/signOut
+frontend/middleware.ts                     A5: route protection middleware
+frontend/app/api/auth/[...nextauth]/route.ts  A5: fixed handlers destructure pattern
+frontend/types/next-auth.d.ts              A5: Session/JWT type augmentation
+frontend/.env.local                        A5: AUTH_SECRET + AUTH_FASTAPI_URL
+frontend/components/auth/LoginForm.tsx     A6: credentials sign-in form
+frontend/components/auth/RegisterForm.tsx  A6: account creation form
+frontend/components/auth/UserMenu.tsx      A6: header auth island
+frontend/app/login/page.tsx                A6: login page Server Component
+frontend/app/register/page.tsx             A6: register page Server Component
+frontend/providers.tsx                     A6: SessionProvider wrapper
+frontend/components/ui/header.tsx          A6: UserMenu added to nav
+frontend/lib/api.ts                        A6: applyAuthInterceptor
+Dockerfile.api                             L6: API image (multi-stage)
+frontend/Dockerfile                        L6: web image (multi-stage, standalone)
+nginx/nginx.conf                           L6: reverse proxy with critical auth routing
+.dockerignore                              L6: API build context filter
+frontend/.dockerignore                     L6: web build context filter
+frontend/next.config.ts                    L6: output: "standalone"
+docker-compose.yml                         L6: AUTH_FASTAPI_URL + finalized
+```
+
+**Test status at commit:**
+- `48/48` pytest tests passing
+- `tsc --noEmit`: 0 TypeScript errors
+- `HEAD: b09d88e → origin/main`
+
+---
+
+### 71.9  Project Status After Layer 6
+
+| Layer | Description | Status |
+|---|---|---|
+| Layer 0 — CNN Training | EfficientNet-B3, 80.03% TTA accuracy | ✅ COMPLETE |
+| Layer 1 — Inference Engine | CoinInference, CLAHE, TTA, auto-crop | ✅ COMPLETE |
+| Layer 2 — Knowledge Base | 47,705 ChromaDB vectors, 9,541 types | ✅ COMPLETE |
+| Layer 3 — Agent System | 5 LangGraph agents, all 3 routing paths | ✅ COMPLETE |
+| Layer 4 — FastAPI Backend | Auth, RBAC, rate-limit, SQLite history | ✅ COMPLETE |
+| Layer 4+ — PostgreSQL + JWT | A1 tables, A2 JWT, A3 audit, A4 ORM history | ✅ COMPLETE |
+| Layer 5 — Next.js Frontend | Full UX, 3-way CNN display, Phase 1–4 UX | ✅ COMPLETE |
+| Layer 5+ — Auth Frontend | A5 NextAuth v5, A6 Login/Register/UserMenu | ✅ COMPLETE |
+| Layer 6 — Docker | Dockerfiles, Nginx, Compose finalized | ✅ COMPLETE |
+| Layer 7 — Tests + CI/CD | pytest integration, Jest, Playwright, GitHub Actions | 🔲 NEXT |
+
+**Next: Layer 7 — Testing & CI/CD.** Scope:
+- Integration tests (FastAPI `TestClient` against a test PostgreSQL DB)
+- Frontend component tests (Jest + Testing Library for `LoginForm`, `UserMenu`, `AnalysisPanel`)
+- End-to-end tests (Playwright — upload coin image → verify analysis page + history entry)
+- GitHub Actions workflow (`.github/workflows/ci.yml`): lint → test → build → push Docker images to GHCR
+
+---
+
+*Engineering Journal — Sections 68–71 added.*
+*Section 68: A4 — classify.py + history.py migrated from SQLite _store.py to PostgreSQL ORM.*
+*Section 69: A5 — NextAuth.js v5 installed, credentials provider, JWT sessions, route middleware.*
+*Section 70: A6 — LoginForm, RegisterForm, UserMenu, SessionProvider, Bearer token interceptor.*
+*Section 71: Layer 6 — Dockerfile.api, frontend/Dockerfile, nginx.conf, .dockerignore files, output:standalone, docker-compose.yml finalized.*
+*One commit pushed: b09d88e. 48/48 unit tests passing. 0 TypeScript errors.*
+*HEAD: b09d88e → origin/main.*

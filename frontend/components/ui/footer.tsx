@@ -32,7 +32,7 @@ const COLUMNS = [
     heading: "Resources",
     links: [
       { label: "Corpus Nummorum",  href: "https://www.corpus-nummorum.eu",  external: true },
-      { label: "API Documentation",href: "/api/docs",                        external: true },
+      { label: "API Documentation",href: "http://127.0.0.1:8000/docs",        external: true },
       { label: "Engineering Docs", href: "/admin" },
     ],
   },

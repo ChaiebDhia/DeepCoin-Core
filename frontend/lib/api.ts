@@ -23,7 +23,6 @@
  */
 
 import axios, { type AxiosError } from "axios";
-import { getSession }              from "next-auth/react";
 
 import type {
   ClassifyResponse,
@@ -66,6 +65,32 @@ const classifyApiClient = axios.create({
 
 // ── Shared request interceptors ─────────────────────────────────────────────
 
+// ── Auth token cache ─────────────────────────────────────────────────────────
+
+/**
+ * Module-level JWT cache.
+ *
+ * WHY NOT call getSession() inside the interceptor:
+ *   getSession() from next-auth/react fires a fetch to /api/auth/session on
+ *   EVERY intercepted request. When that endpoint is slow or unreachable,
+ *   NextAuth calls console.error("ClientFetchError") INSIDE its own code,
+ *   BEFORE throwing — so our try/catch cannot suppress the console noise.
+ *
+ *   The fix: keep a simple module-level variable that is set ONCE by the
+ *   <SessionSync> component whenever the session changes (see
+ *   components/auth/SessionSync.tsx). The interceptor reads synchronously
+ *   from the cache — zero network overhead, zero console warnings.
+ */
+let _authToken: string | null = null;
+
+/**
+ * Called by <SessionSync> when the NextAuth session updates.
+ * Exported so SessionSync can import it without circular deps.
+ */
+export function setAuthToken(token: string | null): void {
+  _authToken = token;
+}
+
 /**
  * applyKeyInterceptor — injects the static X-API-Key header if configured.
  * WHY NEXT_PUBLIC_: Next.js only exposes env vars to the browser when they
@@ -80,12 +105,11 @@ function applyKeyInterceptor(client: typeof apiClient) {
 }
 
 /**
- * applyAuthInterceptor — injects the JWT Bearer token from the NextAuth session.
+ * applyAuthInterceptor — injects the JWT Bearer token from the module-level cache.
  *
- * WHY async interceptor:
- *   getSession() is async — it reads the session cookie / JWT from the
- *   browser. It resolves immediately when the session is cached (no network
- *   call), so the interceptor adds negligible latency.
+ * WHY synchronous (no async):
+ *   Reading _authToken is instant — no network call, no Promise chain.
+ *   The token is kept fresh by <SessionSync> which watches useSession().
  *
  * WHY only inject when a token exists:
  *   Guest users (not logged in) still use the API (anonymous classify).
@@ -97,19 +121,9 @@ function applyKeyInterceptor(client: typeof apiClient) {
  *   The scheme must match exactly — no "Token" or "JWT" prefix.
  */
 function applyAuthInterceptor(client: typeof apiClient) {
-  client.interceptors.request.use(async (config) => {
-    // SSR guard — getSession() requires window (browser-only).
-    // During server-side rendering or before hydration the call would throw
-    // ClientFetchError. Skip silently; the request is sent as unauthenticated.
-    if (typeof window === "undefined") return config;
-    try {
-      const session = await getSession();
-      const token   = (session?.user as { access_token?: string })?.access_token;
-      if (token) config.headers["Authorization"] = `Bearer ${token}`;
-    } catch {
-      // Silently ignore — NextAuth not yet ready or session endpoint unreachable.
-      // Request proceeds without Authorization header (treated as guest by FastAPI).
-    }
+  // Synchronous — reads from module-level cache, never fires a network request.
+  client.interceptors.request.use((config) => {
+    if (_authToken) config.headers["Authorization"] = `Bearer ${_authToken}`;
     return config;
   });
 }

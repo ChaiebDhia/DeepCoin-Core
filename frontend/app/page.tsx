@@ -17,8 +17,7 @@ import { PipelineSteps }  from "@/components/home/PipelineSteps";
 import { StatsBar }       from "@/components/home/StatsBar";
 import { ValueCards }     from "@/components/home/ValueCards";
 import { ForWhoCards }    from "@/components/home/ForWhoCards";
-import { Testimonials }   from "@/components/home/Testimonials";
-import { AnalyseSection } from "@/components/home/AnalyseSection";
+import { TechStack }      from "@/components/home/TechStack";
 import { EmailCapture }   from "@/components/home/EmailCapture";
 
 export default function HomePage() {
@@ -29,8 +28,7 @@ export default function HomePage() {
       <StatsBar />
       <ValueCards />
       <ForWhoCards />
-      <Testimonials />
-      <AnalyseSection />
+      <TechStack />
       <EmailCapture />
     </>
   );

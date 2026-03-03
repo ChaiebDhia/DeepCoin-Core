@@ -173,12 +173,12 @@ export function UserMenu() {
 
             {/* Profile / admin links */}
             <div className="py-1">
-              {role === "admin" && (
+              {(role === "admin" || role === "curator") && (
                 <Link
                   href="/admin"
                   onClick={() => setOpen(false)}
                   className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-[var(--surface-2)] transition-colors"
-                  style={{ color: "#fca5a5" }}
+                  style={{ color: role === "admin" ? "#fca5a5" : "var(--brand-gold)" }}
                 >
                   <ShieldCheck size={15} />
                   Admin Dashboard
