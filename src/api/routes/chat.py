@@ -176,6 +176,39 @@ def _run_chat(query: str, n_sources: int, top5_labels: list[str] | None = None) 
     """
     import re as _re
 
+    # ── 0. Non-numismatic query guard ────────────────────────────────────────
+    # WHY: The LLM is instructed to "never say insufficient information" —
+    # essential for sparse-but-valid numismatic queries, but catastrophic for
+    # entirely off-topic input.  A greeting like "assalamu alaykom" has no
+    # numismatic terms, so rag.search() returns weakly-matched junk and the
+    # model fabricates a coin description.  This guard catches non-numismatic
+    # input before any LLM call and returns a friendly redirect.
+    _NUMISMATIC_RE = _re.compile(
+        r'coin|numismat|\bCN\b|tetradrachm|denarius|drachm|obol|solidus|'
+        r'aureus|sestert|didrachm|stater|hemidrachm|diobol|triobol|'
+        r'obverse|reverse|mint|iconograph|legend|die|weight|diameter|'
+        r'hellenistic|roman|greek|byzantine|macedon|persian|seleucid|ptolem|'
+        r'emperor|king|dynasty|ancient|archaeolog|'
+        r'bronze|silver|gold|electrum|billon|'
+        r'\bCN\s*\d{2,6}|\b\d{4,6}\b',
+        _re.IGNORECASE,
+    )
+    if not _NUMISMATIC_RE.search(query):
+        logger.info("chat: non-numismatic query rejected: %r", query[:60])
+        return {
+            "answer": (
+                "Hello! I'm DeepCoin AI, a specialist in ancient numismatics "
+                "and the Corpus Nummorum database covering 9,541 coin types. "
+                "I can help with questions about specific coin types ("
+                "e.g. \"CN 1015\"), denominations (\"silver tetradrachm from "
+                "Athens\"), dynasties (\"Seleucid coinage\"), rulers ("
+                "\"coins of Alexander the Great\"), materials, or mint cities. "
+                "What would you like to explore?"
+            ),
+            "sources":  [],
+            "provider": "guard",
+        }
+
     from src.core.rag_engine import get_rag_engine
     rag = get_rag_engine()
 
@@ -337,6 +370,31 @@ def _run_chat(query: str, n_sources: int, top5_labels: list[str] | None = None) 
         "  assessment possible, combining database facts with expert knowledge."
     )
 
+    # ── 4c. "Type not in corpus" caveat ────────────────────────────────────
+    # WHY: When a specific CN type ID was detected in the query but
+    # get_context_blocks() returned "no identity data" (type not scraped),
+    # primary_context is empty.  Without this caveat the LLM — told to
+    # "never say insufficient information" — confidently invents a plausible
+    # coin from period-general knowledge and presents it as CN Type XXXX.
+    # The caveat makes the gap explicit so the LLM produces a clearly-labelled
+    # general assessment rather than a falsely-attributed specific record.
+    corpus_caveat = ""
+    if cn_id_match and not primary_context:
+        corpus_caveat = (
+            f"CRITICAL CONSTRAINT: CN Type {cn_id_match.group(1)} is NOT present "
+            f"in the indexed Corpus Nummorum records (9,541 types). "
+            f"Your FIRST SENTENCE must state this explicitly — e.g. "
+            f"'CN Type {cn_id_match.group(1)} is not currently indexed in the "
+            f"Corpus Nummorum records available to me.' "
+            f"AFTER that opening statement you may: "
+            f"(1) describe related types from the supplementary context below, "
+            f"(2) offer general numismatic context about the period or "
+            f"denomination if inferable from the query — clearly introduced as "
+            f"'Generally speaking,...' or 'Historically,...'. "
+            f"Do NOT invent a specific obverse, reverse, weight, or legend for "
+            f"this exact type and present it as confirmed fact."
+        )
+
     context_section = ""
     if primary_context:
         context_section += primary_context + "\n"
@@ -355,7 +413,8 @@ def _run_chat(query: str, n_sources: int, top5_labels: list[str] | None = None) 
 
     user_message = (
         f"<scholarly_database>\n{context_section}</scholarly_database>\n\n"
-        f"QUESTION: {query}\n\n"
+        + (f"{corpus_caveat}\n\n" if corpus_caveat else "")
+        + f"QUESTION: {query}\n\n"
         "Answer as a world-class numismatist. Do not reference any XML tags, section "
         "headers, or data delimiters in your response."
     )
