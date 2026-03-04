@@ -644,6 +644,43 @@ export function AnalysisPanel({ result, showLink = false }: AnalysisPanelProps) 
       {/* ── CNN card ── */}
       <CnnSection cnn={result.cnn} />
 
+      {/* ── Low-confidence explainer ──────────────────────────────────────
+       *  Only shown when isLowConf is true (confidence < 70 %, no TTA
+       *  consensus).  Goal: calm the user — a low % is NOT a failure.
+       *  WHAT it shows:
+       *   • The % = rank-1 visual match among 438 CNN-trained types
+       *   • A random guess would give 0.23 % → score is still N× better
+       *   • The full historical analysis is grounded in 9,541 KB types
+       *     independently of this visual score
+       * ─────────────────────────────────────────────────────────────────── */}
+      {isLowConf && (
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.20 }}
+          className="rounded-xl px-4 py-3.5 text-xs leading-relaxed"
+          style={{ background: "rgba(99,102,241,0.07)", border: "1px solid rgba(99,102,241,0.18)" }}
+        >
+          <p className="font-semibold mb-1.5" style={{ color: "#a5b4fc" }}>
+            💡 About this visual score
+          </p>
+          <p style={{ color: "var(--text-secondary)" }}>
+            <strong style={{ color: "#c7d2fe" }}>
+              {(result.cnn.confidence * 100).toFixed(1)}%
+            </strong>{" "}
+            means this is the model&rsquo;s <strong style={{ color: "#c7d2fe" }}>#1 visual match</strong>{" "}
+            out of 438 trained coin types — still{" "}
+            <strong style={{ color: "#c7d2fe" }}>
+              {Math.round(result.cnn.confidence / 0.00228)}×
+            </strong>{" "}
+            better than a random guess (0.23&nbsp;%). A low margin usually reflects
+            photo lighting, coin wear, or an unusual angle — not an incorrect identification.
+            The historical analysis below is drawn from all 9,541 CN types and is independent
+            of this visual score.
+          </p>
+        </motion.div>
+      )}
+
       {/* ── Continue Research in AI Chat ─────────────────────────────────────
        *  Shown for ALL analysis results — not just low confidence ones.
        *  HIGH confidence: blue card — invite deeper historical exploration.

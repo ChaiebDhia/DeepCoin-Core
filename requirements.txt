@@ -27,6 +27,7 @@ langchain-openai==0.3.0
 chromadb==0.6.0
 sentence-transformers==3.3.0
 rank-bm25
+duckduckgo-search>=6.0.0     # web search fallback for AI chat (no API key required)
 
 # Database
 psycopg2-binary==2.9.10

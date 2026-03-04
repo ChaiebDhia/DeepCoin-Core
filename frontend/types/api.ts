@@ -220,3 +220,24 @@ export interface ChatSessionListResponse {
   skip:  number;
   limit: number;
 }
+
+// ── KB browse types ───────────────────────────────────────────────────────────
+
+/** One coin type from the Corpus Nummorum knowledge base (9,541 types). */
+export interface KbTypeItem {
+  type_id:         string;
+  denomination:    string;
+  region:          string;
+  date_range:      string;
+  material:        string;
+  mint:            string;
+  authority:       string;
+  in_training_set: boolean;
+  text_snippet:    string;
+}
+
+export interface KbBrowseResponse {
+  items:       KbTypeItem[];
+  total:       number;
+  search_used: boolean;
+}

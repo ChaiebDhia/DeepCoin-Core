@@ -36,6 +36,8 @@ import type {
   ChatMessageRecord,
   ChatSessionDetail,
   ChatSessionListResponse,
+  KbTypeItem,
+  KbBrowseResponse,
 } from "@/types/api";
 
 // ── Axios instance ────────────────────────────────────────────────────────────
@@ -372,7 +374,42 @@ export async function explorePublic(
   }
 }
 
-// ── Admin endpoints ───────────────────────────────────────────────────────────
+// ── KB browse ────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/kb/types — search or browse all 9,541 CN coin types.
+ *
+ * WHY classifyApiClient: avoids the Next.js proxy timeout (the search query
+ * can hit BM25 + ChromaDB simultaneously, which takes ~300 ms).
+ *
+ * @param search        Free-text query (denomination, dynasty, region, …)
+ * @param skip          Page offset
+ * @param limit         Page size (default 20)
+ * @param inTrainingSet When true, filter to the 438 CNN-trained types only
+ */
+export async function browseKb(
+  search        = "",
+  skip          = 0,
+  limit         = 20,
+  inTrainingSet = false,
+): Promise<KbBrowseResponse> {
+  try {
+    const params = new URLSearchParams({
+      search,
+      skip:            String(skip),
+      limit:           String(limit),
+      in_training_set: String(inTrainingSet),
+    });
+    const { data } = await classifyApiClient.get<KbBrowseResponse>(
+      `/api/kb/types?${params}`,
+    );
+    return data;
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+// ── Admin endpoints ─────────────────────────────────────────────────────────────
 
 /**
  * GET /api/admin/feedback (via Next.js proxy at /api/admin/feedback)

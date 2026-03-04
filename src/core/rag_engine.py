@@ -583,12 +583,12 @@ class RAGEngine:
             ("context",  "Context"),
         ]
         lines = []
-        for i, (ctype, label) in enumerate(labels, start=1):
+        for _i, (ctype, label) in enumerate(labels, start=1):
             chunk_id = f"{tid}_{ctype}"
             ch       = self._chunk_index.get(chunk_id)
             text     = ch["text"] if ch else f"(no {ctype} data for type {tid})"
-            lines.append(f"[CONTEXT {i} \u2014 {label}]  {text}")
-        return "\n".join(lines)
+            lines.append(f"=== {label} ===\n{text}")
+        return "\n\n".join(lines)
 
     def populate_chroma(self, batch_size: int = 200) -> None:
         """

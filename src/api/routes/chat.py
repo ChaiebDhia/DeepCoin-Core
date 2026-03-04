@@ -101,6 +101,43 @@ class ChatResponse(BaseModel):
 
 # ── RAG + LLM pipeline (blocking — runs in to_thread) ────────────────────────
 
+def _web_search(query: str, max_results: int = 4) -> str:
+    """
+    Fallback web search using DuckDuckGo (no API key required).
+
+    WHAT: Runs a DuckDuckGo text search and returns top snippets formatted
+          as plain prose blocks labeled with their source title.
+
+    WHY: When the Corpus Nummorum KB has sparse or no data for a query
+         (e.g. general numismatic topics, less-common dynasties), the LLM
+         would otherwise generate content from memory alone.  Injecting real
+         web snippets grounds the answer in external scholarly sources and
+         acknowledges the internet source transparently to the user.
+
+    Called only when the KB context is thin (< 2 supplementary hits AND
+    no direct CN type match), so it does not slow down well-covered queries.
+    """
+    try:
+        from duckduckgo_search import DDGS
+        results = DDGS().text(
+            query + " ancient coin numismatics",
+            max_results=max_results,
+            timelimit="y",
+        )
+        if not results:
+            return ""
+        lines = []
+        for r in results:
+            title = r.get("title", "Web source")
+            body  = r.get("body", "")[:400]
+            href  = r.get("href", "")
+            lines.append(f"[Web: {title}]\n{body}\n(source: {href})")
+        return "\n\n".join(lines)
+    except Exception as exc:
+        logger.debug("Web search unavailable: %s", exc)
+        return ""
+
+
 def _run_chat(query: str, n_sources: int, top5_labels: list[str] | None = None) -> dict[str, Any]:
     """
     Execute a complete RAG → LLM chat pipeline synchronously.
@@ -232,6 +269,9 @@ def _run_chat(query: str, n_sources: int, top5_labels: list[str] | None = None) 
     supplementary_lines: list[str] = []
     supplementary_sources: list[ChatSource] = []
     seen_type_ids: set[str] = {cn_id_match.group(1)} if cn_id_match else set()
+    already_fetched = {cn_id_match.group(1)} if cn_id_match else set()
+    if top5_labels:
+        already_fetched.update(lbl.strip() for lbl in top5_labels if lbl.strip())
 
     for hit in hits:
         type_id    = str(hit.get("type_id", hit.get("id", "?")))
@@ -242,7 +282,7 @@ def _run_chat(query: str, n_sources: int, top5_labels: list[str] | None = None) 
         snippet    = hit.get("document", hit.get("text", ""))[:300]
         n          = len(supplementary_lines) + 1
         supplementary_lines.append(
-            f"[RELATED CONTEXT {n}] CN Type {type_id} ({chunk_type}):\n{snippet}"
+            f"--- CN Type {type_id} ({chunk_type}) ---\n{snippet}"
         )
         supplementary_sources.append(ChatSource(
             type_id    = type_id,
@@ -253,31 +293,41 @@ def _run_chat(query: str, n_sources: int, top5_labels: list[str] | None = None) 
 
     all_sources = primary_sources + candidate_sources + supplementary_sources
 
-    # ── 4. Build system + user messages ─────────────────────────────────────
+    # ── 4b. Web search fallback when KB context is thin ────────────────────────
+    # Trigger web search when:
+    #   - No direct CN type ID was found in the query (general numismatic topic)
+    #   - AND the supplementary search returned fewer than 2 results
+    # This prevents web fallback from firing on known CN type queries.
+    web_context = ""
+    if not primary_context and len(supplementary_lines) < 2:
+        web_context = _web_search(query)
+        if web_context:
+            logger.info("chat: KB context thin — injected web search results for: %r", query[:80])
+
+    # ── 5. Build system + user messages ─────────────────────────────────────
     system_message = (
         "You are DeepCoin AI, an expert numismatist and ancient historian specializing "
         "in the Corpus Nummorum (CN) database — a DFG-funded scholarly catalogue of "
         "9,716 ancient coin types spanning Greek, Hellenistic, Roman provincial, and "
         "imperial mints from the 7th century BC to the 4th century AD.\n\n"
-        "YOUR RESPONSE MUST:\n"
-        "1. GROUND specific facts (dates, denominations, weights, mint cities, legends, "
-        "   iconography) in the provided context blocks. When citing Corpus Nummorum data, "
-        "   write naturally — for example: 'According to Corpus Nummorum records for "
-        "   CN Type 1015...' or 'CN Type 544 records show...' — NEVER use bracket "
-        "   notation such as [CONTEXT N] or [CN Type XXXX] in your output.\n"
-        "2. SUPPLEMENT with your expert numismatic knowledge when context data is sparse "
-        "   — this is REQUIRED, not optional. Mark supplemented facts explicitly with "
-        "   'Historically,' or 'General numismatic knowledge indicates...'. A sparse KB "
-        "   record for a well-known coin type (e.g. Athenian tetradrachm, Roman denarius) "
-        "   is not a reason to withhold expertise.\n"
-        "3. STRUCTURE your answer clearly:\n"
-        "   • Coin identity (type, denomination, issuing authority, date range)\n"
-        "   • Physical / iconographic description (obverse, reverse, metal, weight)\n"
-        "   • Historical and numismatic significance (mint city, ruler, dynasty, context)\n"
-        "4. NEVER respond with 'insufficient information' — a senior numismatist always "
-        "   provides the most complete assessment possible from available evidence.\n"
-        "5. Write in precise, professional English suitable for museum documentation "
-        "   (2–4 paragraphs)."
+        "YOUR RESPONSE RULES:\n"
+        "1. WRITE IN NATURAL PROSE. When referencing a Corpus Nummorum record, write "
+        "   naturally: 'CN Type 1015 is a silver drachm from Maroneia...' or "
+        "   'According to the Corpus Nummorum, this coin...' \n"
+        "   CRITICAL: Do NOT use any form of [CONTEXT N], [CN Type XXXX], [Web: ...] "
+        "   or any other bracket notation in your ANSWER. Those are only labels in the "
+        "   DATA you receive — never repeat them in your response.\n"
+        "2. SUPPLEMENT with your expert numismatic knowledge when data is sparse. "
+        "   Mark supplemented facts with 'Historically,' or 'General numismatic "
+        "   knowledge suggests...'. A sparse KB record for a well-known type is NOT "
+        "   a reason to withhold expertise.\n"
+        "3. STRUCTURE your answer:\n"
+        "   • Identity (denomination, issuing authority, date range)\n"
+        "   • Physical description (obverse, reverse, metal, weight)\n"
+        "   • Historical significance (mint, ruler, dynasty, context)\n"
+        "4. NEVER say 'insufficient information' or 'impossible to answer'. Always "
+        "   provide the most complete assessment possible.\n"
+        "5. Write 2–4 paragraphs in precise, professional English."
     )
 
     context_section = ""
@@ -285,8 +335,13 @@ def _run_chat(query: str, n_sources: int, top5_labels: list[str] | None = None) 
         context_section += primary_context + "\n"
     if supplementary_lines:
         context_section += (
-            "=== RELATED COIN TYPES FROM THE CORPUS NUMMORUM ===\n"
+            "=== Related Corpus Nummorum Types ===\n"
             + "\n\n".join(supplementary_lines) + "\n"
+        )
+    if web_context:
+        context_section += (
+            "\n=== Web References (scholarly numismatics resources) ===\n"
+            + web_context + "\n"
         )
 
     user_message = (
@@ -296,7 +351,7 @@ def _run_chat(query: str, n_sources: int, top5_labels: list[str] | None = None) 
         "and your expert knowledge."
     )
 
-    # ── 5. Call LLM (reuse historian's provider chain) ─────────────────────
+    # ── 6. Call LLM (reuse historian's provider chain) ─────────────────────
     from src.agents.historian import _get_llm
     client, model = _get_llm("text")
     provider = model if model else "fallback"

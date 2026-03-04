@@ -1,301 +1,380 @@
-"use client";
+﻿"use client";
 
 /**
- * app/explore/page.tsx — Explore CN Coin Types
- * ===============================================
- * WHAT: A public gallery of all analyses ever run on DeepCoin.
- *       Browsable by anyone — no login required.
+ * app/explore/page.tsx â€” Numismatic Discovery
+ * =============================================
+ * WHAT: A public browser for all 9,541 coin types in the Corpus Nummorum
+ *       knowledge base.  Anyone can search "silver tetradrachm Athens" and
+ *       get real scholarly records with AI chat and external CN links.
  *
- * WHY PUBLIC:
- *   This is the "window display" of the platform. Showing real analyses
- *   (with routes, confidence levels, and coin labels) builds credibility
- *   for new visitors before they sign up.
+ * WHY THIS REPLACES THE OLD COMMUNITY GALLERY:
+ *   The old explore page showed a list of user analyses â€” essentially the
+ *   same data as the history page but stripped of PII. It provided little
+ *   value to anonymous visitors who wanted to *learn* about ancient coins.
  *
- * WHY it now uses /api/explore (not /api/history):
- *   /api/history requires authentication — anonymous users get 401 and
- *   the gallery showed nothing.  /api/explore is intentionally unauthenticated.
- *   It returns only public-safe fields (no user identity, no file paths).
+ *   The KB browser solves a real problem: numismatists, students, and museum
+ *   staff need a fast way to *discover* what the platform knows before they
+ *   submit a coin photo.  Exposing all 9,541 CN types here also surfaces the
+ *   depth of the underlying knowledge base, which builds trust.
  *
- * FEATURES:
- *   - Server-side route filter (historian / validator / investigator)
- *   - Client-side search by coin label
- *   - Pagination (page size 12)
- *   - Each card links to the full analysis (/history/:id)
- *   - Corpus Nummorum external link for each coin type
+ * DATA SOURCE:
+ *   GET /api/kb/types  (no auth required)
+ *   â€” hybrid BM25 + vector search when a query is typed
+ *   â€” paginated identity-chunk browse when no query
  *
  * WHY "use client":
- *   Uses useState for filter state, useQuery for data fetching.
+ *   Uses useQuery (TanStack Query) + useState for search/pagination state.
+ *   Server Component would require route params or server actions for that.
  */
 
-import { useState, useMemo }       from "react";
-import { useQuery }                from "@tanstack/react-query";
-import { motion, AnimatePresence } from "framer-motion";
-import Link                        from "next/link";
-import { ExternalLink, Search, FlaskConical, BookOpen, ShieldCheck, Loader2, Sparkles } from "lucide-react";
-import { explorePublic }           from "@/lib/api";
-import type { ExploreItem }        from "@/types/api";
+import { useState, useRef }               from "react";
+import { useQuery }                        from "@tanstack/react-query";
+import Link                                from "next/link";
+import { Search, ExternalLink, Sparkles, BookOpen, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { browseKb }                        from "@/lib/api";
+import { KbTypeItem }                      from "@/types/api";
 
-/* ── types ────────────────────────────────────────────────────────────────── */
+// â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-type RouteFilter = "all" | "historian" | "validator" | "investigator";
+const PAGE_SIZE = 20;
 
-/* ── helpers ──────────────────────────────────────────────────────────────── */
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const ROUTE_CONFIG: Record<string, { color: string; bg: string; icon: typeof BookOpen; label: string }> = {
-  historian: {
-    color: "#3b82f6", bg: "#3b82f620",
-    icon: BookOpen, label: "Historian",
-  },
-  validator: {
-    color: "#f59e0b", bg: "#f59e0b20",
-    icon: ShieldCheck, label: "Validator",
-  },
-  investigator: {
-    color: "#8b5cf6", bg: "#8b5cf620",
-    icon: FlaskConical, label: "Investigator",
-  },
-};
+/** Colour classes for the material pill. */
+function materialPillClass(material: string): string {
+  const m = material.toLowerCase();
+  if (m.includes("gold") || m.includes("aurum"))       return "bg-yellow-500/15 text-yellow-300 border-yellow-500/30";
+  if (m.includes("silver") || m.includes("argentum"))  return "bg-slate-400/15 text-slate-300 border-slate-400/30";
+  if (m.includes("bronze") || m.includes("aes")
+    || m.includes("copper"))                            return "bg-orange-700/15 text-orange-300 border-orange-700/30";
+  if (m.includes("electrum"))                           return "bg-yellow-700/15 text-yellow-400 border-yellow-700/30";
+  return "bg-white/[0.06] text-[var(--text-secondary)] border-white/10";
+}
 
-function RoutePill({ route }: { route: string }) {
-  const cfg = ROUTE_CONFIG[route];
-  if (!cfg) return null;
-  const Icon = cfg.icon;
+/** Build the "Ask AI" chat URL with the CN type pre-loaded as context. */
+function chatUrl(item: KbTypeItem): string {
+  const label = item.denomination
+    ? `${item.denomination}${item.authority ? " of " + item.authority : ""} (CN ${item.type_id})`
+    : `CN ${item.type_id}`;
+  return `/chat?q=${encodeURIComponent("Tell me about " + label + " â€” " + item.date_range)}`;
+}
+
+// â”€â”€ KbTypeCard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+function KbTypeCard({ item }: { item: KbTypeItem }) {
+  const mat = item.material || "â€”";
   return (
-    <span
-      className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
-      style={{ backgroundColor: cfg.bg, color: cfg.color }}
+    <div
+      className="group relative rounded-xl border transition-all duration-200
+                 hover:border-[var(--accent-primary)]/40 hover:shadow-lg hover:shadow-[var(--accent-primary)]/5"
+      style={{ background: "var(--card-bg, rgba(255,255,255,0.04))", borderColor: "rgba(255,255,255,0.08)" }}
     >
-      <Icon size={9} /> {cfg.label}
-    </span>
-  );
-}
-
-function ConfidenceBadge({ conf }: { conf: number | null | undefined }) {
-  if (conf == null) return null;
-  const pct   = Math.round(conf * 100);
-  const color = pct >= 70 ? "#22c55e" : pct >= 40 ? "#f59e0b" : "#8b5cf6";
-  return (
-    <span className="text-xs font-black tabular-nums" style={{ color }}>
-      {pct}%
-    </span>
-  );
-}
-
-/* ── main component ───────────────────────────────────────────────────────── */
-
-export default function ExplorePage() {
-  const [routeFilter, setRouteFilter] = useState<RouteFilter>("all");
-  const [search,      setSearch]      = useState("");
-  const [page,        setPage]        = useState(1);
-  const PAGE_SIZE = 12;
-
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["explore-public", page, PAGE_SIZE, routeFilter],
-    queryFn:  () => explorePublic(
-      (page - 1) * PAGE_SIZE,
-      PAGE_SIZE,
-      routeFilter !== "all" ? routeFilter : undefined,
-    ),
-    staleTime: 60_000,
-  });
-
-  const filtered = useMemo(() => {
-    let items: ExploreItem[] = data?.items ?? [];
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      items = items.filter(i =>
-        (i.label ?? "").toLowerCase().includes(q) ||
-        (i.id    ?? "").toLowerCase().includes(q),
-      );
-    }
-    return items;
-  }, [data, search]);
-
-  const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 1;
-
-  return (
-    <div className="py-10 max-w-5xl space-y-8">
-
-      <div className="space-y-2">
-        <p className="text-xs font-black uppercase tracking-widest" style={{ color: "var(--brand-gold)" }}>
-          Community Gallery
-        </p>
-        <h1 className="text-3xl font-black" style={{ color: "var(--text-primary)" }}>
-          Explore Analyses
-        </h1>
-        <p className="text-sm max-w-xl" style={{ color: "var(--text-secondary)" }}>
-          Browse all coin analyses run on DeepCoin — no account needed.
-          Each card shows the AI route taken, confidence level, and links to the full report.
-        </p>
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--text-muted)" }} />
-          <input
-            value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1); }}
-            placeholder="Search by coin type or label…"
-            className="w-full pl-8 pr-4 py-2 text-sm rounded-xl outline-none transition-colors"
-            style={{ backgroundColor: "var(--surface-1)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
-          />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {(["all", "historian", "validator", "investigator"] as RouteFilter[]).map(r => {
-            const cfg   = ROUTE_CONFIG[r];
-            const label = r === "all" ? "All routes" : cfg?.label ?? r;
-            const active = routeFilter === r;
-            return (
-              <button
-                key={r}
-                onClick={() => { setRouteFilter(r); setPage(1); }}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
-                style={{
-                  backgroundColor: active ? (cfg?.bg ?? "var(--brand-gold)") : "var(--surface-1)",
-                  color:           active ? (cfg?.color ?? "#0d1520")        : "var(--text-secondary)",
-                  border:          "1px solid var(--border)",
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {data && (
-        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-          {data.total} total analyses · page {page} of {totalPages}
-        </p>
+      {/* CNN badge */}
+      {item.in_training_set && (
+        <span
+          className="absolute top-2.5 right-2.5 rounded-full px-2 py-0.5 text-[10px] font-semibold
+                     tracking-wide uppercase"
+          style={{ background: "rgba(16,185,129,0.12)", color: "#34d399",
+                   border: "1px solid rgba(16,185,129,0.25)" }}
+        >
+          CNN trained
+        </span>
       )}
 
-      {isLoading && (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 size={28} className="animate-spin" style={{ color: "var(--brand-gold)" }} />
-        </div>
-      )}
+      <div className="p-4 pb-3">
+        {/* Type number */}
+        <p className="font-mono text-xs font-bold tracking-widest mb-1"
+           style={{ color: "var(--accent-primary, #6366f1)" }}>
+          CN {item.type_id}
+        </p>
 
-      {isError && (
-        <div className="text-center py-14">
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>Could not load analyses. Try refreshing.</p>
-        </div>
-      )}
+        {/* Denomination + authority */}
+        <h3 className="text-sm font-semibold leading-snug mb-0.5"
+            style={{ color: "var(--text-primary, #f1f5f9)" }}>
+          {item.denomination || "Unknown denomination"}
+          {item.authority && (
+            <span className="font-normal" style={{ color: "var(--text-secondary, #94a3b8)" }}>
+              {" Â· "}{item.authority}
+            </span>
+          )}
+        </h3>
 
-      <AnimatePresence mode="wait">
-        {!isLoading && !isError && (
-          <motion.div
-            key={`${page}-${routeFilter}-${search}`}
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5"
-          >
-            {filtered.map((item, i) => {
-              const cnId   = item.label?.match(/\d+/)?.[0];
-              const cnHref = cnId ? `https://www.corpus-nummorum.eu/types/${cnId}` : null;
-              return (
-                <motion.div
-                  key={item.id}
-                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.03 }}
-                  className="rounded-2xl border overflow-hidden"
-                  style={{ borderColor: "var(--border)", backgroundColor: "var(--surface-1)" }}
-                >
-                  <div className="h-1 w-full" style={{
-                    backgroundColor:
-                      item.route_taken === "historian"    ? "#3b82f6" :
-                      item.route_taken === "validator"    ? "#f59e0b" :
-                      item.route_taken === "investigator" ? "#8b5cf6" : "var(--border)",
-                  }} />
-                  <div className="p-5 space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-bold leading-snug truncate" style={{ color: "var(--text-primary)" }} title={item.label ?? item.id}>
-                        {item.label ?? "Unclassified"}
-                      </p>
-                      {cnHref && (
-                        <a href={cnHref} target="_blank" rel="noopener noreferrer"
-                           className="shrink-0 text-[10px] flex items-center gap-0.5 hover:underline"
-                           style={{ color: "var(--text-muted)" }}>
-                          CN <ExternalLink size={9} />
-                        </a>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between">
-                      {item.route_taken && <RoutePill route={item.route_taken} />}
-                      <ConfidenceBadge conf={item.confidence} />
-                    </div>
-                    {item.created_at && (
-                      <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>
-                        {new Date(item.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
-                      </p>
-                    )}
-                    <Link
-                      href={`/history/${item.id}`}
-                      className="block w-full text-center text-xs font-semibold py-2 rounded-lg transition-colors hover:opacity-80"
-                      style={{ backgroundColor: "var(--surface-2)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
-                    >
-                      View full analysis →
-                    </Link>
-                  </div>
-                </motion.div>
-              );
-            })}
-            {filtered.length === 0 && !isLoading && (
-              <div className="col-span-full text-center py-14">
-                <p className="text-sm" style={{ color: "var(--text-muted)" }}>No analyses match the current filter.</p>
-              </div>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
+        {/* Region + date */}
+        <p className="text-xs leading-relaxed mb-2.5"
+           style={{ color: "var(--text-secondary, #94a3b8)" }}>
+          {[item.region, item.date_range, item.mint].filter(Boolean).join(" Â· ") || "â€”"}
+        </p>
 
-      {totalPages > 1 && (
-        <div className="flex justify-center gap-2">
-          <button disabled={page === 1} onClick={() => setPage(p => p - 1)}
-            className="px-4 py-2 text-xs rounded-lg transition-opacity disabled:opacity-30"
-            style={{ backgroundColor: "var(--surface-1)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
-            ← Previous
-          </button>
-          <span className="flex items-center px-4 text-xs" style={{ color: "var(--text-muted)" }}>
-            {page} / {totalPages}
+        {/* Material pill */}
+        {mat !== "â€”" && (
+          <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium border mb-3 ${materialPillClass(mat)}`}>
+            {mat}
           </span>
-          <button disabled={page === totalPages} onClick={() => setPage(p => p + 1)}
-            className="px-4 py-2 text-xs rounded-lg transition-opacity disabled:opacity-30"
-            style={{ backgroundColor: "var(--surface-1)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
-            Next →
-          </button>
-        </div>
-      )}
+        )}
 
-      {/* AI Chat CTA */}
-      <div className="rounded-2xl border p-6 flex flex-col sm:flex-row items-center gap-5"
-           style={{ borderColor: "rgba(139,92,246,0.3)", backgroundColor: "rgba(139,92,246,0.04)" }}>
-        <Sparkles size={28} style={{ color: "#8b5cf6", flexShrink: 0 }} />
-        <div className="flex-1 space-y-1 text-center sm:text-left">
-          <h2 className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>Ask the DeepCoin AI</h2>
-          <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-            Curious about a dynasty, mint city, or material?  Our AI searches 9,541 Corpus Nummorum
-            coin types and answers in natural language — no account needed.
+        {/* Text snippet */}
+        {item.text_snippet && (
+          <p className="text-[11px] leading-relaxed line-clamp-2"
+             style={{ color: "var(--text-secondary, #94a3b8)", opacity: 0.75 }}>
+            {item.text_snippet}
           </p>
-        </div>
-        <Link href="/chat" className="shrink-0 px-5 py-2.5 rounded-xl font-bold text-xs transition-opacity hover:opacity-80"
-              style={{ backgroundColor: "#8b5cf6", color: "#fff" }}>
-          Try AI Chat →
-        </Link>
+        )}
       </div>
 
-      {/* Sign-up CTA */}
-      <div className="rounded-2xl border p-8 text-center space-y-4"
-           style={{ borderColor: "rgba(212,168,83,0.3)", backgroundColor: "rgba(212,168,83,0.04)" }}>
-        <h2 className="font-bold text-base" style={{ color: "var(--text-primary)" }}>Have a coin to identify?</h2>
-        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-          Upload a photo and get a full historical report — denomination, mint, period, and provenance.
-        </p>
-        <Link href="/login?callbackUrl=/analyse"
-              className="inline-block px-7 py-2.5 rounded-xl font-bold text-sm transition-opacity hover:opacity-80"
-              style={{ backgroundColor: "var(--brand-gold)", color: "#0d1520" }}>
-          Start analysing →
+      {/* Action bar */}
+      <div className="flex gap-2 px-4 pb-4 pt-1">
+        <Link
+          href={chatUrl(item)}
+          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium
+                     transition-all hover:brightness-110 active:scale-95"
+          style={{ background: "rgba(99,102,241,0.15)", color: "#a5b4fc",
+                   border: "1px solid rgba(99,102,241,0.25)" }}
+        >
+          <Sparkles className="w-3 h-3" />
+          Ask AI
         </Link>
+        <a
+          href={`https://www.corpus-nummorum.eu/types/${item.type_id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium
+                     transition-all hover:brightness-110 active:scale-95"
+          style={{ background: "rgba(255,255,255,0.04)", color: "var(--text-secondary, #94a3b8)",
+                   border: "1px solid rgba(255,255,255,0.10)" }}
+        >
+          <ExternalLink className="w-3 h-3" />
+          View Record
+        </a>
       </div>
     </div>
   );
 }
+
+// â”€â”€ Main page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+export default function ExplorePage() {
+  const [query, setQuery]              = useState("");
+  const [debouncedQuery, setDebounced] = useState("");
+  const [page, setPage]                = useState(0);
+  const [cnnOnly, setCnnOnly]          = useState(false);
+  const debounceRef                    = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleSearch(value: string) {
+    setQuery(value);
+    setPage(0);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebounced(value), 350);
+  }
+
+  function clearSearch() {
+    setQuery("");
+    setDebounced("");
+    setPage(0);
+  }
+
+  const skip = page * PAGE_SIZE;
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["kb-types", debouncedQuery, skip, cnnOnly],
+    queryFn:  () => browseKb(debouncedQuery, skip, PAGE_SIZE, cnnOnly),
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
+  });
+
+  const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0;
+
+  return (
+    <main className="min-h-screen" style={{ background: "var(--bg-primary, #0f172a)" }}>
+
+      {/* â”€â”€ Hero â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <section className="px-4 pt-16 pb-10 text-center">
+        <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium mb-5"
+             style={{ background: "rgba(99,102,241,0.12)", color: "#a5b4fc",
+                      border: "1px solid rgba(99,102,241,0.20)" }}>
+          <BookOpen className="w-3.5 h-3.5" />
+          Corpus Nummorum Scholarly Database
+        </div>
+
+        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-3"
+            style={{ color: "var(--text-primary, #f1f5f9)" }}>
+          Numismatic Discovery
+        </h1>
+
+        <p className="text-base max-w-xl mx-auto mb-2"
+           style={{ color: "var(--text-secondary, #94a3b8)" }}>
+          Browse{" "}
+          <span className="font-semibold" style={{ color: "var(--accent-primary, #6366f1)" }}>
+            9,541 ancient coin types
+          </span>{" "}
+          from the Corpus Nummorum â€” the scholarly reference behind every DeepCoin analysis.
+        </p>
+
+        {data && !isLoading && (
+          <p className="text-xs mb-8" style={{ color: "var(--text-secondary, #94a3b8)", opacity: 0.6 }}>
+            {data.total.toLocaleString()} types{" "}
+            {debouncedQuery ? `match "${debouncedQuery}"` : "in database"}
+            {data.search_used ? " Â· hybrid keyword + semantic search" : " Â· browsing all types"}
+          </p>
+        )}
+        {!data && !isLoading && <div className="mb-8" />}
+
+        {/* â”€â”€ Search bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        <div className="relative max-w-lg mx-auto mb-6">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none"
+                  style={{ color: "var(--text-secondary, #94a3b8)" }} />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => handleSearch(e.target.value)}
+            placeholder="Search denominations, dynasties, regions, legendsâ€¦"
+            className="w-full rounded-xl py-3 pl-10 pr-10 text-sm outline-none transition-all
+                       focus:ring-2 focus:ring-[var(--accent-primary)]/40"
+            style={{
+              background: "rgba(255,255,255,0.05)",
+              border:     "1px solid rgba(255,255,255,0.12)",
+              color:      "var(--text-primary, #f1f5f9)",
+            }}
+          />
+          {query && (
+            <button
+              onClick={clearSearch}
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-0.5
+                         transition-colors hover:bg-white/10"
+              style={{ color: "var(--text-secondary, #94a3b8)" }}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {/* â”€â”€ Toggle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        <div className="flex items-center justify-center gap-3">
+          <button
+            onClick={() => { setCnnOnly(false); setPage(0); }}
+            className={`rounded-full px-4 py-1.5 text-xs font-medium transition-all border
+                        ${!cnnOnly
+                          ? "border-[var(--accent-primary)]/50 text-[var(--accent-primary)]"
+                          : "border-white/10 text-[var(--text-secondary)] hover:border-white/20"}`}
+            style={{ background: !cnnOnly ? "rgba(99,102,241,0.12)" : "rgba(255,255,255,0.03)" }}
+          >
+            All 9,541 types
+          </button>
+          <button
+            onClick={() => { setCnnOnly(true); setPage(0); }}
+            className={`rounded-full px-4 py-1.5 text-xs font-medium transition-all border
+                        ${cnnOnly
+                          ? "border-emerald-500/50 text-emerald-400"
+                          : "border-white/10 text-[var(--text-secondary)] hover:border-white/20"}`}
+            style={{ background: cnnOnly ? "rgba(16,185,129,0.10)" : "rgba(255,255,255,0.03)" }}
+          >
+            CNN-trained only (438)
+          </button>
+        </div>
+      </section>
+
+      {/* â”€â”€ Results â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <section className="max-w-6xl mx-auto px-4 pb-16">
+
+        {/* Loading skeleton */}
+        {isLoading && !data && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {Array.from({ length: PAGE_SIZE }).map((_, i) => (
+              <div key={i} className="rounded-xl h-52 animate-pulse"
+                   style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }} />
+            ))}
+          </div>
+        )}
+
+        {/* Error */}
+        {isError && (
+          <div className="rounded-xl p-8 text-center"
+               style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.15)" }}>
+            <p className="text-sm" style={{ color: "#f87171" }}>
+              Could not load coin types. Make sure the backend is running.
+            </p>
+          </div>
+        )}
+
+        {/* Empty */}
+        {data && data.items.length === 0 && !isLoading && (
+          <div className="text-center py-20">
+            <p className="text-4xl mb-4">ðŸª™</p>
+            <p className="text-base font-semibold mb-2" style={{ color: "var(--text-primary)" }}>
+              No types match &ldquo;{debouncedQuery}&rdquo;
+            </p>
+            <p className="text-sm mb-5" style={{ color: "var(--text-secondary)" }}>
+              Try a denomination (denarius, tetradrachm), a region (Thrace, Lydia), or a dynasty (Ptolemaic, Seleucid).
+            </p>
+            <button
+              onClick={clearSearch}
+              className="rounded-full px-4 py-2 text-sm font-medium transition-all hover:brightness-110"
+              style={{ background: "rgba(99,102,241,0.15)", color: "#a5b4fc",
+                       border: "1px solid rgba(99,102,241,0.25)" }}
+            >
+              Clear search
+            </button>
+          </div>
+        )}
+
+        {/* Cards + pagination */}
+        {data && data.items.length > 0 && (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-8">
+              {data.items.map((item) => (
+                <KbTypeCard key={item.type_id} item={item} />
+              ))}
+            </div>
+
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium
+                             transition-all disabled:opacity-30 hover:enabled:brightness-110"
+                  style={{ background: "rgba(255,255,255,0.05)", color: "var(--text-secondary)",
+                           border: "1px solid rgba(255,255,255,0.10)" }}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Previous
+                </button>
+                <span className="text-sm tabular-nums" style={{ color: "var(--text-secondary)" }}>
+                  Page {page + 1} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
+                  className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium
+                             transition-all disabled:opacity-30 hover:enabled:brightness-110"
+                  style={{ background: "rgba(255,255,255,0.05)", color: "var(--text-secondary)",
+                           border: "1px solid rgba(255,255,255,0.10)" }}
+                >
+                  Next
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
+      {/* â”€â”€ Footer CTA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <section className="border-t px-4 py-10 text-center"
+               style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+        <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
+          Have a coin photo? Run a full AI analysis â€” CNN classification + historical research + PDF report.
+        </p>
+        <Link
+          href="/analyse"
+          className="inline-flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-medium
+                     transition-all hover:brightness-110 active:scale-95"
+          style={{ background: "var(--accent-primary, #6366f1)", color: "#fff" }}
+        >
+          <Sparkles className="w-4 h-4" />
+          Analyse a coin
+        </Link>
+      </section>
+    </main>
+  );
+}
+
