@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: March 4, 2026 — JWT silent refresh (proxy route + Axios interceptor + NextAuth expiry tracking), confirm-subscription cleanup (EmailCapture simplified success state), Docker CVE fix (Python 3.12-slim + Node 22-alpine). Commit: pending. Layer 7 (Tests + CI/CD) is next.
+# Last updated: March 4, 2026 — JWT silent refresh (proxy route + Axios interceptor + NextAuth expiry tracking), confirm-subscription cleanup (EmailCapture simplified success state), Docker CVE fix (Python 3.12-slim + Node 22-alpine). Commit: 40118e5. Layer 7 (Tests + CI/CD) is next.
 
 ---
 
@@ -1269,7 +1269,7 @@ pytest (9.0.2)      # unit testing (34 tests across 3 files)
 | `932a67f` | feat: /about + /docs pages (Server Components), /explore gallery (Client Component), admin subscriber panel, Next.js route handler proxy for X-API-Key |
 | `06116a5` | feat: enterprise chat redesign v2, AI Chat CTA in AnalysisPanel, TutorialModal, admin access guide |
 | `584fe2c` | fix: prompt injection guard (ChatMessage Literal roles), chat SSE streaming (POST /api/chat/stream + chatQueryStream + streaming cursor), explore date_range fix, stale comment cleanup. Layer 7 (Tests + CI/CD) is next. |
-| pending   | feat: JWT silent refresh (proxy route + Axios interceptor + SessionSync update() bridge + NextAuth expiry tracking), confirm-subscription UX cleanup (remove broken confirm link), Docker CVE fix (Python 3.12-slim + Node 22-alpine) ← LATEST |
+| `40118e5` | feat: JWT silent refresh (proxy route + Axios interceptor + SessionSync update() bridge + NextAuth expiry tracking), confirm-subscription UX cleanup (remove broken confirm link), Docker CVE fix (Python 3.12-slim + Node 22-alpine) ← LATEST |
 
 ---
 
