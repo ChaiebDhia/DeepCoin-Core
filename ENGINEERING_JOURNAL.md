@@ -29867,3 +29867,1280 @@ python scripts/test_pipeline.py
 *Section 119: End-to-end request trace — 19 steps from browser click to PDF download, latency budget.*
 *Section 120: 44 bugs in 10 categories — pattern taxonomy and prevention rules.*
 *Section 121: Complete runbook — prerequisites, setup, Docker, testing, troubleshooting.*
+
+
+
+---
+
+## Section 122 â€” Bug 45: Admin "All Analyses" Returns Empty (Missing `Path` Import)
+
+**Date:** March 4, 2026  
+**Commit:** `0aee7b9`  
+**File affected:** `src/api/routes/admin.py`  
+**Severity:** High â€” a core admin feature was silently broken for every user
+
+---
+
+### 122.1 â€” What the Bug Looked Like
+
+When an admin or curator opened the **Analyses** tab on `/admin`, the UI displayed:
+
+```
+All Analyses â€” No analyses match your filters.
+```
+
+This happened *even when dozens of users had submitted coin analyses*. Filtering by route or typing a search term made no difference. The table was always empty.
+
+From the user's perspective it looked like a data problem â€” maybe analyses were not being saved. But the History page (`/history`) showed analyses correctly for the logged-in user. The data existed; something in the admin path was broken.
+
+---
+
+### 122.2 â€” Root Cause: `NameError` from a Missing Import
+
+The admin analyses endpoint (`GET /api/admin/analyses`) contained this logic inside `list_all_analyses()`:
+
+```python
+for row in rows:
+    pdf_url = None
+    if row.pdf_path:
+        filename = Path(row.pdf_path).name   # <- THIS LINE
+        pdf_url  = f"/api/reports/{filename}"
+```
+
+`Path` is Python's `pathlib.Path` class. It converts a raw filesystem string like `C:\Users\Administrator\deepcoin\reports\report_abc123.pdf` into just the filename `report_abc123.pdf`.
+
+The problem: **`from pathlib import Path` was missing at the top of `admin.py`**.
+
+When FastAPI executes the endpoint, Python hits `Path(row.pdf_path)` and raises:
+
+```
+NameError: name 'Path' is not defined
+```
+
+This is an unhandled exception. FastAPI catches it and returns:
+
+```json
+HTTP 500 Internal Server Error
+{"detail": "Internal Server Error"}
+```
+
+---
+
+### 122.3 â€” Why the Frontend Showed "Empty" Instead of an Error
+
+The React Query hook in `admin/page.tsx`:
+
+```typescript
+const { data, isLoading } = useQuery({
+  queryKey: ["admin", "analyses", skip, LIMIT, dSearch, dRoute],
+  queryFn:  () => getAdminAnalyses(skip, LIMIT, dSearch || undefined, dRoute || undefined),
+  staleTime: 30_000,
+  enabled:   authed,
+});
+
+const items = data?.items ?? [];   // fallback to empty array on undefined
+const total = data?.total ?? 0;
+```
+
+When `getAdminAnalyses()` receives HTTP 500, Axios throws an error. React Query catches it and sets `data = undefined`. The `?? []` fallback produces an empty array. The table renders zero rows with the empty-state message.
+
+There is no explicit `isError` branch visible in the Analyses tab â€” the empty-state message is displayed for both "no data" and "fetch error". This masked the bug from immediate diagnosis.
+
+---
+
+### 122.4 â€” The Fix
+
+One line added to the imports block at the top of `src/api/routes/admin.py`:
+
+```python
+from pathlib import Path          # <- added
+from fastapi  import APIRouter, Depends, HTTPException, Query
+```
+
+After this, `Path(row.pdf_path).name` resolves correctly and the endpoint returns the full paginated list.
+
+---
+
+### 122.5 â€” Why This Happened
+
+The `admin.py` file was built in layers across multiple sessions. The initial version did not include PDF URL construction in the response. A later commit added `Path(row.pdf_path).name` inline without scrolling back to the imports block to add the import.
+
+Python does not fail at **import time** when a name is used inside a function body â€” it only fails at **call time**. The server started and ran fine; the bug manifested only when the endpoint was called.
+
+**Prevention rule:** A static analysis tool like `flake8` or `ruff` flags `F821: undefined name 'Path'` before runtime. The existing `pyproject.toml` configures flake8; running `make lint` would have caught this instantly.
+
+---
+
+### 122.6 â€” The Call Chain
+
+```
+Browser: admin/page.tsx  AnalysesTab
+  â”‚  useQuery â†’ getAdminAnalyses()
+  â”‚
+  â–¼
+GET /api/admin/analyses   (proxied Next.js â†’ FastAPI)
+  â”‚
+  â”œâ”€ BEFORE FIX: Path(row.pdf_path).name â†’ NameError â†’ HTTP 500 â†’ empty table
+  â””â”€ AFTER FIX:  Path(row.pdf_path).name â†’ "report_abc.pdf" â†’ /api/reports/report_abc.pdf
+                 full JSON list returned â†’ table renders N rows
+```
+
+---
+
+## Section 123 â€” Chat State Persistence: Module-Level Cache Architecture
+
+**Date:** March 4, 2026  
+**Commit:** `0aee7b9`  
+**File affected:** `frontend/app/chat/page.tsx`
+
+---
+
+### 123.1 â€” The Problem: React State Is Destroyed on Navigation
+
+Every React component owns local state declared with `useState`. When the user navigates from `/chat` to `/history` and back, React **unmounts** the `ChatPageInner` component (destroying all state) and then **mounts a fresh one** (resetting all state to initial values). The conversation disappeared.
+
+This is expected React behaviour â€” local state is scoped to the component lifecycle for simplicity and memory safety. But for a chat interface, losing the conversation on navigation is a severe UX regression.
+
+---
+
+### 123.2 â€” Why Module-Level Cache Was Chosen
+
+Three options were evaluated:
+
+| Option | How it works | Verdict |
+|---|---|---|
+| **Zustand store** | Add chat state to the global classify store | Rejected â€” the classify store calls `reset()` on `CoinUploader` mount, which would wipe chat state. Coupling two unrelated features through shared state creates hard-to-debug interactions. |
+| **URL query params** | Encode messages in the URL | Rejected â€” a 10-message conversation produces a URL thousands of characters long, breaking deep-linking and browser history. |
+| **Module-level variable** | Plain JS object declared outside any function | Accepted â€” zero dependencies, zero re-renders, zero coupling, automatic cleanup on tab close. |
+
+A module-level variable in a `.tsx` file lives at JavaScript module scope. It is created once when the module is first imported and persists for the entire browser tab lifetime. It survives React component unmount/remount cycles but is reset when the tab closes or the page is hard-refreshed (F5). This is exactly the desired behaviour for in-session chat persistence.
+
+---
+
+### 123.3 â€” The Cache Declaration
+
+```typescript
+// frontend/app/chat/page.tsx
+// Declared OUTSIDE ChatPageInner â€” at module scope.
+// Survives component unmount/remount. Reset on tab close / hard refresh.
+
+const _chatCache: {
+  messages:         Message[];         // the full visible conversation
+  currentSessionId: string | null;     // which DB session is active
+  input:            string;            // the text currently in the input box
+} = {
+  messages:         [],
+  currentSessionId: null,
+  input:            "",
+};
+```
+
+**Why a single typed object and not three separate `let` declarations?**
+
+One named object makes the grouping explicit. It also enables atomic "new chat" reset:
+
+```typescript
+// handleNewChat â€” reset everything at once:
+_chatCache.messages         = [];
+_chatCache.currentSessionId = null;
+_chatCache.input            = "";
+```
+
+---
+
+### 123.4 â€” State Initialization from Cache
+
+```typescript
+// BEFORE (lost on navigation):
+const [messages, setMessages] = useState<Message[]>([]);
+const [input,    setInput]    = useState("");
+const currentSessionId        = useRef<string | null>(null);
+
+// AFTER (restores on remount):
+const [messages, setMessages] = useState<Message[]>(_chatCache.messages);
+const [input,    setInput]    = useState(_chatCache.input);
+const currentSessionId        = useRef<string | null>(_chatCache.currentSessionId);
+```
+
+**First mount:** `_chatCache` holds defaults (`[]`, `null`, `""`). Behaviour identical to before.  
+**Subsequent mounts after navigation:** `_chatCache` holds the previous conversation. State is restored immediately â€” no API call, no flash of empty content.
+
+---
+
+### 123.5 â€” Write-Through Sync Effects
+
+The cache must always reflect the latest state values. This is done with `useEffect` hooks that fire after every relevant state change:
+
+```typescript
+// messagesRef: gives handleSubmit non-stale access without changing its dep array
+const messagesRef = useRef<Message[]>([]);
+useEffect(() => { messagesRef.current = messages; }, [messages]);
+
+// Cache sync: every state change writes through to the module-level cache
+useEffect(() => { _chatCache.messages = messages; }, [messages]);
+useEffect(() => { _chatCache.input    = input;    }, [input]);
+```
+
+**Why `useEffect` instead of writing to the cache directly in setter calls?**
+
+React state setters (`setMessages`, `setInput`) are asynchronous â€” the new value is not reflected until the next render. If you call `setMessages(newMessages)` and simultaneously write `_chatCache.messages = newMessages`, you are correctly writing the new value. However, using `useEffect` is the idiomatic React pattern because it guarantees the cache is always synchronized with what is actually rendered, regardless of state batching or Strict Mode double-invocation.
+
+---
+
+### 123.6 â€” The `currentSessionId` Ref Sync
+
+`useRef` values live in `.current` and are not tracked by React or by `useEffect`. Every place in the code that mutates `currentSessionId.current` must also manually update `_chatCache.currentSessionId`:
+
+```typescript
+// In handleSelectSession (user clicks a session in the sidebar):
+currentSessionId.current    = id;
+_chatCache.currentSessionId = id;
+
+// In handleDeleteSession:
+currentSessionId.current    = null;
+_chatCache.currentSessionId = null;
+
+// In handleNewChat:
+currentSessionId.current    = null;
+_chatCache.currentSessionId = null;
+_chatCache.messages         = [];    // also reset visible messages
+_chatCache.input            = "";    // also reset draft input
+
+// In handleSubmit after a new session is created in the database:
+currentSessionId.current    = created.id;
+_chatCache.currentSessionId = created.id;
+```
+
+This pattern of "always write the ref and the cache together" is enforced by convention rather than a type system. Every mutation site was updated in the same commit.
+
+---
+
+### 123.7 â€” The `messagesRef` Pattern for Stale Closures
+
+`handleSubmit` is wrapped in `useCallback` with dep array `[loading, isAuthed]`. This means the callback is created once and reused â€” it has a "stale closure" over `messages`. If it reads `messages` directly, it always sees the value from when the callback was first created (empty array), not the current value.
+
+The solution: a ref that mirrors the latest messages value:
+
+```typescript
+const messagesRef = useRef<Message[]>([]);
+useEffect(() => { messagesRef.current = messages; }, [messages]);
+```
+
+Inside `handleSubmit`, read `messagesRef.current` instead of `messages`:
+
+```typescript
+const priorHistory = messagesRef.current   // always current
+  .slice(-6)
+  .map(m => ({ role: m.role, content: m.content }));
+```
+
+This is the standard React pattern for accessing latest state values inside stale callbacks. The ref is always up-to-date because refs are mutable objects and the `useEffect` updates them synchronously after every render.
+
+---
+
+### 123.8 â€” Complete Navigation Lifecycle
+
+```
+Browser tab opens (first time)
+  ChatPageInner mounts
+    useState([])   â† _chatCache.messages is []
+    useRef(null)   â† _chatCache.currentSessionId is null
+
+User types, submits messages
+  setMessages â†’ useEffect â†’ _chatCache.messages = [msg1, msg2, ...]
+  setInput    â†’ useEffect â†’ _chatCache.input    = ""
+  handleSubmit session created â†’ _chatCache.currentSessionId = "abc-123"
+
+User navigates to /history
+  React unmounts ChatPageInner
+  All useState values garbage-collected
+  _chatCache still holds: messages=[msg1,msg2,...], currentSessionId="abc-123"
+
+User navigates back to /chat
+  React mounts fresh ChatPageInner
+  useState(_chatCache.messages)         â†’ [msg1, msg2, ...] RESTORED
+  useRef(_chatCache.currentSessionId)   â†’ "abc-123"         RESTORED
+  User sees full conversation instantly
+
+User presses F5 (hard refresh)
+  Browser destroys JavaScript module scope
+  _chatCache reset to { messages:[], currentSessionId:null, input:"" }
+  Fresh state â€” correct behaviour
+```
+
+---
+
+## Section 124 â€” Conversation Memory: End-to-End Multi-Turn AI Chat
+
+**Date:** March 4, 2026  
+**Commit:** `0aee7b9`  
+**Files affected:** `src/api/routes/chat.py`, `frontend/lib/api.ts`, `frontend/app/chat/page.tsx`
+
+---
+
+### 124.1 â€” The Problem: Every Request Was a Stateless Single-Turn
+
+Before this fix, each chat submission sent only:
+
+```json
+{
+  "query": "How heavy was it?",
+  "n_sources": 5,
+  "top5_labels": []
+}
+```
+
+The backend built a prompt containing only the current question and RAG context. The LLM saw no history. A follow-up question like "How heavy was it?" (referring to a previously discussed coin) was meaningless to the LLM because it had no context for "it".
+
+---
+
+### 124.2 â€” How Multi-Turn Memory Works in LLM APIs
+
+The OpenAI-compatible chat completions API (used by GitHub Models Gemini, Google AI Studio, and Ollama) accepts a `messages` array:
+
+```json
+[
+  { "role": "system",    "content": "You are a numismatic expert..." },
+  { "role": "user",      "content": "What is a denarius?" },
+  { "role": "assistant", "content": "A denarius is a silver Roman coin weighing ~3.9g..." },
+  { "role": "user",      "content": "How heavy was it?" }
+]
+```
+
+The LLM processes all messages as a single context window. The word "it" in the final message resolves to "denarius" because the prior exchange is present. This is the standard pattern for giving LLMs memory of a conversation.
+
+---
+
+### 124.3 â€” Backend Change: `ChatRequest` Model
+
+```python
+# src/api/routes/chat.py
+
+class ChatRequest(BaseModel):
+    """
+    Pydantic model for POST /api/chat request body.
+    FastAPI validates the JSON body against this schema before calling the endpoint.
+    An invalid or missing required field returns HTTP 422 Unprocessable Entity.
+
+    Fields:
+        query              - the user's current question (required, no default)
+        n_sources          - number of KB chunks to retrieve via RAG (default 5)
+        top5_labels        - CN type labels from an analysis result, injected
+                             into the RAG query for context pre-loading (default [])
+        conversation_history - list of prior turns. Each dict must have keys
+                             "role" ("user" or "assistant") and "content" (string).
+                             Default [] = backward compatible â€” no history sent.
+    """
+    query:                str
+    n_sources:            int                    = 5
+    top5_labels:          list[str]              = []
+    conversation_history: list[dict[str, str]]   = []   # NEW
+```
+
+**Why `list[dict[str, str]]` and not a Pydantic sub-model?**
+
+The OpenAI chat messages format is `{"role": "user", "content": "..."}` â€” a simple two-key dict. Creating a Pydantic `ChatMessage` class for this would add boilerplate without benefit: the LLM call already expects the raw dict format, and Pydantic would need to serialize it back anyway. The plain dict type is idiomatic for this pattern.
+
+**Default `[]`:** Clients that do not send `conversation_history` still work correctly â€” the field defaults to an empty list and `_run_chat` receives no prior turns.
+
+---
+
+### 124.4 â€” Backend Change: `_run_chat()` Function
+
+```python
+def _run_chat(
+    query:                str,
+    sources:              list[dict],
+    provider_info:        dict,
+    conversation_history: list[dict[str, str]] = (),
+) -> tuple[str, list[dict], str]:
+    """
+    Synchronous LLM call, wrapped in asyncio.to_thread() by the async endpoint.
+
+    Builds the messages array as:
+        [system_prompt]
+        + prior_turns[-6:]         <- last 6 messages = 3 full exchanges
+        + [current_user_message]   <- the question being asked right now
+
+    WHY cap at 6 prior turns?
+      - gemma3:4b (Ollama) has an 8,192 token context window
+      - The system prompt + RAG context already uses ~800 tokens
+      - 6 turns of average chat history ~ 1,200 tokens
+      - Total: ~2,000 tokens â€” well within the 8k window
+      - Gemini 2.5 Flash supports 1M tokens so the cap is conservative there,
+        but it prevents any model from being overwhelmed
+      - 3 prior exchanges is sufficient for pronoun resolution and follow-up
+        questions â€” the most common multi-turn patterns
+    """
+    ...
+    prior_turns = list(conversation_history)[-6:]   # cap to last 6
+
+    messages_for_llm = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        *prior_turns,                                # inject history between system and current
+        {"role": "user",   "content": full_prompt},  # current question always last
+    ]
+
+    response = client.chat.completions.create(
+        model    = provider_info["model"],
+        messages = messages_for_llm,
+        temperature = 0.3,
+        max_tokens  = 1200,
+    )
+```
+
+**Why prior turns go between system and current user message?**
+
+The OpenAI API specification requires:
+1. System message first (sets behaviour and constraints)
+2. Alternating user/assistant turns (the conversation history)
+3. User message last (the question to answer right now)
+
+Placing history after the current message would violate the alternating pattern and could confuse some models.
+
+---
+
+### 124.5 â€” Backend Change: Endpoint Passes History
+
+```python
+@router.post("")
+async def chat(body: ChatRequest, ...):
+    ...
+    answer, sources_used, provider_used = await asyncio.to_thread(
+        _run_chat,
+        augmented_query,
+        sources,
+        provider_info,
+        body.conversation_history,    # NEW: passed as 4th argument
+    )
+```
+
+`asyncio.to_thread` is needed because `_run_chat` makes a synchronous HTTP call to the LLM API. FastAPI is async-native; a blocking synchronous call inside an async endpoint would block the entire event loop, preventing all other requests from being processed. `to_thread` runs the synchronous function in a separate thread, keeping the event loop free.
+
+---
+
+### 124.6 â€” Frontend: `chatQuery()` Updated Signature
+
+```typescript
+// frontend/lib/api.ts
+
+export async function chatQuery(
+  query:               string,
+  nSources             = 5,
+  top5Labels:          string[]                              = [],
+  conversationHistory: Array<{ role: string; content: string }> = [],
+): Promise<ChatResponse> {
+  const { data } = await classifyApiClient.post<ChatResponse>("/api/chat", {
+    query,
+    n_sources:            nSources,
+    top5_labels:          top5Labels,
+    conversation_history: conversationHistory,   // NEW field in POST body
+  });
+  return data;
+}
+```
+
+**Why `classifyApiClient` (direct to FastAPI) and not `apiClient` (proxied)?**
+
+`apiClient` routes through the Next.js dev server proxy. The proxy has an implicit timeout of approximately 30 seconds. A complex RAG retrieval + Ollama LLM call can take 40â€“120 seconds depending on the model and context length. `classifyApiClient` connects directly to `http://127.0.0.1:8000` with a custom 180-second timeout, bypassing the proxy entirely.
+
+---
+
+### 124.7 â€” Frontend: `handleSubmit` Captures History
+
+```typescript
+const handleSubmit = useCallback(async (q: string) => {
+  if (!q.trim() || loading || !isAuthed) return;
+
+  // Capture history BEFORE appending the new user message.
+  // messagesRef.current is always up-to-date (see Section 123.7).
+  // slice(-6): take only the last 6 messages (= 3 prior exchanges).
+  const priorHistory = messagesRef.current
+    .slice(-6)
+    .map(m => ({ role: m.role, content: m.content }));
+
+  // Optimistically append the new user message to the UI
+  const userMsg: Message = { role: "user", content: q, timestamp: new Date().toISOString() };
+  setMessages(prev => [...prev, userMsg]);
+  setInput("");
+
+  // ... session creation / selection logic omitted for brevity ...
+
+  // Call backend with history attached
+  const res = await chatQuery(q, 5, top5Labels, priorHistory);
+
+  // Append the AI response
+  const aiMsg: Message = {
+    role:      "assistant",
+    content:   res.answer,
+    timestamp: new Date().toISOString(),
+    sources:   res.sources,
+    provider:  res.provider,
+  };
+  setMessages(prev => [...prev, aiMsg]);
+
+}, [loading, isAuthed]);
+```
+
+**Why capture `priorHistory` BEFORE appending `userMsg`?**
+
+`priorHistory` represents the conversation *so far*, not including the current question. The current question is sent separately as the `query` field. If `priorHistory` included the current question, the LLM would see it twice: once in `conversation_history` and once in `query`. Double-sending causes confusion and wastes context window tokens.
+
+The capture happens before `setMessages(prev => [...prev, userMsg])` precisely to exclude the new message from the history snapshot.
+
+---
+
+### 124.8 â€” Complete Multi-Turn Example Trace
+
+```
+State before submission:
+  messages: [
+    { role: "user",      content: "What is a denarius?" },
+    { role: "assistant", content: "A denarius is a silver Roman coin..." },
+  ]
+
+User types: "How heavy was it?"
+
+handleSubmit("How heavy was it?")
+  priorHistory = [
+    { role: "user",      content: "What is a denarius?"              },
+    { role: "assistant", content: "A denarius is a silver Roman coin..." },
+  ]  // captured BEFORE appending userMsg
+
+  setMessages([...messages, { role: "user", content: "How heavy was it?" }])
+  // UI now shows 3 messages
+
+POST /api/chat  {
+  query: "How heavy was it?",
+  conversation_history: [
+    { role: "user",      content: "What is a denarius?" },
+    { role: "assistant", content: "A denarius is a silver Roman coin..." }
+  ]
+}
+
+_run_chat() builds LLM messages = [
+  { role: "system",    content: "[numismatic expert + RAG context]" },
+  { role: "user",      content: "What is a denarius?"              },  <- history
+  { role: "assistant", content: "A denarius is a silver Roman coin..." }, <- history
+  { role: "user",      content: "How heavy was it?"                },  <- current
+]
+
+LLM resolves "it" = "denarius" from prior assistant turn
+LLM response: "The standard denarius weighed approximately 3.9 grams..."
+
+setMessages([...messages, { role: "assistant", content: "The standard denarius..." }])
+// UI now shows 4 messages â€” full coherent conversation
+```
+
+---
+
+## Section 125 â€” Admin Users CRUD: Complete Technical Reference
+
+**Date:** March 4, 2026  
+**Commit:** `0aee7b9`  
+**Files affected:** `src/api/routes/admin.py`, `frontend/app/admin/page.tsx`, `frontend/lib/api.ts`, `frontend/types/api.ts`
+
+---
+
+### 125.1 â€” Why User Management in the Admin Dashboard
+
+DeepCoin uses Role-Based Access Control with three roles:
+
+| Role | Privilege level | What they can do |
+|---|---|---|
+| `admin` | Highest | Full system access including user management |
+| `curator` | Elevated | Review analyses, corrections, subscribers â€” no user management |
+| `analyst` | Standard | Submit analyses, view own history |
+
+Before this feature, changing a user's role or suspending an account required running a raw SQL `UPDATE` command directly against the PostgreSQL database. That is unacceptable in production because it requires server shell access, risks SQL syntax errors with destructive consequences, and leaves no audit trail. The Users tab provides a safe, role-guarded, logged UI layer over the same database operations.
+
+---
+
+### 125.2 â€” Four New REST Endpoints in `admin.py`
+
+#### GET /api/admin/users â€” List Users (Paginated + Searchable)
+
+```python
+@router.get("/users", response_model=dict)
+async def list_users(
+    skip:   int          = Query(0, ge=0),
+    limit:  int          = Query(20, ge=1, le=100),
+    search: str          = Query("", max_length=200),
+    db:     AsyncSession = Depends(get_db),
+    token:  dict         = Depends(_require_privileged),
+):
+```
+
+**Access: admin OR curator.** Curators need to identify which user submitted an analysis for follow-up review. They can see the list but cannot modify anything.
+
+**Query construction:**
+
+```python
+stmt = select(User)
+if search.strip():
+    like = f"%{search.strip()}%"
+    stmt = stmt.where(
+        or_(User.email.ilike(like), User.display_name.ilike(like))
+    )
+
+# Two-query pattern: count first, then fetch page
+stmt_count = select(func.count()).select_from(stmt.subquery())
+total      = (await db.execute(stmt_count)).scalar_one()
+rows       = (await db.execute(
+    stmt.order_by(User.created_at.desc()).offset(skip).limit(limit)
+)).scalars().all()
+```
+
+`ilike` = case-insensitive LIKE. `or_()` = SQL OR. This returns all users whose email OR display name contains the search string, case-insensitively.
+
+**Why two queries (count + page) instead of one?**
+
+A single `SELECT * FROM users LIMIT 20` cannot tell the frontend how many total pages exist. A second `SELECT COUNT(*)` on the same filtered subquery gives `total`, from which `pages = ceil(total / limit)` is computed. This two-query pattern is used consistently across all admin endpoints and the history API.
+
+**Response shape per user (key fields):**
+
+```python
+{
+    "id":             str(u.id),                # UUID stringified
+    "email":          u.email,
+    "display_name":   u.display_name,           # nullable
+    "role":           u.role,
+    "status":         u.status,
+    "created_at":     u.created_at.isoformat(),
+    "last_login_at":  u.last_login_at.isoformat() if u.last_login_at else None,
+    "analyses_count": <subquery: SELECT COUNT(*) FROM analyses WHERE user_id = u.id>,
+}
+```
+
+`analyses_count` uses a dedicated subquery per user rather than a JOIN. A JOIN would multiply rows and complicate pagination bookkeeping. At 20 users per page, 20 correlated subqueries is negligible overhead.
+
+---
+
+#### PATCH /api/admin/users/{user_id}/role â€” Change Role
+
+```python
+@router.patch("/users/{user_id}/role")
+async def update_user_role(
+    user_id: str,
+    body:    dict,
+    token:   dict         = Depends(_require_admin),   # admin-ONLY
+    db:      AsyncSession = Depends(get_db),
+):
+    # Self-protection guard
+    if token["sub"] == user_id:
+        raise HTTPException(403, "Cannot change your own role")
+
+    new_role = body.get("role")
+    if new_role not in ("admin", "curator", "analyst"):
+        raise HTTPException(422, "Invalid role value")
+
+    user = await db.get(User, uuid.UUID(user_id))
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    user.role = new_role
+    await db.commit()
+    return {"ok": True}
+```
+
+**Why admin-only and not curator?**
+
+Role changes control system access. Allowing curators to promote themselves to admin would be a privilege escalation vulnerability. The principle of least privilege requires the most sensitive operations to require the highest role.
+
+**The self-demotion guard:**
+
+If the only admin demotes themselves to analyst, the system has no admin and is permanently locked â€” no one can access admin-only operations. The guard (`token["sub"] == user_id`) prevents this. An admin who needs to remove their own access must have another admin demote them.
+
+---
+
+#### PATCH /api/admin/users/{user_id}/status â€” Suspend / Reactivate
+
+```python
+@router.patch("/users/{user_id}/status")
+async def update_user_status(
+    user_id: str,
+    body:    dict,
+    token:   dict         = Depends(_require_admin),
+    db:      AsyncSession = Depends(get_db),
+):
+    if token["sub"] == user_id:
+        raise HTTPException(403, "Cannot change your own status")
+
+    new_status = body.get("status")
+    if new_status not in ("active", "suspended", "pending"):
+        raise HTTPException(422, "Invalid status value")
+
+    user = await db.get(User, uuid.UUID(user_id))
+    if not user:
+        raise HTTPException(404)
+
+    user.status = new_status
+    await db.commit()
+    return {"ok": True}
+```
+
+**Why suspension instead of deletion?**
+
+Suspending a user preserves their analysis history and maintains the audit trail. A suspended user cannot log in (the auth endpoint in `auth.py` checks `if db_user.status != "active": raise HTTPException(403)`). Their existing JWT tokens remain valid until they expire (15-minute default), after which they cannot obtain new tokens. This creates a "soft block" â€” effective within 15 minutes of the suspension action.
+
+**The self-suspension guard:**
+
+If an admin accidentally suspended themselves, they would be locked out with no way to reactivate their own account. The guard prevents this.
+
+---
+
+#### DELETE /api/admin/users/{user_id} â€” Hard Delete
+
+```python
+@router.delete("/users/{user_id}", status_code=204)
+async def delete_user(
+    user_id: str,
+    token:   dict         = Depends(_require_admin),
+    db:      AsyncSession = Depends(get_db),
+):
+    if token["sub"] == user_id:
+        raise HTTPException(403, "Cannot delete your own account")
+
+    user = await db.get(User, uuid.UUID(user_id))
+    if not user:
+        raise HTTPException(404)
+
+    await db.delete(user)
+    await db.commit()
+    return Response(status_code=204)
+```
+
+**Why hard delete and not soft delete?**
+
+GDPR Article 17 ("right to erasure") requires genuinely removing a user's personal data upon request. A soft-delete approach (e.g., `status='deleted'`) keeps the user's email and other PII in the database, potentially violating GDPR. Hard delete is the correct implementation for a production system that may serve EU users.
+
+**Foreign key behaviour (ON DELETE SET NULL):**
+
+The `analyses` table has `user_id UUID REFERENCES users(id) ON DELETE SET NULL`. When the user is deleted:
+- The `users` row is removed â€” personal data erased âœ“
+- Their `analyses` rows remain with `user_id = NULL` â€” research data preserved âœ“
+- The admin "All Analyses" table shows these as "Anonymous" user
+
+This design satisfies both GDPR (erasure of PII) and research integrity (analyses remain for reference).
+
+**HTTP 204 â€” No Content:**
+
+The REST standard for a successful DELETE response is 204 with no body. The frontend treats any 2xx status as success; there is no response body to parse.
+
+---
+
+### 125.3 â€” TypeScript Interfaces
+
+```typescript
+// frontend/types/api.ts
+
+/**
+ * AdminUserItem â€” one user row from GET /api/admin/users.
+ * Union types ("admin"|"curator"|"analyst") ensure the TypeScript compiler
+ * catches any typo in role/status values at build time.
+ */
+export interface AdminUserItem {
+  id:             string;                                 // UUID as string
+  email:          string;
+  display_name:   string | null;                          // null until user sets it
+  role:           "admin" | "curator" | "analyst";        // exhaustive union
+  status:         "pending" | "active" | "suspended";    // exhaustive union
+  created_at:     string | null;                          // ISO 8601 or null
+  last_login_at:  string | null;                          // ISO 8601 or null
+  analyses_count: number;
+}
+
+/**
+ * AdminUsersResponse â€” paginated envelope, same shape as other paginated APIs.
+ * Consistent pagination shape across AdminAnalysesResponse, HistoryListResponse, etc.
+ */
+export interface AdminUsersResponse {
+  items: AdminUserItem[];
+  total: number;   // total records matching search â€” for pagination math
+  skip:  number;   // current offset
+  limit: number;   // items per page
+  pages: number;   // Math.ceil(total / limit)
+}
+```
+
+---
+
+### 125.4 â€” API Client Functions
+
+```typescript
+// frontend/lib/api.ts
+
+export async function getAdminUsers(
+  skip   = 0,
+  limit  = 20,
+  search?: string,          // undefined omits the query param entirely
+): Promise<AdminUsersResponse> {
+  const params: Record<string, string | number> = { skip, limit };
+  if (search) params.search = search;
+  const { data } = await apiClient.get<AdminUsersResponse>("/api/admin/users", { params });
+  return data;
+}
+
+export async function updateUserRole(userId: string, role: string): Promise<void> {
+  await apiClient.patch(`/api/admin/users/${userId}/role`, { role });
+}
+
+export async function updateUserStatus(userId: string, status: string): Promise<void> {
+  await apiClient.patch(`/api/admin/users/${userId}/status`, { status });
+}
+
+export async function deleteAdminUser(userId: string): Promise<void> {
+  await apiClient.delete(`/api/admin/users/${userId}`);
+}
+```
+
+All four functions use the proxied `apiClient` (not `classifyApiClient`) because admin operations are fast database writes â€” no 30-second timeout risk. The proxy carries the Authorization Bearer JWT header automatically via the Axios interceptor configured in `api.ts`.
+
+---
+
+### 125.5 â€” UsersTab Component Architecture
+
+The `UsersTab` component is added to `frontend/app/admin/page.tsx` and follows the exact structural pattern of `AnalysesTab`, `CorrectionsTab`, and `SubscribersTab`:
+
+```
+header bar (icon, title, count badge, search input)
+  â”‚
+  â–¼
+overflow-x-auto table wrapper
+  â”‚
+  â”œâ”€â”€ thead: Email | Name | Role | Status | Joined | Analyses | Actions
+  â”œâ”€â”€ tbody:
+  â”‚    â”œâ”€â”€ <TableSkeleton> while loading
+  â”‚    â”œâ”€â”€ mapped user rows
+  â”‚    â””â”€â”€ empty state (Users icon + message) when no results
+  â”‚
+  â–¼
+<Pagination> component
+```
+
+**Debounced search:**
+
+```typescript
+const [search,  setSearch]  = useState("");    // live â€” updates on every keystroke
+const [dSearch, setDSearch] = useState("");    // debounced â€” triggers API call
+
+useEffect(() => {
+  const t = setTimeout(() => {
+    setDSearch(search);  // apply search after 500ms pause
+    setPage(1);          // reset to page 1 when search changes
+  }, 500);
+  return () => clearTimeout(t);  // cancel previous timer when search changes again
+}, [search]);
+```
+
+Without debounce, every keystroke in "user@example.com" (17 characters) fires 17 API calls. With 500ms debounce, only 1 API call fires after the user stops typing.
+
+**React Query integration:**
+
+```typescript
+const queryClient = useQueryClient();
+
+const { data, isLoading } = useQuery({
+  queryKey: ["admin", "users", skip, PAGE_LIMIT, dSearch],
+  queryFn:  () => getAdminUsers(skip, PAGE_LIMIT, dSearch || undefined),
+  staleTime: 30_000,   // cache for 30 seconds
+  enabled:   authed,
+});
+```
+
+`staleTime: 30_000` â€” the query result is considered fresh for 30 seconds. Navigating within the admin dashboard does not re-fetch if the data is less than 30 seconds old. This prevents unnecessary API calls while keeping admin data reasonably current.
+
+**Role change with a styled `<select>` dropdown:**
+
+```tsx
+<select
+  value={u.role}
+  onChange={e => handleRoleChange(u.id, e.target.value)}
+  style={{
+    backgroundColor: `${ROLE_COLORS[u.role]}20`,  // 20 = hex opacity 12.5%
+    color:           ROLE_COLORS[u.role],
+  }}
+>
+  <option value="admin">admin</option>
+  <option value="curator">curator</option>
+  <option value="analyst">analyst</option>
+</select>
+```
+
+The `<select>` looks like a badge. Changing the dropdown value calls `handleRoleChange` immediately. The handler awaits `updateUserRole()` and then calls `queryClient.invalidateQueries({ queryKey: ["admin", "users"] })`, which marks all `["admin","users",*]` cache entries stale and triggers a background re-fetch â€” the table updates with server-confirmed data.
+
+**Status toggle (click to suspend/reactivate):**
+
+```tsx
+<button
+  onClick={() => handleStatusToggle(u.id, u.status)}
+  title={u.status === "suspended" ? "Click to reactivate" : "Click to suspend"}
+>
+  {u.status}
+</button>
+```
+
+Clicking the status badge toggles between `active` â†” `suspended`. The `title` attribute provides a browser tooltip explaining what the click will do. The button is styled identically to the role badge â€” same rounded pill, same colour system.
+
+**Delete with confirmation:**
+
+```tsx
+<button onClick={() => handleDelete(u.id, u.email)}>
+  <Trash2 size={13} />
+</button>
+
+// In handleDelete:
+if (!window.confirm(
+  `Permanently delete user "${email}"?\nAll their analyses will be de-associated.`
+)) return;
+await deleteAdminUser(userId);
+queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+```
+
+`window.confirm()` is a synchronous native browser dialog. It blocks JavaScript execution until the user responds. Simple, zero-dependency, unmissable. The message text includes the user's email to prevent mistaken deletion.
+
+---
+
+### 125.6 â€” Security Summary for User Management
+
+| Action | HTTP Method | Path | Auth | Self-protection |
+|---|---|---|---|---|
+| View users | GET | /api/admin/users | admin OR curator | n/a |
+| Change role | PATCH | /api/admin/users/{id}/role | admin only | 403 if own ID |
+| Change status | PATCH | /api/admin/users/{id}/status | admin only | 403 if own ID |
+| Delete user | DELETE | /api/admin/users/{id} | admin only | 403 if own ID |
+
+All self-protection guards are enforced server-side. A raw HTTP request bypassing the UI still hits the same `token["sub"] == user_id` check and receives HTTP 403.
+
+---
+
+## Section 126 â€” Navbar Active State: `usePathname` Pattern
+
+**Date:** March 4, 2026  
+**Commit:** `0aee7b9`  
+**Files affected:** `frontend/components/ui/NavLinks.tsx`, `frontend/components/ui/MobileNav.tsx`
+
+---
+
+### 126.1 â€” The Problem: All Nav Links Looked Identical
+
+Before this change, nav links had static styling regardless of the current page. Convention in every major website and application is that the active page's navigation link is visually distinguished. Violating this convention makes the UI feel unfinished and disorienting â€” users cannot tell where they are.
+
+---
+
+### 126.2 â€” The Tool: `usePathname` Hook
+
+`usePathname` is a hook from `next/navigation` introduced in Next.js 13.4 App Router. It returns the current URL pathname as a string:
+
+```
+Current URL        usePathname() returns
+/analyse           "/analyse"
+/history/abc123    "/history/abc123"
+/admin             "/admin"
+/                  "/"
+```
+
+**Pages Router vs App Router note:**
+
+In Next.js 12 (Pages Router), you accessed the path via `useRouter().pathname`. In Next.js 13+ App Router, the router was split into two hooks with single responsibilities:
+- `useRouter()` â€” navigation actions: `push()`, `replace()`, `back()`, `refresh()`
+- `usePathname()` â€” read the current path (no navigation capabilities)
+
+This separation follows the Single Responsibility Principle. `NavLinks.tsx` uses `usePathname` for reading only â€” it never navigates programmatically.
+
+**Client Component requirement:**
+
+`usePathname` is a browser-side hook. Any component using it must be marked `"use client"`. Both `NavLinks.tsx` and `MobileNav.tsx` already had the directive from prior changes.
+
+---
+
+### 126.3 â€” The `isActive()` Helper Function
+
+```typescript
+/**
+ * isActive â€” determines whether a nav link should receive active styling.
+ *
+ * Three cases:
+ *   1. Hash links like "/#pricing": never active â€” they scroll to a section
+ *      rather than navigating to a distinct page.
+ *   2. Homepage "/": exact match only â€” every path starts with "/", so
+ *      startsWith("/") would mark the homepage link active on every page.
+ *   3. All other links: startsWith(href) â€” this marks both /history and
+ *      /history/abc123 as active when the History nav link is shown.
+ *      This is correct: the user is "in" the history section.
+ */
+function isActive(href: string, pathname: string): boolean {
+  if (href.startsWith("/#")) return false;
+  if (href === "/")          return pathname === "/";
+  return pathname.startsWith(href);
+}
+```
+
+**Why "startsWith" beats exact match for sub-pages:**
+
+| pathname | href | startsWith result | Desired |
+|---|---|---|---|
+| /history | /history | true | YES â€” on history list page |
+| /history/abc-123 | /history | true | YES â€” on history detail page, still "in History" |
+| /admin | /history | false | NO â€” different section |
+
+An exact match (`pathname === href`) would fail for detail pages, making the History link appear inactive when the user is viewing `/history/abc123`. The startsWith match correctly keeps the nav link active for all pages within a section.
+
+---
+
+### 126.4 â€” Desktop Nav: Gold Underline Bar (`NavLinks.tsx`)
+
+```typescript
+const baseCls     = "relative px-3 py-1.5 text-sm font-medium transition-colors";
+const inactiveCls = "text-[var(--text-muted)] hover:text-[var(--text-primary)]";
+const activeCls   = "text-white font-semibold";
+
+// In the link render:
+<Link
+  href={link.href}
+  className={`${baseCls} ${active ? activeCls : inactiveCls}`}
+>
+  {link.label}
+  {active && (
+    <span
+      className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full"
+      style={{ background: "var(--brand-gold, #d4a853)" }}
+      aria-hidden="true"
+    />
+  )}
+</Link>
+```
+
+**Why `position: relative` on the link and `position: absolute; bottom: 0` on the bar?**
+
+CSS absolute positioning is relative to the nearest positioned ancestor. Setting `position: relative` on `<Link>` makes it the positioned ancestor. The underline `<span>` with `position: absolute; bottom: 0; left: 0; right: 0` sits exactly at the bottom of the link, stretching its full width â€” independent of the text length. This avoids the variable-width underline problem of `text-decoration: underline`.
+
+**Why `var(--brand-gold, #d4a853)`?**
+
+CSS custom properties (`var()`) allow theming. `--brand-gold` is defined in `globals.css` as `#d4a853`. The fallback `#d4a853` ensures the colour works even if the CSS variable is somehow not defined (e.g., in a testing environment that doesn't load the stylesheet).
+
+**`aria-hidden="true"`:**
+
+Screen readers should not announce the decorative underline span. `aria-hidden` removes it from the accessibility tree entirely.
+
+---
+
+### 126.5 â€” Mobile Nav: Gold Colour + Dot (`MobileNav.tsx`)
+
+The mobile nav renders links in a vertical list (drawer/slide-out menu). An underline bar at the bottom of a vertically-stacked item looks visually wrong. The mobile active state uses:
+
+1. **Gold text colour** (`var(--brand-gold)`) â€” applied to both the label text and icon
+2. **Bold font weight** (`fontWeight: 600`) â€” the active item is visually heavier
+3. **Gold dot indicator** â€” a 6Ã—6px circle on the right side of the row
+
+```tsx
+const active = isActive(link.href, pathname);
+
+// The link item:
+<a
+  href={link.href}
+  style={{
+    color:      active ? "var(--brand-gold)" : "var(--text-secondary)",
+    fontWeight: active ? 600 : 400,
+  }}
+>
+  <IconComponent size={14} style={{
+    color: active ? "var(--brand-gold)" : "..."
+  }} />
+  {link.label}
+  {active && (
+    <span
+      className="ml-auto w-1.5 h-1.5 rounded-full"
+      style={{ background: "var(--brand-gold)" }}
+    />
+  )}
+</a>
+```
+
+**Why different visual treatment for mobile?**
+
+Desktop (horizontal bar): the underline is positioned below the text, creating a horizontal baseline indicator â€” universally understood as "selected tab" in web UIs.
+
+Mobile (vertical list): underlining a vertically-stacked list item looks like a hyperlink, not a selection indicator. Colour change + weight change + right-aligned dot follows native mobile design patterns (iOS Settings, Android navigation drawers, Tailwind UI sidebar components).
+
+**`ml-auto`** on the dot span pushes it to the right edge of the flex row, creating visual symmetry and separating it from the label text.
+
+---
+
+### 126.6 â€” Complete Example: Active State Transitions
+
+```
+User is on /history
+
+NavLinks.tsx:
+  / Analyse   â€” text-muted (inactive)
+  / Explore   â€” text-muted (inactive)
+  / History   â€” text-WHITE font-semibold + GOLD BAR (active)  â† isActive("/history", "/history") = true
+  / AI Chat   â€” text-muted (inactive)
+  / About     â€” text-muted (inactive)
+
+User navigates to /history/abc123 (detail page):
+  / History still shows GOLD BAR     â† isActive("/history", "/history/abc123") = true (startsWith)
+  All other links remain inactive
+
+User navigates to /admin:
+  / History â€” text-muted             â† isActive("/history", "/admin") = false
+  / Admin is not in the public NAV_LINKS array (admin tab bar is internal to the page)
+```
+
+---
+
+## Section 127 â€” Project State After March 4 Evening Session
+
+**Commit:** `0aee7b9`  
+**Date:** March 4, 2026
+
+---
+
+### 127.1 â€” Summary of All Changes
+
+| Feature | Category | Files Changed |
+|---|---|---|
+| Bug 45: Admin analyses empty | Bug fix | `src/api/routes/admin.py` |
+| Chat state persistence | Frontend feature | `frontend/app/chat/page.tsx` |
+| Chat conversation memory | Full-stack feature | `src/api/routes/chat.py`, `frontend/lib/api.ts`, `frontend/app/chat/page.tsx` |
+| Admin Users CRUD | Full-stack feature | `src/api/routes/admin.py`, `frontend/app/admin/page.tsx`, `frontend/lib/api.ts`, `frontend/types/api.ts` |
+| Navbar active state | Frontend feature | `frontend/components/ui/NavLinks.tsx`, `frontend/components/ui/MobileNav.tsx` |
+
+**8 files changed. 713 insertions, 45 deletions. TypeScript errors: 0.**
+
+---
+
+### 127.2 â€” Complete File Change Log
+
+**`src/api/routes/admin.py`** (+130 lines)
+- Added `from pathlib import Path` import
+- Added `list_users()` â€” GET /api/admin/users
+- Added `update_user_role()` â€” PATCH /api/admin/users/{id}/role
+- Added `update_user_status()` â€” PATCH /api/admin/users/{id}/status
+- Added `delete_user()` â€” DELETE /api/admin/users/{id}
+
+**`src/api/routes/chat.py`** (+12 lines)
+- `ChatRequest`: added `conversation_history: list[dict[str, str]] = []`
+- `_run_chat()`: added `conversation_history` param; builds `messages_for_llm` with prior turns capped at 6
+- Endpoint `chat()`: passes `body.conversation_history` as 4th arg to `asyncio.to_thread`
+
+**`frontend/components/ui/NavLinks.tsx`** (full rewrite)
+- Added `usePathname` import
+- Added `isActive()` helper function
+- Split styling into `baseCls`, `inactiveCls`, `activeCls`
+- Active indicator: absolutely-positioned gold `<span>` bar at bottom
+
+**`frontend/components/ui/MobileNav.tsx`** (+15 lines)
+- Added `usePathname` import and `const pathname = usePathname()`
+- Updated link items: compute `active`, apply gold colour + bold weight + dot
+
+**`frontend/app/chat/page.tsx`** (+45 lines)
+- Added `_chatCache` module-level object (3 fields)
+- Changed `useState([])` â†’ `useState(_chatCache.messages)`, etc.
+- Added 3 `useEffect` sync hooks (`messagesRef`, `_chatCache.messages`, `_chatCache.input`)
+- Updated all 4 `currentSessionId.current` assignments to sync `_chatCache.currentSessionId`
+- Updated `handleNewChat` to also reset `_chatCache.messages` and `_chatCache.input`
+- Updated `handleSubmit`: captures `priorHistory` from `messagesRef.current.slice(-6)`, passes to `chatQuery()`
+
+**`frontend/lib/api.ts`** (+55 lines)
+- `chatQuery()`: added 4th param `conversationHistory`; posts as `conversation_history`
+- Added `AdminUsersResponse` to type imports
+- Added `getAdminUsers()`, `updateUserRole()`, `updateUserStatus()`, `deleteAdminUser()`
+
+**`frontend/types/api.ts`** (+20 lines)
+- Added `AdminUserItem` interface (8 fields with union types)
+- Added `AdminUsersResponse` interface (5 fields)
+
+**`frontend/app/admin/page.tsx`** (+165 lines)
+- Updated React import: added `useEffect`
+- Updated React Query import: added `useQueryClient`
+- Updated lucide imports: added `Trash2`, `UserCog`
+- Added `getAdminUsers`, `updateUserRole`, `updateUserStatus`, `deleteAdminUser` to lib/api import
+- Added `AdminUserItem` to types import
+- Updated `type TabId`: added `| "users"`
+- Added `USER_STATUS_COLORS` constant (`active`, `suspended`, `pending`)
+- Added `UsersTab` component (~120 lines):
+  - Debounced search (500ms) with `useEffect`
+  - `useQuery` for paginated user list
+  - `handleRoleChange`, `handleStatusToggle`, `handleDelete` mutation handlers
+  - Table: role `<select>` badge, status toggle button, delete `<Trash2>` icon
+  - `<Pagination>` component reused from same file
+- Updated `TABS` array: added Users tab with `UserCog` icon
+- Updated render block: added `{activeTab === "users" && <UsersTab .../>}`
+
+---
+
+### 127.3 â€” Layer Status
+
+| Layer | Status | Notes |
+|---|---|---|
+| 0 â€” CNN Training | âœ… Complete | EfficientNet-B3, 80.03% TTA |
+| 1 â€” Inference Engine | âœ… Complete | CLAHE, auto-crop, TTA Ã—8 |
+| 2 â€” Knowledge Base | âœ… Complete | 47,705 vectors, 9,541 types, BM25+RRF |
+| 3 â€” Agent System | âœ… Complete | Historian, Investigator, Validator, Synthesis |
+| 4 â€” FastAPI Backend | âœ… Complete | Auth, RBAC, history, admin+users CRUD |
+| 5 â€” Next.js Frontend | âœ… Complete | Chat memory, active nav, admin users, all pages |
+| 6 â€” Docker | âœ… Complete | PostgreSQL + FastAPI + Next.js Compose |
+| 7 â€” Tests + CI/CD | ðŸ”² Pending | pytest + GitHub Actions |
+
+---
+
+### 127.4 â€” Bug Registry
+
+| # | Description | Root cause | Fix | Commit |
+|---|---|---|---|---|
+| 45 | Admin "All Analyses" always empty | Missing `from pathlib import Path` â€” NameError on every request | Added import | `0aee7b9` |
+
+Total bugs found and fixed across all sessions: **45**
+
+---
+
+### 127.5 â€” Architecture: How the Five Changes Connect
+
+```
+NAVBAR (NavLinks.tsx / MobileNav.tsx)
+  usePathname() â†’ isActive() â†’ gold underline OR gold dot + bold
+  User knows exactly where they are at every point in the application.
+
+CHAT PAGE (chat/page.tsx)
+  _chatCache module-level object
+  â”œâ”€â”€ Initialized: useState(_chatCache.messages) â€” restores on navigation
+  â”œâ”€â”€ Written:     useEffect â†’ _chatCache.messages = current state
+  â””â”€â”€ currentSessionId.current mutations â†’ _chatCache.currentSessionId = X
+
+  handleSubmit
+  â”œâ”€â”€ priorHistory = messagesRef.current.slice(-6)   â† last 3 exchanges
+  â””â”€â”€ chatQuery(query, 5, labels, priorHistory)
+       â”‚
+       â–¼
+  POST /api/chat { conversation_history: priorHistory }
+       â”‚
+       â–¼
+  _run_chat(query, sources, provider, conversation_history)
+  â””â”€â”€ messages = [system, ...history[-6:], current_user_message]
+       â”‚
+       â–¼
+  LLM sees full conversation context â†’ coherent multi-turn responses
+
+ADMIN PAGE (admin/page.tsx)
+  Users tab (new)
+  â”œâ”€â”€ GET /api/admin/users â†’ paginated searchable table
+  â”œâ”€â”€ PATCH /api/admin/users/{id}/role  â†’ role <select> badge
+  â”œâ”€â”€ PATCH /api/admin/users/{id}/status â†’ status toggle button
+  â””â”€â”€ DELETE /api/admin/users/{id} â†’ Trash2 + window.confirm()
+
+  admin.py
+  â”œâ”€â”€ from pathlib import Path (Bug 45 fix)
+  â””â”€â”€ 4 new RBAC-guarded endpoints with self-protection
+```
+
+---
+
+*Engineering Journal â€” Sections 122â€“127 added March 4, 2026 (evening session, commit 0aee7b9).*
+*Section 122: Bug 45 â€” missing Path import caused NameError â†’ HTTP 500 â†’ silent empty table in admin analyses.*
+*Section 123: Chat state persistence â€” module-level _chatCache, write-through useEffect, messagesRef stale closure pattern.*
+*Section 124: Conversation memory â€” ChatRequest.conversation_history, _run_chat multi-turn messages, handleSubmit priorHistory capture.*
+*Section 125: Admin users CRUD â€” 4 REST endpoints with self-protection, UsersTab with debounced search/role select/status toggle/delete.*
+*Section 126: Navbar active state â€” usePathname, isActive() helper, gold underline (desktop), gold dot+colour (mobile).*
+*Section 127: Project state â€” 8 files changed, 713 insertions, layer status, bug #45, architecture diagram.*
