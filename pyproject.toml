@@ -50,7 +50,8 @@ dependencies = [
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
-    "httpx>=0.27.0",           # FastAPI TestClient async support
+    "httpx>=0.27.0",           # FastAPI TestClient + ASGITransport
+    "aiosqlite>=0.20.0",       # SQLite async driver for integration tests (replaces PostgreSQL)
     "black>=24.0.0",
     "flake8>=7.0.0",
     "flake8-bugbear>=24.0",    # stricter linting rules
@@ -62,6 +63,11 @@ dev = [
 testpaths    = ["tests"]
 # Show all output, don't capture
 addopts      = "-v --tb=short"
+# pytest-asyncio: auto mode so every async def test_* is treated as asyncio test
+# WHY auto: avoids having to add @pytest.mark.asyncio to every async test function.
+#           The decorator is error-prone — it is easy to forget and the test
+#           silently passes without running any assertions.
+asyncio_mode = "auto"
 # Treat warnings as non-fatal (some deps emit DeprecationWarning)
 filterwarnings = ["ignore::DeprecationWarning"]
 

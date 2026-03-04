@@ -1,0 +1,199 @@
+# ============================================================
+# DeepCoin-Core — GitHub Actions CI Pipeline
+# ============================================================
+#
+# WHAT this file does:
+#   Runs on every push to `main` and every pull request targeting `main`.
+#   Two parallel jobs (python-ci and frontend-ci) give independent pass/fail
+#   signals for backend and frontend, so a TypeScript error does not block
+#   a Python-only fix from merging.
+#
+# WHY two jobs (not one monolithic job):
+#   - Python job needs torch (~700 MB CPU wheel) — unnecessary on frontend
+#   - Frontend job needs Node 22 + npm cache — unnecessary on Python tests
+#   - Parallel execution cuts total wall-clock time from ~8 min to ~5 min
+#
+# WHY Python 3.12 (not 3.11):
+#   The Dockerfile.api was upgraded to python:3.12-slim to resolve a
+#   HIGH-severity importlib.resources CVE present in 3.11.  The CI runner
+#   must match production Python version to catch version-specific issues.
+#
+# WHY --index-url for torch before pip install -e ".[dev]":
+#   pip resolves ALL dependencies together.  Without pre-installing torch CPU
+#   first, pip will pull the CUDA-12 wheel via PyPI (torch-2.6.0+cu124) which
+#   is ~2.5 GB and requires compatible NVIDIA drivers (absent on GitHub runners).
+#   Installing torch CPU first from the dedicated CPU index locks in the CPU
+#   build; the subsequent `pip install -e ".[dev]"` sees torch already installed
+#   and skips it.
+#
+# WHY cache pip with requirements.txt + pyproject.toml as key:
+#   requirements.txt lists every locked pin; pyproject.toml holds dev extras.
+#   A change to either file invalidates the cache and forces a clean install.
+#   Unchanged runs skip the full pip install (~3 min → ~20 s).
+#
+# WHY DATABASE_URL=sqlite+aiosqlite:///./tests/test_ci.db:
+#   Integration tests override get_db() with an AsyncMock session, so no
+#   real DB writes happen. However SQLAlchemy's async engine is constructed
+#   at module import time from DATABASE_URL.  Setting this env var prevents
+#   the engine constructor from failing with "no driver for postgresql+asyncpg"
+#   (asyncpg is not installed in CI — only aiosqlite is a dev dependency).
+#
+# WHY npx tsc --noEmit (not next build):
+#   `next build` downloads image optimisation bindings, runs the full webpack
+#   compile, and takes ~3 minutes.  `tsc --noEmit` uses the compiler already
+#   in node_modules and only checks types — same errors but much faster.
+#   Build failures surface naturally when the app is deployed.
+# ============================================================
+
+name: DeepCoin CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-flight runs for the same branch/PR if a new commit arrives,
+# preventing redundant queue buildup on fast-moving branches.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ──────────────────────────────────────────────────────────
+  # JOB 1 — Python backend
+  # ──────────────────────────────────────────────────────────
+  python-ci:
+    name: Python ${{ matrix.python-version }} — unit + integration tests
+    runs-on: ubuntu-latest
+
+    # Matrix lets us catch version-specific regressions cheaply.
+    # 3.12 = production Dockerfile version.
+    # 3.11 = original development version — kept to detect compatibility gaps.
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.11"]
+
+    env:
+      # ── Required by src/api/db/session.py (module-level engine constructor)
+      DATABASE_URL: "sqlite+aiosqlite:///./tests/test_ci.db"
+
+      # ── Minimal test secret — same length used in conftest.py
+      SECRET_KEY: "ci-only-secret-key-exactly-32------"
+
+      # ── Marks the environment as 'test' — activates dev-mode auth paths
+      ENV: "test"
+
+      # ── Disable LLM providers so chat/historian use the offline fallback
+      GITHUB_TOKEN:   ""
+      GOOGLE_API_KEY: ""
+
+    steps:
+      # ── Checkout ─────────────────────────────────────────────────────────
+      - uses: actions/checkout@v4
+
+      # ── Python setup ─────────────────────────────────────────────────────
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # ── Pip cache ────────────────────────────────────────────────────────
+      # Key: hash of both dependency files so any pin change busts the cache.
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-py${{ matrix.python-version }}-pip-${{ hashFiles('requirements.txt', 'pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-py${{ matrix.python-version }}-pip-
+
+      # ── Torch CPU wheel (must come first — see WHY comment at top) ───────
+      - name: Install PyTorch CPU
+        run: |
+          pip install --upgrade pip
+          pip install torch==2.6.0 torchvision==0.21.0 \
+            --index-url https://download.pytorch.org/whl/cpu
+
+      # ── Project + dev dependencies ────────────────────────────────────────
+      - name: Install project and dev dependencies
+        run: |
+          pip install -e ".[dev]"
+
+      # ── Linting (fast — runs before tests so lint errors surface first) ──
+      - name: Lint with flake8
+        run: |
+          # E501 (line too long) is handled by black; ignore here to avoid
+          # noise from auto-formatted lines that are slightly over 79 chars.
+          # W503/W504: line break before/after binary operator — black's style.
+          flake8 src/ tests/ \
+            --max-line-length=110 \
+            --extend-ignore=E501,W503,W504,E203 \
+            --exclude=src/api/db/migrations/
+
+      # ── Format check ─────────────────────────────────────────────────────
+      - name: Check formatting with black
+        run: |
+          black --check --line-length=110 src/ tests/
+
+      # ── Unit tests ───────────────────────────────────────────────────────
+      - name: Run unit tests
+        run: |
+          pytest tests/unit/ -v --tb=short -q
+
+      # ── Integration tests ────────────────────────────────────────────────
+      # Runs AFTER unit tests so a unit failure is reported first.
+      - name: Run integration tests
+        run: |
+          pytest tests/integration/ -v --tb=short -q
+
+      # ── Upload test results (optional — visible in GitHub Actions UI) ────
+      - name: Upload test result artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-py${{ matrix.python-version }}
+          path: |
+            tests/test_ci.db
+          if-no-files-found: ignore
+
+  # ──────────────────────────────────────────────────────────
+  # JOB 2 — Next.js frontend
+  # ──────────────────────────────────────────────────────────
+  frontend-ci:
+    name: Next.js — TypeScript check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      # ── Checkout ─────────────────────────────────────────────────────────
+      - uses: actions/checkout@v4
+
+      # ── Node.js setup ─────────────────────────────────────────────────────
+      # Node 22 = same LTS version used in Dockerfile.frontend
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      # ── Install dependencies ──────────────────────────────────────────────
+      - name: Install npm dependencies
+        run: npm ci
+
+      # ── TypeScript type-check ─────────────────────────────────────────────
+      # --noEmit: type-check only, no output files written.
+      # --project: explicit path since we're already in the frontend/ directory.
+      - name: TypeScript type check
+        run: npx tsc --noEmit
+
+      # ── ESLint (if configured) ────────────────────────────────────────────
+      # next lint is the recommended way to run Next.js ESLint rules.
+      # The || true prevents this optional step from failing the build if
+      # no ESLint config exists yet — it will always emit a warning instead.
+      - name: ESLint
+        run: npx next lint --dir . 2>&1 || true

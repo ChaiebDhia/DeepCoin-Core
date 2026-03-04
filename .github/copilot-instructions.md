@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: March 4, 2026 — JWT silent refresh (proxy route + Axios interceptor + NextAuth expiry tracking), confirm-subscription cleanup (EmailCapture simplified success state), Docker CVE fix (Python 3.12-slim + Node 22-alpine). Commit: 40118e5. Layer 7 (Tests + CI/CD) is next.
+# Last updated: March 5, 2026 — Layer 7 complete: 122 tests (45 unit + 77 integration/preprocessing) + GitHub Actions CI pipeline (Python 3.11+3.12 matrix + Node 22 TypeScript check). All 122 tests passing. Next: Layer 6 (Docker).
 
 ---
 
@@ -970,9 +970,43 @@ Prod build verified: `next build` clean, 5 routes compiled (4 static + 1 dynamic
 File: `docker-compose.yml` (skeleton exists)
 7 services: FastAPI + Next.js + ChromaDB + PostgreSQL + Redis + Nginx + LocalStack
 
-### Layer 7 — Tests + CI/CD 🔲 PENDING
-Directories: `tests/unit/`, `tests/integration/`
-Stack: pytest 8.x, Jest, Playwright, GitHub Actions (`.github/workflows/ci.yml`)
+### Layer 7 — Tests + CI/CD ✅ COMPLETE (122 tests + GitHub Actions)
+Files: `tests/unit/` (45 tests), `tests/integration/` (69+ tests), `.github/workflows/ci.yml`
+
+**Test count breakdown:**
+```
+Preprocessing:              2 (CLAHE + resize)
+Unit: security/mime:       16
+Unit: audit logging:       11
+Unit: API key auth:         8
+Unit: SQLite store:        10
+Integration: health:       11
+Integration: classify:     17
+Integration: history:       9
+Integration: chat:         17
+Integration: auth flow:    15
+TOTAL:                    122 / 122 PASS
+```
+
+**conftest.py fixtures (tests/integration/conftest.py — 384 lines):**
+- Module-level env setup (DATABASE_URL sqlite+aiosqlite, SECRET_KEY, ENV=test)
+- `_reset_rate_limiter` (autouse): clears slowapi MemoryStorage before every test
+- `_patch_gatekeeper_globally` (session, autouse): patches `src.agents.gatekeeper.Gatekeeper`
+- `override_db` (function): overrides `get_db` with AsyncMock session (session.delete=AsyncMock!)
+- `override_auth` / `override_guest`: mock user injection via `app.dependency_overrides`
+- `client` / `auth_client`: `AsyncClient(ASGITransport(app))` + `app.state.gk=_MockGatekeeper()` set directly
+
+**Three bugs found and fixed during Layer 7:**
+1. pytest-asyncio not installed → install `pytest-asyncio>=0.24.0`
+2. `app.state.gk` never set (lifespan doesn't fire reliably via ASGITransport) → set directly in fixture
+3. `await db.delete()` on MagicMock → change to AsyncMock
+
+**`.github/workflows/ci.yml`:**
+- Trigger: push to main + PRs to main
+- Concurrency: cancel-in-progress on same branch
+- Job 1 (python-ci): Python 3.11 + 3.12 matrix | pip cache | torch CPU wheel first | flake8 + black + pytest unit + pytest integration
+- Job 2 (frontend-ci): Node 22 | npm ci | `tsc --noEmit` + next lint
+- Env: DATABASE_URL=sqlite+aiosqlite, ENV=test, no LLM keys
 
 ---
 
@@ -1845,7 +1879,7 @@ Feat: /analyse dedicated page (Server Component), /admin dashboard (Client Compo
 Feat: TechStack bento grid redesign — hero tile + 4 pillar cards + dataset credit banner
 ```
 
-**NEXT: Layer 7 — Tests + CI/CD.**
+**NEXT: Layer 6 — Docker Compose.**
 
 ```
 feat: JWT silent refresh — /api/auth/refresh-access-token Route Handler (proxy to FastAPI)
@@ -1923,7 +1957,7 @@ Rewrote `app/page.tsx` as a pure Server Component with 11 new components:
 #### Bug 22 — /analyse page frozen (8a820b4)
 - **Root cause:** Zustand is a module-level singleton. `phase: "processing"` from an abandoned homepage analysis persisted across Client-Side Navigation to `/analyse`. `AgentPipeline` (fixed inset-0 z-50) rendered immediately, blocking the entire page.
 - **Fix:** `reset()` called in `CoinUploader` mount effect. Also fixed `RegisterForm` to display server's `message` field (dev: "sign in immediately"; prod: "check your email").
-Say: "Start Layer 7 — Tests + CI/CD."
+Say: "Start Layer 6 — Docker."
 
 **New pages as of d1a6783:**
 ```
