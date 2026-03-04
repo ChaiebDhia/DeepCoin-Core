@@ -245,7 +245,7 @@ export default function AboutPage() {
           Ready to try it?
         </h2>
         <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-          Upload a coin photograph and get a full historical analysis in under 20 seconds.
+          Upload a coin photograph and get a full historical analysis, typically in 15–60 seconds.
         </p>
         <Link
           href="/login?callbackUrl=/analyse"

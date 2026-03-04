@@ -33,6 +33,9 @@ import type {
   AdminFeedbackResponse,
   AdminAnalysesResponse,
   ChatResponse,
+  ChatMessageRecord,
+  ChatSessionDetail,
+  ChatSessionListResponse,
 } from "@/types/api";
 
 // ── Axios instance ────────────────────────────────────────────────────────────
@@ -299,13 +302,48 @@ export async function getHealth(): Promise<HealthResponse> {
 
 /**
  * Build the absolute URL for a PDF report download.
+ *
+ * WHY bypass the Next.js proxy:
+ *   Next.js Turbopack's reverse-proxy buffers the entire response body before
+ *   forwarding it to the browser.  For PDFs (often 400 KB+) this creates a
+ *   noticeable delay AND can trip internal timeouts, causing the proxy to
+ *   return a JSON error body instead of the binary PDF.  The browser then
+ *   saves that error as ".json".
+ *
+ *   Using the direct FastAPI URL (NEXT_PUBLIC_CLASSIFY_URL base) bypasses
+ *   the proxy entirely — the browser fetches the PDF directly from FastAPI,
+ *   which streams it with the correct Content-Disposition: attachment header.
+ *
  * pdf_url from the API is like "/api/reports/filename.pdf".
+ * NEXT_PUBLIC_CLASSIFY_URL is "http://127.0.0.1:8000/api/classify".
  */
+const _DIRECT_API_BASE: string = (() => {
+  const raw = process.env.NEXT_PUBLIC_CLASSIFY_URL ?? "";
+  return raw.replace(/\/api\/classify$/, "").replace(/\/$/, "");
+})();
+
 export function pdfDownloadUrl(pdfUrl: string): string {
   // Already a full URL (future-proofing)
   if (pdfUrl.startsWith("http")) return pdfUrl;
-  // Relative — works because /api/* is proxied by Next.js rewrites
-  return pdfUrl;
+
+  // Defensive: older records may have a full Windows filesystem path embedded
+  // inside the /api/reports/ prefix, e.g. "/api/reports/C:/Users/.../report.pdf".
+  // This happens when rsplit("/") was used on a backslash Windows path in the
+  // backend — the whole path ends up as the "filename" segment.
+  // Fix: normalise to forward slashes, take the last segment as the filename.
+  let cleanUrl = pdfUrl.replace(/\\/g, "/");
+  const reportsPrefix = "/api/reports/";
+  if (cleanUrl.startsWith(reportsPrefix)) {
+    const afterPrefix = cleanUrl.slice(reportsPrefix.length);
+    // If the remainder still contains path separators it's a leaked FS path
+    if (afterPrefix.includes("/")) {
+      const filename = afterPrefix.split("/").pop()!;
+      cleanUrl = `${reportsPrefix}${filename}`;
+    }
+  }
+
+  // Bypass Next.js proxy — call FastAPI directly for binary file responses
+  return `${_DIRECT_API_BASE}${cleanUrl}`;
 }
 // ── Public explore ────────────────────────────────────────────────────────────
 
@@ -390,12 +428,90 @@ export async function getAdminAnalyses(
 export async function chatQuery(query: string, nSources = 5): Promise<ChatResponse> {
   // Uses classifyApiClient (direct to FastAPI, 180 s timeout) — same reason as
   // classifyCoin: the LLM call can take 8–20 s; the Next.js proxy would time out.
+  // FIX: route is /api/chat (prefix set in chat.py router), was /chat before.
   try {
-    const { data } = await classifyApiClient.post<ChatResponse>("/chat", {
+    const { data } = await classifyApiClient.post<ChatResponse>("/api/chat", {
       query,
       n_sources: nSources,
     });
     return data;
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+// ── Chat session history ──────────────────────────────────────────────────────
+// All chat-session calls are auth-gated — they use apiClient (which attaches
+// the NextAuth JWT via applyAuthInterceptor). They go through the Next.js proxy
+// because they are small JSON payloads (no binary streaming issues like PDFs).
+
+export interface CreateSessionPayload {
+  title:    string;
+  messages: ChatMessageRecord[];
+}
+
+export interface AppendSessionPayload {
+  messages: ChatMessageRecord[];
+}
+
+export async function createChatSession(
+  payload: CreateSessionPayload
+): Promise<ChatSessionDetail> {
+  try {
+    const { data } = await apiClient.post<ChatSessionDetail>(
+      "/chat/sessions",
+      payload
+    );
+    return data;
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+export async function listChatSessions(
+  skip = 0,
+  limit = 30
+): Promise<ChatSessionListResponse> {
+  try {
+    const { data } = await apiClient.get<ChatSessionListResponse>(
+      "/chat/sessions",
+      { params: { skip, limit } }
+    );
+    return data;
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+export async function getChatSession(id: string): Promise<ChatSessionDetail> {
+  try {
+    const { data } = await apiClient.get<ChatSessionDetail>(
+      `/chat/sessions/${id}`
+    );
+    return data;
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+export async function appendChatSession(
+  id: string,
+  payload: AppendSessionPayload
+): Promise<ChatSessionDetail> {
+  try {
+    const { data } = await apiClient.patch<ChatSessionDetail>(
+      `/chat/sessions/${id}`,
+      payload
+    );
+    return data;
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+export async function deleteChatSession(id: string): Promise<void> {
+  try {
+    await apiClient.delete(`/chat/sessions/${id}`);
   } catch (err) {
     throw toApiError(err);
   }

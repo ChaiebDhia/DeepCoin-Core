@@ -132,6 +132,7 @@ class User(Base):
     audit_log_entries: Mapped[list["AuditLog"]]          = relationship(back_populates="user", lazy="select")
     email_verifications: Mapped[list["EmailVerification"]] = relationship(back_populates="user", lazy="select", cascade="all, delete-orphan")
     refresh_tokens:    Mapped[list["RefreshToken"]]      = relationship(back_populates="user", lazy="select", cascade="all, delete-orphan")
+    chat_sessions:     Mapped[list["ChatSession"]]       = relationship(back_populates="user", lazy="select", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<User id={self.id[:8]} email={self.email} role={self.role.value}>"
@@ -377,3 +378,52 @@ class RefreshToken(Base):
 
     def __repr__(self) -> str:
         return f"<RefreshToken user={self.user_id} revoked={self.revoked_at is not None}>"
+
+
+# ── ChatSession ──────────────────────────────────────────────────────────────────────────
+
+class ChatSession(Base):
+    """
+    One AI chat conversation saved by a user.
+
+    WHY store messages as JSONB:
+        Chat messages are a variable-length array of {role, content, sources, provider}.
+        JSONB lets us store the full structure without needing a separate
+        messages table.  Indexing isn't required on individual messages —
+        we always load an entire session at once.
+
+    WHY title is the first user message (truncated):
+        Users need to recognise their past conversations at a glance.
+        Storing the first user message as the title is the universal pattern
+        (used by ChatGPT, Claude, Gemini).  We cap it at 200 chars.
+
+    WHY CASCADE on user_id:
+        If a user deletes their account (GDPR purge), all their chat history
+        should be destroyed automatically — no orphan rows.
+    """
+    __tablename__ = "chat_sessions"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True,
+        server_default=func.gen_random_uuid(),
+    )
+    user_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    messages: Mapped[list] = mapped_column(JSONB, nullable=False, default=list, server_default="[]",)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False,
+        server_default=func.now(), onupdate=func.now()
+    )
+
+    # ── Relationships ──
+    user: Mapped["User"] = relationship(back_populates="chat_sessions")
+
+    def __repr__(self) -> str:
+        return f"<ChatSession id={self.id[:8]} user={self.user_id[:8]} title={self.title[:30]}"

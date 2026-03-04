@@ -199,7 +199,13 @@ async def list_all_analyses(
 
     items = []
     for row in rows:
-        pdf_name = row.pdf_path.rsplit("/", 1)[-1] if row.pdf_path else None
+        # WHY Path(row.pdf_path).name instead of rsplit("/"):
+        #   On Windows, pdf_path uses backslashes (C:\...\report.pdf).
+        #   rsplit("/", 1) only splits on forward slashes — with backslashes the
+        #   entire path is returned as the "name", producing a broken URL like
+        #   /api/reports/C:\Users\...\report.pdf.
+        #   pathlib.Path.name handles BOTH forward and backward slashes.
+        pdf_name = Path(row.pdf_path).name if row.pdf_path else None
         items.append({
             "id":          row.id,
             "created_at":  row.timestamp.isoformat() if row.timestamp else None,

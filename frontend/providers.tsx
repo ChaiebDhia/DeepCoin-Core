@@ -84,8 +84,8 @@ export default function Providers({ children }: ProvidersProps) {
         }}
       />
 
-      {/* DevTools — only visible in development */}
-      <ReactQueryDevtools initialIsOpen={false} />
+      {/* DevTools — only in development; suppressed in production builds */}
+      {process.env.NODE_ENV === "development" && <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />}
     </QueryClientProvider>
     </SessionProvider>
   );

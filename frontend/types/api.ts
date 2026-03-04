@@ -188,3 +188,35 @@ export interface ChatResponse {
   sources:  ChatSource[];
   provider: string;
 }
+
+// ── Chat session history types ────────────────────────────────────────────────
+
+export interface ChatMessageRecord {
+  role:     "user" | "assistant";
+  content:  string;
+  sources?: ChatSource[];
+  provider?: string;
+}
+
+export interface ChatSessionSummary {
+  id:         string;
+  title:      string;
+  created_at: string;
+  updated_at: string;
+  msg_count:  number;
+}
+
+export interface ChatSessionDetail {
+  id:         string;
+  title:      string;
+  messages:   ChatMessageRecord[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatSessionListResponse {
+  items: ChatSessionSummary[];
+  total: number;
+  skip:  number;
+  limit: number;
+}

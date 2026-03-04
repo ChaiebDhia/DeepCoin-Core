@@ -68,6 +68,7 @@ from src.api.routes.subscribers  import router as subscribers_router
 from src.api.routes.explore      import router as explore_router
 from src.api.routes.admin        import router as admin_router
 from src.api.routes.chat         import router as chat_router
+from src.api.routes.chat_sessions import router as chat_sessions_router
 
 from src import __version__
 
@@ -250,6 +251,7 @@ app.include_router(subscribers_router)                                          
 app.include_router(explore_router)                                              # /api/explore  (public)
 app.include_router(admin_router)                                                # /api/admin/*  (privileged)
 app.include_router(chat_router)                                                 # /api/chat     (AI Q&A)
+app.include_router(chat_sessions_router)                                        # /api/chat/sessions (history)
 
 
 # ── PDF report serving ────────────────────────────────────────────────────────
@@ -283,6 +285,7 @@ async def serve_report(filename: str):
         path         = report_path,
         media_type   = "application/pdf",
         filename     = safe,
+        headers      = {"Content-Disposition": f'attachment; filename="{safe}"'},
     )
 
 

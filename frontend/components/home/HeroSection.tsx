@@ -157,7 +157,7 @@ export function HeroSection() {
           <strong className="text-white">EfficientNet-B3 CNN</strong> with a{" "}
           <strong className="text-white">5-agent RAG system</strong> to classify coins
           against 9,716 Corpus Nummorum types, validate material forensically, and
-          generate a professional PDF report — all under 20 seconds.
+          generate a professional PDF report — typically in 15–60 seconds.
         </motion.p>
 
         {/* CTAs */}

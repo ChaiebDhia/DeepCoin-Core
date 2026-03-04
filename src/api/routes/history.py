@@ -81,7 +81,12 @@ def _row_to_summary(row: Classification) -> HistorySummary:
     if row.pdf_path:
         pdf_url = f"/api/reports/{Path(row.pdf_path).name}"
     elif payload.get("pdf_url"):
-        pdf_url = payload["pdf_url"]
+        # Defensive: older records may have stored the full filesystem path
+        # inside payload["pdf_url"] (e.g. "/api/reports/C:\\Users\\...\\.pdf").
+        # Replace both path separators and take the last segment.
+        raw = str(payload["pdf_url"])
+        filename = raw.replace("\\", "/").rsplit("/", 1)[-1]
+        pdf_url = f"/api/reports/{filename}" if filename.endswith(".pdf") else None
     return HistorySummary(
         id             = row.id,
         timestamp      = row.timestamp.isoformat(),
@@ -114,7 +119,9 @@ def _row_to_response(row: Classification) -> ClassifyResponse:
     if row.pdf_path:
         pdf_url = f"/api/reports/{Path(row.pdf_path).name}"
     elif payload.get("pdf_url"):
-        pdf_url = payload["pdf_url"]
+        raw = str(payload["pdf_url"])
+        filename = raw.replace("\\", "/").rsplit("/", 1)[-1]
+        pdf_url = f"/api/reports/{filename}" if filename.endswith(".pdf") else None
 
     return ClassifyResponse(
         id                   = row.id,

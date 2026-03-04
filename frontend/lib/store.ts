@@ -84,7 +84,13 @@ export const useDeepCoinStore = create<DeepCoinState>()((set) => ({
   setTta:            (tta)      => set({ tta }),
   setSelectedFile:   (file)     => set({ selectedFile: file }),
   setUploadProgress: (pct)      => set({ uploadProgress: pct }),
-  setPhase:          (phase)    => set({ phase }),
+  // WHY clear result on "uploading": when handleAnalyse() begins, the previous
+  // analysis result must vanish immediately so its PDF download button cannot
+  // persist into the new upload phase. Without this, a completed AnalysisPanel
+  // stays visible until setResult() fires for the NEW analysis (up to 60 s).
+  setPhase:          (phase)    => phase === "uploading"
+    ? set({ phase, result: null, errorMessage: null })
+    : set({ phase }),
   setResult:         (result)   => set({ result, phase: "done", errorMessage: null }),
   setError:          (message)  => set({ errorMessage: message, phase: "error" }),
   _cancelFn:         null,

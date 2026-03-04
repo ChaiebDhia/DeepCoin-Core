@@ -128,13 +128,18 @@ def _run_chat(query: str, n_sources: int) -> dict[str, Any]:
     # ── 3. Format context blocks ────────────────────────────────────────────
     context_lines: list[str] = []
     sources: list[ChatSource] = []
+    # WHY 'hit' directly (not hit.get('metadata', {})):
+    #   rag_engine.search() returns flat dicts with type_id, chunk_type, etc.
+    #   at the top level — there is no nested 'metadata' key. Using hit directly
+    #   prevents all sources from showing '? / ?' in the frontend SourceChip.
     for i, hit in enumerate(hits, 1):
-        meta    = hit.get("metadata", {})
-        snippet = hit.get("document", "")[:300]
-        context_lines.append(f"[CONTEXT {i}] Type {meta.get('type_id','?')} ({meta.get('chunk_type','?')}):\n{snippet}")
+        snippet = hit.get("document", hit.get("text", ""))[:300]
+        type_id    = str(hit.get("type_id", hit.get("id", "?")))
+        chunk_type = str(hit.get("chunk_type", hit.get("chunk_types", ["?"])[0] if hit.get("chunk_types") else "?"))
+        context_lines.append(f"[CONTEXT {i}] Type {type_id} ({chunk_type}):\n{snippet}")
         sources.append(ChatSource(
-            type_id    = str(meta.get("type_id", "?")),
-            chunk_type = str(meta.get("chunk_type", "?")),
+            type_id    = type_id,
+            chunk_type = chunk_type,
             snippet    = snippet,
             score      = float(hit.get("rrf_score", hit.get("score", 0.0))),
         ))
