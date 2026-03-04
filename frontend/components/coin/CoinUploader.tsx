@@ -19,7 +19,7 @@
  *   → classifyCoin() starts → phase: uploading → phase: processing → phase: done
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState }           from "react";
 import { UploadCloud, ImageIcon, XCircle, StopCircle } from "lucide-react";
 import toast                                  from "react-hot-toast";
 
@@ -284,21 +284,24 @@ export function CoinUploader() {
   /**
    * Stable object-URL for the coin image preview.
    *
-   * WHY useMemo + useEffect:
-   *   URL.createObjectURL() called inline in JSX creates a NEW blob URL on
-   *   EVERY render and never revokes the old ones. Over dozens of uploads
-   *   per numismatist session this leaks significant memory.
-   *   useMemo creates exactly one URL per selectedFile value;
-   *   the cleanup effect revokes it when selectedFile changes or the
-   *   component unmounts.
+   * WHY useState + useEffect (not useMemo + separate useEffect):
+   *   The old pattern had a React Strict-Mode timing hazard: Strict Mode
+   *   double-invokes effects, revoking blob:A in the cleanup BEFORE React
+   *   has committed the re-created blob:B.  The <img> briefly holds the
+   *   revoked URL and the browser logs ERR_FILE_NOT_FOUND in the console.
+   *
+   *   With useState + useEffect the blob URL and its revocation are managed
+   *   atomically inside a single effect: the cleanup always revokes exactly
+   *   the URL this effect invocation created, regardless of Strict-Mode
+   *   double-invoke or rapid selectedFile transitions.
    */
-  const previewUrl = useMemo(
-    () => (selectedFile ? URL.createObjectURL(selectedFile) : null),
-    [selectedFile],
-  );
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   useEffect(() => {
-    return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); };
-  }, [previewUrl]);
+    if (!selectedFile) { setPreviewUrl(null); return; }
+    const url = URL.createObjectURL(selectedFile);
+    setPreviewUrl(url);
+    return () => { URL.revokeObjectURL(url); };
+  }, [selectedFile]);
 
   // Abort any in-flight request when the component unmounts
   useEffect(() => {

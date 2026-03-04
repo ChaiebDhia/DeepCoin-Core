@@ -665,13 +665,13 @@ export function AnalysisPanel({ result, showLink = false }: AnalysisPanelProps) 
         {result.id && (
           <button
             onClick={() => { setFeedbackOpen(v => !v); setFeedbackStatus("idle"); }}
-            className="ml-auto flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all"
+            className="ml-auto flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all hover:brightness-125 cursor-pointer"
             style={{
-              color:      feedbackOpen ? "#f87171" : "var(--text-muted)",
-              background: feedbackOpen ? "rgba(239,68,68,0.10)" : "rgba(255,255,255,0.04)",
-              border:     `1px solid ${feedbackOpen ? "rgba(239,68,68,0.30)" : "rgba(255,255,255,0.08)"}`,
+              color:      feedbackOpen ? "#f87171" : "#fca5a5",
+              background: feedbackOpen ? "rgba(239,68,68,0.14)" : "rgba(239,68,68,0.07)",
+              border:     `1px solid ${feedbackOpen ? "rgba(239,68,68,0.45)" : "rgba(239,68,68,0.22)"}`,
             }}
-            title="Report a misclassification"
+            title="Report a misclassification — help improve the model"
           >
             <ThumbsDown size={12} />
             Mark as wrong
