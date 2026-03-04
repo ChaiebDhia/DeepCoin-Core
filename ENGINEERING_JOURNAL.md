@@ -26167,3 +26167,609 @@ frontend/app/
 *Section 96: Mobile responsiveness  TutorialModal sm: breakpoints + mobile dot-strip; AgentPipeline 300px mobile budget.*
 *Section 97: Enterprise email confirmation  double opt-in, UUID token, /confirm + /unsubscribe endpoints, Resend integration, dev inline link.*
 *Section 98: Project state  21 routes, 11 pages, all layers 0-6 complete, Layer 7 next.*
+
+
+---
+
+## Section 99  Bug 33: PDF Download 404 on Windows  Full Backslash Path in URL
+
+**Date:** March 4, 2026
+**Commits:** `5d03ccb`
+**Files:** `src/api/routes/admin.py`, `src/api/routes/history.py`, `frontend/lib/api.ts`
+
+---
+
+### 99.1  Symptom
+
+Clicking the PDF download icon on the history detail page or from the admin dashboard returned `{"detail":"Not Found"}` in the browser. The browser DevTools network panel showed:
+
+```
+GET http://127.0.0.1:8000/api/reports/C:/Users/Administrator/deepcoin/reports/report_de297a85...pdf  404 (Not Found)
+```
+
+The URL contained the full Windows filesystem path embedded after `/api/reports/`. FastAPI's `serve_report` endpoint performs a `Path(filename).name` safety check, which correctly rejected the path  but the real problem was the URL should never have contained a filesystem path at all.
+
+---
+
+### 99.2  Root Cause Chain (Three Independent Sources of the Bug)
+
+The same underlying error (`full Windows path instead of just the filename`) originated from three different places. All three had to be fixed.
+
+#### Root Cause 1  `admin.py`: `rsplit("/", 1)[-1]` fails on Windows
+
+**File:** `src/api/routes/admin.py`, line 202  
+**Code before fix:**
+```python
+pdf_name = row.pdf_path.rsplit("/", 1)[-1] if row.pdf_path else None
+```
+
+**What it does:** splits on forward slash `/`, takes the last segment.
+
+**Why it failed on Windows:** The database stores `pdf_path` as the full OS path returned by Python's `open()`. On Windows that is `C:\Users\Administrator\deepcoin\reports\report_abc.pdf`. This string contains *no forward slashes*. `rsplit("/", 1)` produces `["C:\\Users\\...\\report_abc.pdf"]`  a list with one element, the entire original string. Taking `[-1]` returns the full path unchanged.
+
+**Fix:**
+```python
+# WHY Path(row.pdf_path).name instead of rsplit("/"):
+#   On Windows, pdf_path uses backslashes (C:\...\report.pdf).
+#   rsplit("/") finds no separator and returns the entire path.
+#   pathlib.Path.name handles BOTH forward and backward slashes on all OS.
+pdf_name = Path(row.pdf_path).name if row.pdf_path else None
+```
+
+`pathlib.Path` is OS-aware. `Path("C:\\Users\\Admin\\reports\\file.pdf").name` returns `"file.pdf"` on both Windows and Linux.
+
+---
+
+#### Root Cause 2  `history.py`: Old records in `payload["pdf_url"]`
+
+**File:** `src/api/routes/history.py`
+
+The SQLite store has two fields:
+- `pdf_path`  the full filesystem path, set by `classify.py` at classification time
+- `payload`  a JSON blob, which in early versions also stored a raw filesystem path under the key `pdf_url`
+
+Code structure in `_row_to_summary` and `_row_to_response`:
+```python
+pdf_url = None
+if row.pdf_path:
+    pdf_url = f"/api/reports/{Path(row.pdf_path).name}"  #  correct
+elif payload.get("pdf_url"):
+    pdf_url = payload["pdf_url"]  #  was: returned as-is, could be a full path
+```
+
+**Fix (applied to both `_row_to_summary` and `_row_to_response`):**
+```python
+elif payload.get("pdf_url"):
+    # Defensive: older records may have stored the full filesystem path
+    # inside payload["pdf_url"] (e.g. "/api/reports/C:\\Users\\...\\.pdf").
+    # Replace both path separators and take the last segment.
+    raw      = str(payload["pdf_url"])
+    filename = raw.replace("\\", "/").rsplit("/", 1)[-1]
+    pdf_url  = f"/api/reports/{filename}" if filename.endswith(".pdf") else None
+```
+
+The `replace("\\", "/")` normalises the Windows path to forward slashes *before* splitting, so `rsplit("/", 1)` now reliably finds the separator.
+
+---
+
+#### Root Cause 3  `admin/page.tsx`: PDF links bypassed `pdfDownloadUrl()`
+
+The admin dashboard analyses table linked PDFs with bare `<a href={row.pdf_url}>`. This meant:
+1. No Next.js proxy bypass  binary files download broken through the proxy
+2. No path normalization  if `row.pdf_url` contained a leaked path, it went straight into the `href`
+
+**Fix in `frontend/lib/api.ts`:** Added defensive path stripping to `pdfDownloadUrl()`:
+```typescript
+export function pdfDownloadUrl(pdfUrl: string): string {
+  if (pdfUrl.startsWith("http")) return pdfUrl;
+  let cleanUrl = pdfUrl.replace(/\\/g, "/");
+  const reportsPrefix = "/api/reports/";
+  if (cleanUrl.startsWith(reportsPrefix)) {
+    const afterPrefix = cleanUrl.slice(reportsPrefix.length);
+    if (afterPrefix.includes("/")) {
+      // Strip leaked filesystem path: /api/reports/C:/Users/.../file.pdf
+      //                               ->  /api/reports/file.pdf
+      const filename = afterPrefix.split("/").pop()!;
+      cleanUrl = `${reportsPrefix}${filename}`;
+    }
+  }
+  return `${_DIRECT_API_BASE}${cleanUrl}`;
+}
+```
+
+**Fix in `frontend/app/admin/page.tsx`:** All PDF links in the Analyses tab now use `pdfDownloadUrl()`:
+```tsx
+<a
+  href={pdfDownloadUrl(row.pdf_url)}
+  target="_blank"
+  rel="noopener noreferrer"
+>
+  <FileText size={10} /> PDF
+</a>
+```
+
+---
+
+### 99.3  Why This Only Appeared in Production Testing
+
+During Layer 3 and 4 development the test pipeline (`scripts/test_pipeline.py`) built the full path using `Path(pdf_path).name` *before* writing to the API response. The history endpoint used a different code path (the `payload["pdf_url"]` fallback) that was not audited at that time. The admin page was added in Layer 5 v3 and constructed PDF hrefs directly without calling the shared helper.
+
+**The lesson:** Any place that stores or returns a filesystem path must use `pathlib.Path.name`  not string splitting  because Python's path handling is OS-dependent and the `rsplit` on forward slash silently passes on Linux (the dev environment) but breaks on Windows (the deployment machine).
+
+---
+
+### 99.4  File Summary
+
+| File | Change |
+|------|--------|
+| `src/api/routes/admin.py` | `rsplit("/",1)[-1]`  `Path(row.pdf_path).name` |
+| `src/api/routes/history.py` | `_row_to_summary` + `_row_to_response` fallback: normalize + rsplit after `replace("\\","/")` |
+| `frontend/lib/api.ts` | `pdfDownloadUrl()`: strip leaked `C:/Users/...` before `_DIRECT_API_BASE` prefix |
+| `frontend/app/admin/page.tsx` | Analyses tab: `<a href={row.pdf_url}>`  `<a href={pdfDownloadUrl(row.pdf_url)}>` |
+
+---
+
+## Section 100  Bug 34: Stale PDF Download Button Persists Into New Analysis
+
+**Date:** March 4, 2026
+**Commit:** `5d03ccb`
+**File:** `frontend/lib/store.ts`
+
+---
+
+### 100.1  Symptom
+
+After completing one analysis (PDF download button appears in `AnalysisPanel`), clicking **Cancel** and then uploading a new image caused the old PDF download button to remain visible during the new upload phase. In some scenarios the old result panel persisted even after the new analysis began.
+
+---
+
+### 100.2  Root Cause: `setPhase` Did Not Clear `result`
+
+**`frontend/lib/store.ts`  state machine fields:**
+```typescript
+phase:           UploadPhase;   // "idle" | "uploading" | "processing" | "done" | "error"
+result:          ClassifyResponse | null;
+selectedFile:    File | null;
+errorMessage:    string | null;
+```
+
+**The intended state machine:**
+```
+idle  uploading  processing  done
+```
+
+When `handleAnalyse()` starts in `CoinUploader`, it calls `setPhase("uploading")`. The old implementation:
+```typescript
+setPhase: (phase) => set({ phase }),
+```
+
+This changed *only* `phase`. It left `result` pointing at the previous `ClassifyResponse` object.
+
+`AnalyseSection` shows `AnalysisPanel` whenever:
+```typescript
+const hasResult = phase === "done" && result != null;
+```
+
+Once phase becomes `"done"`, if `result` is still the old object, the full old panel (including the old PDF download CTA) re-renders. Because React re-renders are fast, users saw the old panel flash or persist.
+
+**The critical moment:** `handleCancel()` calls `reset()` which sets `result: null`. But `handleAnalyse()` on a *new* file did **not** call `reset()`  it called `setPhase("uploading")` directly, leaving the old result intact.
+
+---
+
+### 100.3  Fix: Atomic State Transition
+
+```typescript
+// BEFORE (only phase changed):
+setPhase: (phase) => set({ phase }),
+
+// AFTER (uploading atomically wipes stale result):
+// WHY clear result on "uploading": when handleAnalyse() begins, the previous
+// analysis result must vanish immediately so its PDF download button cannot
+// persist into the new upload phase.
+setPhase: (phase) => phase === "uploading"
+  ? set({ phase, result: null, errorMessage: null })
+  : set({ phase }),
+```
+
+**Why only `"uploading"` triggers the clear:** The other state transitions (`"processing"`, `"done"`, `"error"`) must NOT clear `result`:
+- `setPhase("processing")`  pipeline still running, result empty, nothing to clear
+- `setPhase("done")`  `setResult()` is called instead (sets `result` + `phase` atomically)
+- `setPhase("error")`  result might display partial data, should not be wiped
+
+The fix is a single-line conditional that precisely targets the transition that starts a new analysis cycle.
+
+---
+
+### 100.4  Why `reset()` Alone Was Insufficient
+
+`CoinUploader` calls `reset()` in two places:
+1. `handleCancel()`  correct, wipes everything
+2. `handleFiles()`  called when a new file is selected, before analysis begins
+
+But `handleAnalyse()` calls `setPhase("uploading")` directly (not `reset()`), so a user who selects a file and immediately clicks Analyse skips the `reset()` path. The fix makes `setPhase("uploading")` itself safe, regardless of which code path leads to it.
+
+---
+
+## Section 101  Admin Dashboard Enterprise Redesign v2
+
+**Date:** March 4, 2026
+**Commit:** `5d03ccb`
+**File:** `frontend/app/admin/page.tsx` (complete rewrite, 750-line  980-line)
+
+---
+
+### 101.1  Problem With the Original Design
+
+The original admin page was a single scrolling column that rendered ALL data sections simultaneously:
+
+```
+[Health overview]
+[Pipeline stats]
+[All Analyses table]       3 simultaneous API calls on mount
+[User Corrections table]   all began before SessionSync wrote the JWT
+[Subscribers table]        all received 401 on cold load
+```
+
+**Problems at scale:**
+1. **3 parallel API calls on mount**  cold page load triggered all three simultaneously. With 1,000+ rows each this was both slow and wasteful.
+2. **No pagination**  the analyses and corrections tables loaded ALL records, causing layout overflow and browser memory pressure.
+3. **Single scroll**  users navigating to subscribers had to scroll past all analyses.
+4. **PDF links bypassed `pdfDownloadUrl()`**  `<a href={row.pdf_url}>` went through the Next.js proxy which cannot serve binary PDFs (Bug 33, Root Cause 3).
+
+---
+
+### 101.2  New Architecture: Tab-Based Lazy Loading
+
+```
+
+  Overview    Analyses    Corrections    Subscribers       
+ (active)    (lazy)      (lazy)         (lazy)             
+
+```
+
+**Lazy loading principle:** Each tab's `useQuery` only fires when the tab is first activated. The `AnimatePresence mode="wait"` wrapper unmounts the previous tab's DOM but React Query keeps the data in cache, so returning to a tab shows the cached result instantly.
+
+**API call reduction:** Cold load: 3 calls  1 call (health check only, no auth required). Switching to Analyses tab makes 1 additional call. Corrections tab: 1. Subscribers: 1. Total for a user who opens all tabs: same as before, but spread across interactions.
+
+---
+
+### 101.3  Component Architecture
+
+```typescript
+AdminPage
+ OverviewTab    (props: isPrivileged, sessionStatus)   always rendered first
+    useQuery: getHealth         (no auth, always enabled)
+    useQuery: getHistory(0,5)   (enabled: authed, shows "my recent analyses")
+ AnalysesTab    (props: sessionStatus)
+    useQuery: getAdminAnalyses  (enabled: authed, paginated 20/page)
+ CorrectionsTab (props: sessionStatus)
+    useQuery: getAdminFeedback  (enabled: authed, paginated 20/page)
+ SubscribersTab (props: sessionStatus)
+     useQuery: /api/admin/subscribers (enabled: authed, client-side pagination 25/page)
+```
+
+**Shared sub-components:**
+- `Pagination`  prev/next buttons, "Page N / M" label, disabled state, reused in all 3 data tabs
+- `TableSkeleton`  5-row animated pulse rows, column count configurable (`cols` prop)
+- `StatusDot`  animated green/amber/red pulse with label, used in health panel
+- `ComponentRow`  single health component check-icon row
+- `downloadCSV`  builds RFC 4180 CSV from subscriber array, triggers browser download
+
+---
+
+### 101.4  Pagination Implementation
+
+Server-side pagination (Analyses, Corrections):
+```typescript
+const { data, isLoading } = useQuery({
+  queryKey: ["admin", "analyses", page, route, search],
+  queryFn:  () => getAdminAnalyses(
+    (page - 1) * PAGE_SIZE,   // skip = (page-1) * 20
+    PAGE_SIZE,                 // limit = 20
+    route  || undefined,
+    search || undefined,
+  ),
+  staleTime: 30_000,
+  enabled:   authed,
+});
+```
+
+The `page` value is part of the `queryKey`, so TanStack Query caches each page independently. Navigating page 121 reuses the page 1 cache without a network call (within `staleTime`).
+
+Client-side pagination (Subscribers):
+The subscribers endpoint returns all records at once (typically small dataset, ~100s of emails). The table paginates purely in JS using `subscribers.slice((subPage-1)*25, subPage*25)`. No refetch on page change.
+
+---
+
+### 101.5  Filter Bar (Analyses Tab)
+
+```
+[  Search CN label  ]  [All routes ]
+```
+
+The search input and route select are `controlled` React state. Changing either resets `page` to 1 (preventing empty-page navigation) and triggers a new query via key invalidation:
+
+```typescript
+onChange={e => { setSearch(e.target.value); setPage(1); }}
+```
+
+Filter parameters are passed directly to `getAdminAnalyses()` which includes them as query params: `?search=&route=historian`. The backend performs a SQL `LIKE` on the label column and `WHERE route_taken = :route`.
+
+---
+
+### 101.6  Access Control: Two Tiers
+
+| User state | What they see |
+|---|---|
+| Unauthenticated | Redirect to `/login?callbackUrl=/admin` |
+| `role: analyst` | Access Restricted page with psql promotion guide |
+| `role: admin` or `curator` | Full 4-tab dashboard |
+
+The "Access Restricted" page for analyst role includes a ready-to-paste SQL command:
+```sql
+UPDATE users SET role='admin' WHERE email='user@example.com';
+```
+This is intentional for a development environment  the admin is always the developer, and copy-pasting a SQL command is the correct low-overhead promotion path for a PFE project.
+
+---
+
+### 101.7  AnimatePresence Tab Transitions
+
+```tsx
+<AnimatePresence mode="wait">
+  <motion.div
+    key={activeTab}
+    initial={{ opacity: 0, y: 10 }}
+    animate={{ opacity: 1, y: 0 }}
+    exit={{ opacity: 0, y: -6 }}
+    transition={{ duration: 0.18 }}
+  >
+    {activeTab === "overview"    && <OverviewTab ... />}
+    {activeTab === "analyses"    && <AnalysesTab ... />}
+    {activeTab === "corrections" && <CorrectionsTab ... />}
+    {activeTab === "subscribers" && <SubscribersTab ... />}
+  </motion.div>
+</AnimatePresence>
+```
+
+`mode="wait"` means the exit animation completes before the enter animation starts. Without this, both the old and new tab would be in the DOM simultaneously for the 180ms transition, causing a layout flash. `key={activeTab}` is what tells Framer Motion to treat each tab as a unique element requiring its own mount/unmount cycle.
+
+---
+
+## Section 102  Bug 35: Admin Page 401 Race Condition (useQuery Before SessionSync)
+
+**Date:** March 4, 2026
+**Commit:** `77edb66`
+**File:** `frontend/app/admin/page.tsx`
+
+---
+
+### 102.1  Symptom
+
+After the admin page redesign (Section 101), the browser console showed three 401 errors immediately on page load, even when logged in:
+
+```
+GET http://localhost:3000/api/history?skip=0&limit=5        401 (Unauthorized)
+GET http://localhost:3000/api/admin/feedback?skip=0&limit=20  401 (Unauthorized)
+GET http://localhost:3000/api/admin/analyses?skip=0&limit=20  401 (Unauthorized)
+```
+
+The calls went out before the JWT was available  every query fired with no `Authorization` header.
+
+---
+
+### 102.2  Root Cause: React Render/useEffect Timing
+
+This is a fundamental React timing constraint, not a logic error:
+
+**The rendering timeline on cold page load:**
+
+```
+t=0ms   React renders AdminPage (synchronous)
+t=0ms   TanStack Query registers 3 useQuery hooks
+t=0ms   useQuery triggers its first fetch immediately (no enabled guard)
+         no JWT in _authToken yet  GET /api/history  401
+t=5ms   useEffect in SessionSync.tsx runs:
+          setAuthToken(session?.user?.accessToken ?? null)
+         _authToken is now populated
+t=?ms   NextAuth resolves  session available  SessionSync calls setAuthToken
+```
+
+The architecture of `lib/api.ts` uses a module-level `_authToken` variable:
+```typescript
+let _authToken: string | null = null;
+
+export function setAuthToken(token: string | null): void {
+  _authToken = token;
+}
+
+function applyAuthInterceptor(client: typeof apiClient) {
+  client.interceptors.request.use((config) => {
+    if (_authToken) config.headers["Authorization"] = `Bearer ${_authToken}`;
+    return config;
+  });
+}
+```
+
+`SessionSync.tsx` calls `setAuthToken()` inside a `useEffect`. In React, `useEffect` runs *after* the first render AND after the browser has painted. TanStack Query's first fetch fires *during* the render commit phase. The inevitable result: the first fetch always runs before `SessionSync` has set the token.
+
+This exact bug is documented in the project at `frontend/app/history/[id]/page.tsx` (comment block around line 247): *"delay is required because the JWT hasn't been written to _authToken yet by SessionSync"*.
+
+---
+
+### 102.3  Fix: `enabled` Guard on Every Authenticated Query
+
+The fix threads `sessionStatus` from `AdminPage` (which already calls `useSession()`) down into every tab component as a prop:
+
+**`AdminPage` (renders all tabs):**
+```tsx
+const { data: session, status: sessionStatus } = useSession();
+
+// ... tab rendering:
+<OverviewTab    isPrivileged={isPrivileged} sessionStatus={sessionStatus} />
+<AnalysesTab                               sessionStatus={sessionStatus} />
+<CorrectionsTab                            sessionStatus={sessionStatus} />
+<SubscribersTab                            sessionStatus={sessionStatus} />
+```
+
+**Each tab component:**
+```tsx
+function AnalysesTab({ sessionStatus }: { sessionStatus: string }) {
+  const authed = sessionStatus === "authenticated";
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin", "analyses", page, route, search],
+    queryFn:  () => getAdminAnalyses(...),
+    staleTime: 30_000,
+    enabled:   authed,   //  query stays dormant until session resolves
+  });
+```
+
+**`useSession()` state machine:**
+```
+sessionStatus = "loading"          enabled = false  no fetch
+sessionStatus = "authenticated"    enabled = true   fetch fires (JWT ready)
+sessionStatus = "unauthenticated"  enabled = false  page redirects anyway
+```
+
+By the time `sessionStatus` transitions from `"loading"` to `"authenticated"`, `SessionSync`'s `useEffect` has already run and written the JWT to `_authToken`. The two asynchronous processes are now properly sequenced.
+
+---
+
+### 102.4  Exception: Health Endpoint
+
+The `getHealth` query in `OverviewTab` is deliberately NOT guarded:
+
+```typescript
+const { data: health } = useQuery({
+  queryKey:        ["health"],
+  queryFn:         getHealth,
+  refetchInterval: 30_000,
+  // No enabled guard  health is a public endpoint, no auth needed
+});
+```
+
+`GET /api/health` does not require authentication. Keeping it always-enabled means the health status shows immediately on page load with no delay, giving instant visual feedback that the backend is reachable.
+
+---
+
+### 102.5  The Broader Pattern
+
+This `enabled: sessionStatus === "authenticated"` pattern is now the standard for all authenticated queries in the project. The same problem exists on any page that:
+- Uses `useSession()` to get credentials
+- Calls `setAuthToken()` via a `useEffect` in `SessionSync`
+- Makes API calls via `apiClient` (which reads `_authToken` synchronously from the interceptor)
+
+Any future authenticated `useQuery` in the codebase should include the same guard. The alternative  storing the token in Zustand or React context and using it directly  was rejected because it would require a Promise chain in the Axios interceptor, defeating the synchronous single-variable design that eliminates `ClientFetchError` console spam.
+
+---
+
+## Section 103  Project State After March 4 Session (Bug Fix Batch)
+
+**Date:** March 4, 2026
+**Commits:** `5d03ccb` (Bug 33/34 + admin redesign), `77edb66` (Bug 35  401 race)
+
+---
+
+### 103.1  Bugs Fixed This Session
+
+| # | Symptom | Root cause | Fix | Commit |
+|---|---------|-----------|-----|--------|
+| 33 | PDF download 404  full Windows path in URL | `admin.py` used `rsplit("/")` which does not split Windows backslash paths; `history.py` `payload["pdf_url"]` fallback returned raw path; admin page bypassed `pdfDownloadUrl()` | `Path.name` in admin.py; normalize+rsplit in history.py fallback; `pdfDownloadUrl()` now strips leaked FS paths; admin table uses the helper | `5d03ccb` |
+| 34 | Stale PDF button persists into new analysis | `setPhase("uploading")` only set `phase`, left `result` intact from previous analysis | `setPhase("uploading")` now atomically sets `{phase, result:null, errorMessage:null}` | `5d03ccb` |
+| 35 | Admin page 401 on every cold load despite being logged in | `useQuery` fires before `SessionSync`'s `useEffect` writes JWT to `_authToken` | `enabled: sessionStatus === "authenticated"` on all 4 authenticated queries | `77edb66` |
+
+---
+
+### 103.2  Files Changed
+
+| File | Change |
+|------|--------|
+| `src/api/routes/admin.py` | `rsplit("/",1)[-1]`  `Path(row.pdf_path).name` |
+| `src/api/routes/history.py` | Both `_row_to_summary` and `_row_to_response` fallback: `raw.replace("\\","/").rsplit("/",1)[-1]` + `.endswith(".pdf")` guard |
+| `frontend/lib/api.ts` | `pdfDownloadUrl()`: strip `/api/reports/C:/...` leaked FS paths before prepending `_DIRECT_API_BASE` |
+| `frontend/lib/store.ts` | `setPhase("uploading")` atomically clears `result:null, errorMessage:null` |
+| `frontend/app/admin/page.tsx` | Complete rewrite: tab-based v2 (Overview/Analyses/Corrections/Subscribers), lazy loading, Pagination component, TableSkeleton, all PDF links via `pdfDownloadUrl()`, `enabled` guards on all queries |
+
+---
+
+### 103.3  Architecture Decisions Reinforced
+
+**`pathlib.Path.name` is mandatory for filesystem path  basename conversion:**
+`rsplit("/")` is an OS-dependent antipattern. It works on Linux/macOS (forward slashes only) but silently fails on Windows. The correct cross-platform approach is always `Path(some_path).name`. This has now been applied consistently across admin.py, history.py, classify.py, and synthesis.py.
+
+**`enabled` guard = the standard pattern for all authenticated `useQuery` calls:**
+`SessionSync` + module-level `_authToken` is the correct architecture (no `ClientFetchError` spam, synchronous interceptor, zero network overhead). But it introduces a timing gap on first render. `enabled: sessionStatus === "authenticated"` is the correct and idiomatic TanStack Query solution. Every future authenticated query must include this guard.
+
+**`setPhase("uploading")` must be a full state reset, not a partial update:**
+Zustand's `set()` merges into existing state. Calling `set({ phase })` leaves all other fields unchanged. Any state transition that begins a new user workflow must explicitly null out results from the previous workflow. The pattern `phase === "uploading" ? set({ phase, result: null, errorMessage: null }) : set({ phase })` encapsulates this clearly.
+
+---
+
+### 103.4  Bug Catalogue: Complete Table (All Sessions)
+
+| # | Description | Status |
+|---|-------------|--------|
+| 1 | `IndentationError` in historian.py |  Fixed |
+| 2 | `RuntimeError: Invalid device string "auto"` |  Fixed |
+| 3 | `multi_cell` X-cursor drift in synthesis.py |  Fixed |
+| 4 | Greek chars rendered as `???` in PDF |  Fixed |
+| 5 | Extra blank page with footer band in PDF |  Fixed |
+| 6 | `to_pdf()` signature mismatch (state vs markdown) |  Fixed |
+| 7 | SSL certificate error in scraper |  Fixed |
+| 8 | Emoji/navigation chars in scraped metadata |  Fixed |
+| 9 | Mint field "Region:" contamination |  Fixed |
+| 10 | 4/438 types returned HTTP errors from CN |  Fixed |
+| 11 | ETA displayed "~161h" instead of "~2h 41min" |  Fixed |
+| 12 | `class_id` used instead of `label_str` for KB lookup |  Fixed |
+| 13 | PDF error silently lost to bare `print()` |  Fixed |
+| 14 | Metal detection priority wrong (silver before bronze) |  Fixed |
+| 15 | KB similarity always 0% (`rrf_score` key mismatch) |  Fixed |
+| 16 | CLAHE skipped in inference  low confidence on raw photos |  Fixed |
+| 17 | `lib/` gitignore rule silenced `frontend/lib/` |  Fixed |
+| 18 | AgS patina false bronze detection  validator mismatch |  Fixed |
+| 19 | `ClientFetchError` from `getSession()` in interceptor |  Fixed |
+| 20 | `/api/auth/session` forwarded to FastAPI (Turbopack bug) |  Fixed |
+| 21 | Login fails after register (status=pending, 403 not propagated) |  Fixed |
+| 22 | `/analyse` page frozen on Client-Side Navigation |  Fixed |
+| 23 | `/explore` returns 401 for anonymous users |  Fixed |
+| 24 | PDF download returns JSON (TTL too short) |  Fixed |
+| 25 | Feedback corrections invisible in admin |  Fixed |
+| 26 | PDF download broken in AnalysisPanel (proxy for binary) |  Fixed |
+| 27 | Auto-crop skip condition `min(h,w)<200` blocked all processed images |  Fixed |
+| 28 | TTA threshold 0.75  0.875 (honest "Consistent Match") |  Fixed |
+| 29 | History table: `<a>` around delete `<button>` (invalid HTML) |  Fixed |
+| 30 | Search field in /explore not debounced |  Fixed |
+| 31 | PDF download broken in HistoryTable (proxy bypass missing) |  Fixed |
+| 32 | `/analyse` accessible without authentication |  Fixed |
+| 33 | PDF download 404  full Windows path in URL |  Fixed |
+| 34 | Stale PDF button persists into new analysis |  Fixed |
+| 35 | Admin page 401 on cold load  `useQuery` before `SessionSync` |  Fixed |
+
+---
+
+### 103.5  Current Layer Status
+
+| Layer | Description | Status |
+|-------|-------------|--------|
+| 0 | CNN Training (EfficientNet-B3, 80.03% TTA  8) |  Complete |
+| 1 | Inference Engine (CLAHE + auto-crop + temperature scaling) |  Complete |
+| 2 | Knowledge Base (47,705 RAG chunks, 9,541 CN types) |  Complete |
+| 3 | Agent System (3-route confidence pipeline, 5 agents) |  Complete |
+| 4 | FastAPI Backend (JWT/RBAC, rate-limit, SQLite WAL, 22 routes) |  Complete |
+| 5 | Next.js Frontend (11 pages, 35+ components, enterprise admin) |  Complete |
+| 6 | Docker + Infrastructure (7 services, Nginx, LocalStack) |  Complete |
+| 7 | Tests + CI/CD |  Pending |
+
+**Total bugs fixed across all sessions: 35. All open bugs: 0.**
+
+**Next: Layer 7  pytest unit/integration suite (`tests/unit/`, `tests/integration/`) + GitHub Actions CI/CD (`flake8` + `black` + `pytest` + `npx tsc --noEmit`).**
+
+---
+
+*Engineering Journal  Sections 99103 added March 4, 2026.*
+*Section 99: Bug 33  PDF 404  three-root-cause analysis: admin.py rsplit, history.py payload fallback, admin page missing pdfDownloadUrl().*
+*Section 100: Bug 34  stale PDF button  setPhase("uploading") must atomically wipe result.*
+*Section 101: Admin dashboard enterprise redesign v2  tab-based lazy loading, Pagination, TableSkeleton, AnimatePresence.*
+*Section 102: Bug 35  401 race condition  useQuery enabled guard pattern; SessionSync timing explained.*
+*Section 103: Project state  35 bugs fixed (all resolved), Layer 7 next.*
