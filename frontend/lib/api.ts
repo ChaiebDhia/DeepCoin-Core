@@ -425,14 +425,20 @@ export async function getAdminAnalyses(
  * @param query     The question (max 500 chars)
  * @param nSources  Number of KB chunks to retrieve (default 5)
  */
-export async function chatQuery(query: string, nSources = 5): Promise<ChatResponse> {
+export async function chatQuery(
+  query: string,
+  nSources = 5,
+  /** Top-5 CNN predicted CN type IDs — injected as primary context in the backend */
+  top5Labels: string[] = [],
+): Promise<ChatResponse> {
   // Uses classifyApiClient (direct to FastAPI, 180 s timeout) — same reason as
   // classifyCoin: the LLM call can take 8–20 s; the Next.js proxy would time out.
   // FIX: route is /api/chat (prefix set in chat.py router), was /chat before.
   try {
     const { data } = await classifyApiClient.post<ChatResponse>("/api/chat", {
       query,
-      n_sources: nSources,
+      n_sources:   nSources,
+      top5_labels: top5Labels,
     });
     return data;
   } catch (err) {

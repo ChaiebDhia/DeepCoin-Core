@@ -277,6 +277,24 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
           </span>
         </div>
 
+        {/* ── Review all 5 candidates callout (States 2 ─ TTA consensus ─ and 3 ─ Deep Search) ──
+         *  WHY: when the model cannot confidently identify one type, the top-5 bar chart
+         *  sitting below the header badge is easy to miss.  A small callout band draws
+         *  the user’s attention downward before they scroll past to the agent section.
+         *  Only shown when !identified so it never appears on clear high-conf results.
+         * ───────────────────────────────────────────────────────────────────── */}
+        {!identified && (
+          <div
+            className="rounded-lg px-3 py-2 text-xs"
+            style={{ background: "rgba(139,92,246,0.07)", border: "1px solid rgba(139,92,246,0.22)" }}
+          >
+            <span className="font-bold text-purple-300">↓ Review all 5 candidate types below</span>
+            <span className="text-[var(--text-muted)]">
+              {" "}— the correct coin may rank 2nd or 3rd. Each label links to the official Corpus Nummorum record.
+            </span>
+          </div>
+        )}
+
         {/* Top-5 table */}
         <div>
           <p className="text-xs text-[var(--text-muted)] mb-2 uppercase tracking-wide">
@@ -560,6 +578,20 @@ export function AnalysisPanel({ result, showLink = false }: AnalysisPanelProps) 
     }
   }
 
+  // ── AI chat CTA helpers ─────────────────────────────────────────────────
+  // isLowConf — true when CNN signal is weak AND there is no TTA consensus.
+  //             Drives the colour/copy variant of the always-visible AI CTA.
+  // top5Labels — comma-separated list of all 5 CNN-predicted type IDs, passed
+  //             to /chat?top5= so the backend fetches context for ALL candidates.
+  // chatHref   — final pre-built URL; computed here once to keep JSX clean.
+  const isLowConf = result.cnn.confidence < DISPLAY_CONF_THRESHOLD
+    && !(result.cnn.vote_fraction != null && result.cnn.vote_fraction >= TTA_VOTE_THRESHOLD);
+  const top5Labels = result.cnn.top5.map((t: Top5Item) => t.label).join(",");
+  const chatQ = isLowConf
+    ? `Identify ancient coin — top candidates: ${result.cnn.top5.map((t: Top5Item) => `CN ${t.label} (${(t.confidence * 100).toFixed(0)}%)`).join(", ")}`
+    : `Tell me about CN ${result.cnn.label} — ${(result.cnn.confidence * 100).toFixed(1)}% confidence identification`;
+  const chatHref = `/chat?q=${encodeURIComponent(chatQ)}&top5=${encodeURIComponent(top5Labels)}`;
+
   return (
     <div className="flex flex-col gap-4 w-full">
       {/* ── Header: route + type + conf + time ── */}
@@ -612,28 +644,45 @@ export function AnalysisPanel({ result, showLink = false }: AnalysisPanelProps) 
       {/* ── CNN card ── */}
       <CnnSection cnn={result.cnn} />
 
-      {/* ── Continue Research in AI Chat (low-confidence only) ─────────────── */}
-      {result.cnn.confidence < DISPLAY_CONF_THRESHOLD
-        && !(result.cnn.vote_fraction != null && result.cnn.vote_fraction >= TTA_VOTE_THRESHOLD)
-        && (
-          <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
-            <Link
-              href={`/chat?q=${encodeURIComponent(`CN ${result.cnn.label} ancient coin numismatics`.trim())}`}
-              className="group flex items-center justify-between rounded-xl px-4 py-3.5 border transition-all hover:border-purple-500/50"
-              style={{ background: "linear-gradient(135deg, rgba(139,92,246,0.10) 0%, rgba(99,102,241,0.05) 100%)", borderColor: "rgba(139,92,246,0.25)" }}
-            >
-              <div>
-                <p className="text-xs font-bold text-purple-300 group-hover:text-purple-200 transition-colors">
-                  🔍 Continue research in DeepCoin AI
-                </p>
-                <p className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
-                  Ask follow-up questions about CN {result.cnn.label} · context pre-loaded
-                </p>
-              </div>
-              <Sparkles size={15} className="shrink-0 ml-3 text-purple-400 opacity-60 group-hover:opacity-100 transition-all" />
-            </Link>
-          </motion.div>
-        )}
+      {/* ── Continue Research in AI Chat ─────────────────────────────────────
+       *  Shown for ALL analysis results — not just low confidence ones.
+       *  HIGH confidence: blue card — invite deeper historical exploration.
+       *  LOW confidence:  purple card — invite candidate comparison.
+       *  chatHref and isLowConf are computed before the return statement
+       *  and pre-load all 5 CNN candidates as ?top5= URL context.
+       * ─────────────────────────────────────────────────────────────────── */}
+      <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
+        <Link
+          href={chatHref}
+          className={`group flex items-center justify-between rounded-xl px-4 py-3.5 border transition-all ${
+            isLowConf ? "hover:border-purple-500/50" : "hover:border-blue-500/40"
+          }`}
+          style={isLowConf
+            ? { background: "linear-gradient(135deg, rgba(139,92,246,0.10) 0%, rgba(99,102,241,0.05) 100%)", borderColor: "rgba(139,92,246,0.25)" }
+            : { background: "linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(99,102,241,0.04) 100%)", borderColor: "rgba(59,130,246,0.22)" }
+          }
+        >
+          <div>
+            <p className={`text-xs font-bold transition-colors ${
+              isLowConf ? "text-purple-300 group-hover:text-purple-200" : "text-blue-300 group-hover:text-blue-200"
+            }`}>
+              {isLowConf
+                ? "🔍 Ask DeepCoin AI — explore all 5 candidates"
+                : `✨ Ask DeepCoin AI about CN ${result.cnn.label}`
+              }
+            </p>
+            <p className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
+              {isLowConf
+                ? `All ${result.cnn.top5.length} candidate types loaded as context — ask to compare them`
+                : "Deep-dive into history, iconography & numismatic significance"
+              }
+            </p>
+          </div>
+          <Sparkles size={15} className={`shrink-0 ml-3 opacity-60 group-hover:opacity-100 transition-all ${
+            isLowConf ? "text-purple-400" : "text-blue-400"
+          }`} />
+        </Link>
+      </motion.div>
 
       {/* ── Agent-specific card ── */}
       {result.route_taken === "historian"    && <HistorianSection    result={result} />}

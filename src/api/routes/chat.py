@@ -60,13 +60,21 @@ class ChatRequest(BaseModel):
     Chat query body.
 
     Fields:
-        query — The natural language question (e.g. "What are silver coins
-                from Maroneia?"). Required, max 500 characters.
-        n_sources — How many RAG context chunks to inject (1–10). A larger
-                    value gives richer context at the cost of longer prompts.
+        query       — The natural language question (e.g. "What are silver coins
+                      from Maroneia?"). Required, max 500 characters.
+        n_sources   — How many RAG context chunks to inject (1–10). A larger
+                      value gives richer context at the cost of longer prompts.
+        top5_labels — Optional list of CN type IDs (as strings) representing
+                      the CNN's top-5 predicted candidates, e.g. ["1015","544"].
+                      When provided, the backend fetches get_context_blocks()
+                      for each label and injects them as PRIMARY CANDIDATE N
+                      blocks at the top of the LLM context — before the
+                      semantic search results.  This lets the chat AI compare
+                      all 5 candidates instead of only the top-1.
     """
-    query:    str = Field(..., min_length=1, max_length=500, description="Numismatic question")
-    n_sources: int = Field(5, ge=1, le=10, description="Number of KB chunks to retrieve")
+    query:       str       = Field(..., min_length=1, max_length=500, description="Numismatic question")
+    n_sources:   int       = Field(5, ge=1, le=10, description="Number of KB chunks to retrieve")
+    top5_labels: list[str] = Field(default_factory=list, description="Top-5 CNN predicted CN type IDs")
 
 
 class ChatSource(BaseModel):
@@ -93,7 +101,7 @@ class ChatResponse(BaseModel):
 
 # ── RAG + LLM pipeline (blocking — runs in to_thread) ────────────────────────
 
-def _run_chat(query: str, n_sources: int) -> dict[str, Any]:
+def _run_chat(query: str, n_sources: int, top5_labels: list[str] | None = None) -> dict[str, Any]:
     """
     Execute a complete RAG → LLM chat pipeline synchronously.
 
@@ -136,7 +144,7 @@ def _run_chat(query: str, n_sources: int) -> dict[str, Any]:
 
     # ── 1. Detect specific CN type ID in the query ──────────────────────────
     # Matches: "CN 4776", "CN4776", "type 4776", "Type-4776", bare "4776" etc.
-    cn_id_match = _re.search(r'(?:CN|cn|Type|type)\s*[-#]?\s*(\d{3,6})\b', query)
+    cn_id_match = _re.search(r'(?:CN|cn|Type|type)\s*[-#]?\s*(\d{2,6})\b', query)
     primary_context   = ""
     primary_sources: list[ChatSource] = []
 
@@ -163,6 +171,43 @@ def _run_chat(query: str, n_sources: int) -> dict[str, Any]:
                 logger.debug("CN type %s not in RAG corpus — falling back to search", detected_id)
         except Exception as exc:
             logger.debug("get_context_blocks(%s) failed: %s", detected_id, exc)
+
+    # ── 1b. Inject context for each of the CNN's top-5 candidate types ──────
+    # WHY: The frontend passes all 5 predicted CN type IDs so the AI can
+    #      compare candidates directly.  Each label gets its own labeled block
+    #      so the LLM can reference them by type ID in its answer without using
+    #      opaque [CONTEXT N] notation.  Labels already fetched as primary
+    #      context (from cn_id_match) are skipped to avoid duplication.
+    candidate_sources: list[ChatSource] = []
+    if top5_labels:
+        for rank, label in enumerate(top5_labels, start=1):
+            label_str = label.strip()
+            if not label_str:
+                continue
+            try:
+                candidate_id_int = int(label_str)
+            except ValueError:
+                continue
+            # Skip if already fetched as the primary direct-lookup type
+            if cn_id_match and cn_id_match.group(1) == label_str:
+                continue
+            try:
+                cand_context = rag.get_context_blocks(candidate_id_int)
+                if f"(no identity data for type {label_str})" not in cand_context:
+                    primary_context += (
+                        f"=== CNN CANDIDATE #{rank}: CN TYPE {label_str} ===\n"
+                        f"{cand_context}\n\n"
+                    )
+                    cand_record = rag.get_by_id(candidate_id_int)
+                    if cand_record:
+                        candidate_sources.append(ChatSource(
+                            type_id    = label_str,
+                            chunk_type = "cnn_candidate",
+                            snippet    = cand_context[:300],
+                            score      = 1.0 / rank,
+                        ))
+            except Exception as exc:
+                logger.debug("top5 get_context_blocks(%s) failed: %s", label_str, exc)
 
     # ── 2. Hybrid search for supplementary context ──────────────────────────
     hits = rag.search(query, n=n_sources)
@@ -206,7 +251,7 @@ def _run_chat(query: str, n_sources: int) -> dict[str, Any]:
             score      = float(hit.get("rrf_score", hit.get("score", 0.0))),
         ))
 
-    all_sources = primary_sources + supplementary_sources
+    all_sources = primary_sources + candidate_sources + supplementary_sources
 
     # ── 4. Build system + user messages ─────────────────────────────────────
     system_message = (
@@ -216,13 +261,15 @@ def _run_chat(query: str, n_sources: int) -> dict[str, Any]:
         "imperial mints from the 7th century BC to the 4th century AD.\n\n"
         "YOUR RESPONSE MUST:\n"
         "1. GROUND specific facts (dates, denominations, weights, mint cities, legends, "
-        "   iconography) in the provided context blocks, citing them as [CONTEXT N] or "
-        "   [CN Type XXXX].\n"
+        "   iconography) in the provided context blocks. When citing Corpus Nummorum data, "
+        "   write naturally — for example: 'According to Corpus Nummorum records for "
+        "   CN Type 1015...' or 'CN Type 544 records show...' — NEVER use bracket "
+        "   notation such as [CONTEXT N] or [CN Type XXXX] in your output.\n"
         "2. SUPPLEMENT with your expert numismatic knowledge when context data is sparse "
-        "   — this is REQUIRED, not optional. Mark supplemented facts explicitly as "
-        "   'Historically,' or '[General numismatic knowledge]'. A sparse KB record "
-        "   for a well-known coin type (e.g. Athenian tetradrachm, Roman denarius) is "
-        "   not a reason to withhold expertise.\n"
+        "   — this is REQUIRED, not optional. Mark supplemented facts explicitly with "
+        "   'Historically,' or 'General numismatic knowledge indicates...'. A sparse KB "
+        "   record for a well-known coin type (e.g. Athenian tetradrachm, Roman denarius) "
+        "   is not a reason to withhold expertise.\n"
         "3. STRUCTURE your answer clearly:\n"
         "   • Coin identity (type, denomination, issuing authority, date range)\n"
         "   • Physical / iconographic description (obverse, reverse, metal, weight)\n"
@@ -329,7 +376,7 @@ async def chat(
         With structured fallback (no LLM): < 100 ms
     """
     try:
-        result = await asyncio.to_thread(_run_chat, body.query, body.n_sources)
+        result = await asyncio.to_thread(_run_chat, body.query, body.n_sources, body.top5_labels)
     except Exception as exc:
         logger.error("chat endpoint error: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Chat pipeline error: {exc}")

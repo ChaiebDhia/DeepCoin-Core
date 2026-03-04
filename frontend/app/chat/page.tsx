@@ -529,7 +529,7 @@ function ChatPageInner() {
     return { role: msg.role, content: msg.content, sources: msg.sources, provider: msg.provider };
   }
 
-  const handleSubmit = useCallback(async (query: string) => {
+  const handleSubmit = useCallback(async (query: string, top5Labels: string[] = []) => {
     if (!query.trim() || loading) return;
     const q = query.trim();
 
@@ -540,7 +540,7 @@ function ChatPageInner() {
 
     let assistantMsg: Message;
     try {
-      const res = await chatQuery(q, 5);
+      const res = await chatQuery(q, 5, top5Labels);
       assistantMsg = {
         id: crypto.randomUUID(), role: "assistant" as const,
         content: res.answer, sources: res.sources, provider: res.provider, userQuery: q,
@@ -592,12 +592,17 @@ function ChatPageInner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, isAuthed]);
 
-  // Auto-fire query when navigated here with ?q= (e.g. from AnalysisPanel low-confidence CTA)
+  // Auto-fire query when navigated here with ?q= (e.g. from AnalysisPanel CTA)
   useEffect(() => {
     const q = searchParams.get("q");
     if (q && !didAutoQuery.current) {
       didAutoQuery.current = true;
-      handleSubmit(q);
+      // Parse ?top5= param — e.g. "1015,544,532,220,3987" injected from analysis panel CTA
+      const rawTop5 = searchParams.get("top5") ?? "";
+      const top5Labels = rawTop5
+        ? rawTop5.split(",").map((s) => s.trim()).filter(Boolean)
+        : [];
+      handleSubmit(q, top5Labels);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
