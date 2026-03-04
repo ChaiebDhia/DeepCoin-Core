@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: March 4, 2026 — Prompt injection guard (ChatMessage Literal roles), chat SSE streaming (POST /api/chat/stream + chatQueryStream + streaming cursor), explore date_range fix, stale comment cleanup. HEAD: pending commit. Layer 7 (Tests + CI/CD) is next.
+# Last updated: March 4, 2026 — Prompt injection guard (ChatMessage Literal roles), chat SSE streaming (POST /api/chat/stream + chatQueryStream + streaming cursor), explore date_range fix, stale comment cleanup. Commit: 584fe2c. Layer 7 (Tests + CI/CD) is next.
 
 ---
 
@@ -1268,7 +1268,7 @@ pytest (9.0.2)      # unit testing (34 tests across 3 files)
 | `391e62e` | feat: POST/GET /api/subscribers (thread-safe, idempotent), data/subscribers.json gitignored |
 | `932a67f` | feat: /about + /docs pages (Server Components), /explore gallery (Client Component), admin subscriber panel, Next.js route handler proxy for X-API-Key |
 | `06116a5` | feat: enterprise chat redesign v2, AI Chat CTA in AnalysisPanel, TutorialModal, admin access guide |
-| pending   | fix: prompt injection guard (ChatMessage Literal), chat SSE streaming, explore date_range, classify stale comment ← LATEST |
+| `584fe2c` | fix: prompt injection guard (ChatMessage Literal roles), chat SSE streaming (POST /api/chat/stream + chatQueryStream + streaming cursor), explore date_range fix, stale comment cleanup. Layer 7 (Tests + CI/CD) is next. |
 
 ---
 
