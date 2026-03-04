@@ -1,5 +1,5 @@
-# DeepCoin-Core — Complete Engineering Journal
-## From Zero to Trained Model: Every Step, Every Decision, Every Problem, Explained for a Baby but Written by an Engineer
+﻿# DeepCoin-Core — Complete Engineering Journal
+## From Zero to Production: Every Step, Every Decision, Every Problem — Explained for a Beginner, Written by a Senior Engineer
 
 **Project**: DeepCoin-Core  
 **School**: ESPRIT  
@@ -7,7 +7,7 @@
 **Period**: PFE (Final Year Engineering Internship), Feb–July 2026  
 **GitHub**: https://github.com/ChaiebDhia/DeepCoin-Core  
 **Author**: Dhia Chaïeb  
-**Status as of**: March 4, 2026 — Sections 112–121 added (journal deep-dive: auth, chat, security, DB schema, config wiring, end-to-end trace, complete state). Layers 0–6 complete and enterprise-grade. Chat pipeline at Generation 4. 44 bugs documented and fixed. 0 open issues. HEAD: `d7860c4`. 36/36 unit tests passing. 0 TypeScript errors. Full encoding quality fix applied (4,760 mojibake artifacts corrected in one session). Layer 7 (Tests + CI/CD) is next.  
+**Status as of**: March 5, 2026 — Sections 122–149 added. Layers 0–7 complete and enterprise-grade. 45 bugs documented and fixed. 122/122 tests passing (45 unit + 77 integration/preprocessing). GitHub Actions CI matrix (Python 3.11 + 3.12, Node 22). 0 TypeScript errors. HEAD: `f3a33fe`. Next: Layer 8 (E2E Playwright tests) or production deployment.  
 
 ---
 
@@ -135,6 +135,34 @@
 119. [Section 119 — End-to-End Request Trace: Upload to PDF in One Journey](#section-119--end-to-end-request-trace-upload-to-pdf-in-one-journey)
 120. [Section 120 — Bug Pattern Analysis: 44 Bugs, 44 Lessons](#section-120--bug-pattern-analysis-44-bugs-44-lessons)
 121. [Section 121 — Complete Runbook: Running DeepCoin from Zero](#section-121--complete-runbook-running-deepcoin-from-zero)
+122. [Section 122 — Bug 45: Admin "All Analyses" Returns Empty (Missing `Path` Import)](#section-122--bug-45-admin-all-analyses-returns-empty-missing-path-import)
+123. [Section 123 — Chat State Persistence: Module-Level Cache Architecture](#section-123--chat-state-persistence-module-level-cache-architecture)
+124. [Section 124 — Conversation Memory: End-to-End Multi-Turn AI Chat](#section-124--conversation-memory-end-to-end-multi-turn-ai-chat)
+125. [Section 125 — Admin Users CRUD: Complete Technical Reference](#section-125--admin-users-crud-complete-technical-reference)
+126. [Section 126 — Navbar Active State: `usePathname` Pattern](#section-126--navbar-active-state-usepathname-pattern)
+127. [Section 127 — Project State After March 4 Evening Session](#section-127--project-state-after-march-4-evening-session)
+128. [Section 128 — Prompt Injection Guard (ChatMessage Literal Role Validation)](#section-128----prompt-injection-guard-chatmessage-literal-role-validation)
+129. [Section 129 — Stale Comment Cleanup (`classify.py`)](#section-129----stale-comment-cleanup-classifypy)
+130. [Section 130 — Explore Page `date_range` Empty String Bug (`kb.py`)](#section-130----explore-page-date_range-empty-string-bug-kbpy)
+131. [Section 131 — Chat SSE Streaming (`POST /api/chat/stream`)](#section-131----chat-sse-streaming-post-apichatstream)
+132. [Section 132 — Project State After SSE Streaming Session](#section-132----project-state-after-sse-streaming-session)
+133. [Section 133 — The JWT Expiry Problem (What Was Broken)](#section-133----the-jwt-expiry-problem-what-was-broken)
+134. [Section 134 — The Backend Was Already Complete (`POST /auth/refresh`)](#section-134----the-backend-was-already-complete-post-authrefresh)
+135. [Section 135 — JWT Refresh: Full Frontend Architecture](#section-135----jwt-refresh-full-frontend-architecture)
+136. [Section 136 — Confirm-Subscription UX Cleanup](#section-136----confirm-subscription-ux-cleanup)
+137. [Section 137 — Docker Base Image CVE Remediation](#section-137----docker-base-image-cve-remediation)
+138. [Section 138 — Project State After JWT Refresh Session](#section-138----project-state-after-jwt-refresh-session)
+139. [Section 139 — Layer 7: Why Tests and CI Are Non-Negotiable](#section-139----layer-7-why-tests-and-ci-are-non-negotiable)
+140. [Section 140 — Integration Test Architecture: The Mock Stack](#section-140----integration-test-architecture-the-mock-stack)
+141. [Section 141 — Three Bugs Found During Layer 7 Implementation](#section-141----three-bugs-found-during-layer-7-implementation)
+142. [Section 142 — GitHub Actions CI Pipeline](#section-142----github-actions-ci-pipeline)
+143. [Section 143 — Final Project State After Layer 7](#section-143----final-project-state-after-layer-7)
+144. [Section 144 — `tests/integration/conftest.py`: Complete Annotation, Every Line, Every Decision](#section-144--testsintegrationconftestpy-complete-annotation-every-line-every-decision)
+145. [Section 145 — `tests/integration/test_health.py`: Every Test Explained In Full](#section-145--testsintegrationtest_healthpy-every-test-explained-in-full)
+146. [Section 146 — `tests/integration/test_classify.py`: Every Test, Every Defence Layer](#section-146--testsintegrationtest_classifypy-every-test-every-defence-layer)
+147. [Section 147 — `test_history.py`, `test_chat_security.py`, `test_auth_flow.py`: Full Deep Dive](#section-147--test_historpy-test_chat_securitypy-test_auth_flowpy-full-deep-dive)
+148. [Section 148 — `.github/workflows/ci.yml`: Every YAML Key Explained](#section-148--githubworkflowsciyml-every-yaml-key-explained)
+149. [Section 149 — `pyproject.toml` Deep Dive + `asyncio_mode` + Complete Project State](#section-149--pyprojecttoml-deep-dive--asyncio_mode--complete-project-state)
 
 ---
 
@@ -1804,6 +1832,8 @@ Net:       +11 images
 
 ## 12. Every File in the Project Explained
 
+> **⚠️ Reader note — Living document:** This section was written in February 2026 when the project had ~12 source files. The project now has 100+ files across `src/`, `frontend/`, `tests/`, `.github/`, and infrastructure. **For the current, complete file inventory see [Section 47](#section-47--complete-file-inventory-every-file-every-function-2026)**. This section is preserved because it explains the foundational reasoning behind the early architecture decisions.
+
 This section lists every source file in the repository, organized by folder. For each file you will learn: what it does, why it exists, who uses it, and what would break if it was deleted. This is a complete registry — if you clone the repo and open a file you don't recognise, this section tells you exactly what it is.
 
 ---
@@ -2617,6 +2647,8 @@ models/
 
 ## 13. Every Problem and How It Was Solved
 
+> **⚠️ Reader note — Partial registry:** This section documents Bugs 1–13 (CNN training and preprocessing phase). The project now has 45 documented bugs. **For the complete bug registry see [Section 120](#section-120--bug-pattern-analysis-44-bugs-44-lessons)** which analyses all bugs by category. Individual bugs 14–45 are documented inline in the sections where they were found (Sections 29, 45, 65–76, 88, 94–112, 122).
+
 ### Problem 1: PyTorch CPU-Only Installation
 
 **Symptom**: `torch.cuda.is_available()` returned `False`. `torch.__version__` showed `+cpu`.  
@@ -3229,6 +3261,8 @@ This is original scientific content: "We discovered a cataloging anomaly candida
 
 ## 17. What Comes Next — Complete Roadmap with Every Detail
 
+> **⚠️ Reader note — Historic snapshot:** This roadmap was written after the CNN training phase. Layers 4 (FastAPI), 5 (Next.js frontend), 6 (Docker), and 7 (Tests + CI) are now **complete**. The current state is documented in **[Section 143](#section-143----final-project-state-after-layer-7)** and **[Section 149](#section-149--pyprojecttoml-deep-dive--asyncio_mode--complete-project-state)**. This section is preserved as a record of the original engineering intent.
+
 This roadmap covers everything that has been built and everything that remains. Think of it as the master plan for turning this academic project into a full industrial system.
 
 ---
@@ -3598,6 +3632,8 @@ jobs:
 ---
 
 ## 18. Full Glossary — Every Technical Term Explained Like You're 5
+
+> **⚠️ Reader note — Extended in later sections:** This glossary covers CNN, preprocessing, and dataset terms from the training phase. Terms introduced later (JWT, RBAC, ASGI, RRF, BM25, chromadb, LangGraph, SSE, Alembic, asyncio, AMP/GradScaler, ONNX, ChromaDB, slowapi, Pydantic v2, `asyncio_mode`, `ASGITransport`, `AsyncMock`) are defined inline in the sections where they first appear. Use your browser’s Ctrl+F to search the full journal for any term not found here.
 
 This glossary covers every technical word used anywhere in this project. Terms are grouped by topic so related concepts appear together. If you read an unfamiliar word in any section of this journal, search here first.
 
