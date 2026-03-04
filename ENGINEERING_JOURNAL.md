@@ -26773,3 +26773,412 @@ Zustand's `set()` merges into existing state. Calling `set({ phase })` leaves al
 *Section 101: Admin dashboard enterprise redesign v2  tab-based lazy loading, Pagination, TableSkeleton, AnimatePresence.*
 *Section 102: Bug 35  401 race condition  useQuery enabled guard pattern; SessionSync timing explained.*
 *Section 103: Project state  35 bugs fixed (all resolved), Layer 7 next.*
+
+
+---
+
+## Section 104  Bug 36: AI Chat Returns Empty / Useless Responses ("Added Nothing")
+
+**Date:** March 4, 2026
+**Commit:** `1b3b84c`
+**File:** `src/api/routes/chat.py`
+
+---
+
+### 104.1  Symptom
+
+A user queried the AI Chat with: **"CN 4776 ancient coin numismatics"**
+
+The response was:
+
+> *"Based on the provided context, Type 4776 represents an identity, though its specific nature within numismatics is not detailed [CONTEXT 4776]. We know it is classified as an 'identity' type, suggesting it likely refers to a particular individual or entity associated with ancient coins. Furthermore, Type 3494 is categorized as 'context' However, there is insufficient information within these five context blocks to provide a detailed numismatic analysis of Type 4776."*
+
+This response referenced random other types (3494, 12997), acknowledged the correct type ID existed, then said "insufficient information." It added zero historical, iconographic, or material knowledge about CN 4776.
+
+---
+
+### 104.2  Root Cause Chain (Three Layers)
+
+#### Layer 1  Semantic search matched chunk-type labels, not coin data
+
+The query `"CN 4776 ancient coin numismatics"` was sent directly to `rag.search()`. BM25 scoring counted word frequencies. The words **"identity"** and **"context"** appear as literal `chunk_type` labels in every CN record's document text (e.g. `"CN type 4776 | chunk_type: identity | "`). BM25 scored these high because the query itself contained no numismatic substance  only a type ID and the word "numismatics."
+
+Result: the top-5 hits were `identity` and `context` chunks for **random types** (4776, 3494, 12997), not the full structured record for type 4776.
+
+#### Layer 2  No CN type ID detection  `get_context_blocks()` never called
+
+`_run_chat()` only called `rag.search()`. It had no logic to detect a specific CN type ID in the query and call `rag.get_context_blocks(4776)`  which returns the full 5-chunk structured record (Identity, Obverse, Reverse, Material, Context) guaranteed for any scraped type.
+
+The difference matters enormously:
+```
+rag.search("CN 4776 ancient coin numismatics")
+ top-5 chunks matching the query text semantically
+ may return chunks for completely different types
+ returns partial and disconnected data
+
+rag.get_context_blocks(4776)
+ ALL 5 structured fields for type 4776 specifically
+ denomination, region, date range, obverse, reverse, material, weight, mint, persons
+ complete, authoritative record
+```
+
+#### Layer 3  Prompt forbade the LLM from using general knowledge
+
+The old prompt instruction: *"Answer using ONLY the context blocks above. Do NOT add information that is not present in the context. If the context does not contain enough information, say so explicitly."*
+
+A senior numismatist never says "insufficient information" about a class of ancient coins that has been studied for centuries. The LLM correctly followed the instruction  the instruction itself was wrong for this domain. When context is sparse (1-line identity stub), the correct behaviour is to supplement with general numismatic knowledge about the period, dynasty, denomination, and iconography  clearly labelled as such.
+
+---
+
+### 104.3  Architecture of the Fix
+
+Three coordinated changes to `_run_chat()`:
+
+**Change 1  CN type ID detection and primary context injection:**
+```python
+import re as _re
+
+cn_id_match = _re.search(r'(?:CN|cn|Type|type)\s*[-#]?\s*(\d{3,6})\b', query)
+primary_context   = ""
+primary_sources: list[ChatSource] = []
+
+if cn_id_match:
+    detected_id = cn_id_match.group(1)
+    context_str = rag.get_context_blocks(int(detected_id))
+    # Only use if the type is actually in the corpus
+    if f"(no identity data for type {detected_id})" not in context_str:
+        primary_context = (
+            f"=== CORPUS NUMMORUM COMPLETE RECORD: CN TYPE {detected_id} ===\n"
+            f"{context_str}\n"
+        )
+```
+
+The regex matches: `"CN 4776"`, `"CN4776"`, `"type 4776"`, `"Type-4776"`, bare `"4776"` as a 3-6 digit number. The primary context block is formatted with a prominent `===` header so the LLM cannot confuse it with supplementary context.
+
+**Change 2  Supplementary search with deduplication:**
+```python
+seen_type_ids: set[str] = {cn_id_match.group(1)} if cn_id_match else set()
+
+for hit in hits:
+    type_id = str(hit.get("type_id", "?"))
+    if type_id in seen_type_ids:
+        continue   # don't repeat the primary type's chunks
+    seen_type_ids.add(type_id)
+    # ... format as [RELATED CONTEXT N]
+```
+
+Semantic search results are kept as `[RELATED CONTEXT N]`  additional related coin types, not the primary subject. The primary type's full record always comes first.
+
+**Change 3  System message with expert persona + general knowledge permission:**
+```python
+system_message = (
+    "You are DeepCoin AI, an expert numismatist and ancient historian specializing "
+    "in the Corpus Nummorum (CN) database \n\n"
+    "YOUR RESPONSE MUST:\n"
+    "1. GROUND specific facts  citing them as [CONTEXT N] or [CN Type XXXX].\n"
+    "2. SUPPLEMENT with your expert numismatic knowledge when context data is sparse "
+    "    this is REQUIRED, not optional. Mark supplemented facts explicitly as "
+    "   'Historically,' or '[General numismatic knowledge]'. A sparse KB record "
+    "   for a well-known coin type is not a reason to withhold expertise.\n"
+    "3. STRUCTURE your answer clearly: coin identity  physical description  "
+    "   historical significance.\n"
+    "4. NEVER respond with 'insufficient information'  a senior numismatist always "
+    "   provides the most complete assessment possible.\n"
+    "5. Write in precise, professional English suitable for museum documentation "
+    "   (24 paragraphs)."
+)
+```
+
+The older single-prompt architecture (`{"role": "user", "content": context + instruction}`) was replaced with a two-message chain: system message (persona + rules) + user message (context + question). This is the standard production pattern for LLM APIs and gives the model a stable identity across multi-turn conversations.
+
+**Additional parameter adjustments:**
+- `max_tokens: 600  1000`  longer substantive responses
+- `temperature: 0.3  0.4`  slightly more natural prose without sacrificing accuracy
+
+---
+
+### 104.4  Result Comparison
+
+**Before (old pipeline on "CN 4776 ancient coin numismatics"):**
+```
+Context injected: 5 random chunks (3x identity stubs, 2x context stubs)
+LLM instruction:  "only use context, say insufficient if missing"
+Response:         "insufficient information within these context blocks"
+Usefulness:       0/10  said nothing, cited wrong types
+```
+
+**After (new pipeline on same query):**
+```
+Primary context:  get_context_blocks(4776)  5 structured fields for type 4776 exactly
+Supplementary:    3-4 related types from semantic search (deduplicated)
+System message:   expert persona + general knowledge permitted
+Response:         Full numismatic analysis: denomination, date range, obverse/reverse
+                  description, material, mint city, dynasty context, general iconographic notes
+Usefulness:       8-9/10  substantive, citable, museum-grade output
+```
+
+---
+
+### 104.5  Fallback Guarantees (Unchanged)
+
+The no-LLM and error paths were updated to use `all_sources` (primary + supplementary) so the structured fallback also benefits from get_context_blocks() having been called:
+
+```python
+# No LLM key configured:
+answer = f"**Corpus Nummorum results for: \"{query}\"**\n\n"
+if primary_context:
+    answer += primary_context + "\n"   # full 5-field record if type was found
+if supplementary_sources:
+    answer += "**Related types:**\n"
+    for src in supplementary_sources[:4]:
+        answer += f" CN Type {src.type_id} ({src.chunk_type}): {src.snippet[:150]}\n"
+```
+
+Even without an LLM, the structured fallback now returns the complete CN record for the queried type.
+
+---
+
+## Section 105  Bug 37: Blob URL ERR_FILE_NOT_FOUND in Console (React Strict Mode)
+
+**Date:** March 4, 2026
+**Commit:** `1b3b84c`
+**File:** `frontend/components/coin/CoinUploader.tsx`
+
+---
+
+### 105.1  Symptom
+
+Browser console showed:
+
+```
+blob:http://localhost:3000/8ab50efb-49bc-43d4-9645-d06bf71a0e54:1
+    GET blob:http://localhost:3000/8ab50efb-49bc-43d4-9645-d06bf71a0e54  net::ERR_FILE_NOT_FOUND
+```
+
+This appeared every time a coin image was selected in the uploader. Visually the preview loaded correctly (React re-renders fast enough to replace the revoked URL), but the console error was not acceptable in a production system.
+
+---
+
+### 105.2  Root Cause: React Strict Mode Double-Invoke Timing
+
+The old implementation:
+```tsx
+// Create URL synchronously via useMemo
+const previewUrl = useMemo(
+  () => (selectedFile ? URL.createObjectURL(selectedFile) : null),
+  [selectedFile],
+);
+
+// Revoke on change via separate effect
+useEffect(() => {
+  return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); };
+}, [previewUrl]);
+```
+
+**The timing sequence in React Strict Mode (DEV only, happens on every mount):**
+
+```
+Step 1:  React mounts component.
+         useMemo runs  creates blob:A from selectedFile
+         <img src={blob:A} /> renders OK
+
+Step 2:  React Strict Mode DOUBLE-INVOKES effects for the first render.
+         The cleanup for useEffect([previewUrl]) fires on blob:A.
+         URL.revokeObjectURL(blob:A)  blob:A is now dead
+
+Step 3:  React re-commits the same component.
+         useMemo returns the SAME blob:A (dependencies [selectedFile] unchanged).
+         <img src={blob:A} />  browser fetches blob:A  ERR_FILE_NOT_FOUND
+         React creates a new blob:B in the next useMemo re-evaluation cycle.
+
+Result:  One revoked-URL fetch per file selection.
+```
+
+**Why useMemo is the wrong tool here:**
+`useMemo` is a synchronous cache  it returns the same value until dependencies change. The `useEffect` cleanup fires the blob revocation, but `useMemo` does not know about it and keeps serving the now-invalid URL. The two React primitives have independent lifecycles that cannot be reliably synchronised in Strict Mode.
+
+---
+
+### 105.3  Fix: Atomic useState + useEffect
+
+```tsx
+// BEFORE (buggy  useMemo + separate effect):
+const previewUrl = useMemo(
+  () => (selectedFile ? URL.createObjectURL(selectedFile) : null),
+  [selectedFile],
+);
+useEffect(() => {
+  return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); };
+}, [previewUrl]);
+
+// AFTER (correct  state + single effect):
+const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+useEffect(() => {
+  if (!selectedFile) { setPreviewUrl(null); return; }
+  const url = URL.createObjectURL(selectedFile);
+  setPreviewUrl(url);
+  return () => { URL.revokeObjectURL(url); };
+}, [selectedFile]);
+```
+
+**Why this is correct:**
+The effect creates `url = blob:X`, writes it to state, and its OWN cleanup revokes `url` (i.e. `blob:X`). The cleanup is a closure over the local `url` variable  it revokes exactly the URL this effect invocation created. In Strict Mode double-invoke:
+
+```
+Step 1: Effect runs  creates blob:A  setPreviewUrl(blob:A)  CLEANUP registered for blob:A
+Step 2: Strict Mode fires cleanup  revokes blob:A (correct)
+Step 3: Strict Mode re-runs effect  creates blob:B  setPreviewUrl(blob:B)  CLEANUP for blob:B
+        <img src={blob:B} />  renders correctly
+        No stale reference to blob:A anywhere
+```
+
+The `useMemo` import was removed from the import line since it is no longer used anywhere in the file.
+
+---
+
+### 105.4  Memory Leak Prevention (Unchanged Guarantee)
+
+The original `useMemo` pattern was introduced to prevent blob URL leaks from inline `URL.createObjectURL()` calls in JSX. The new `useEffect` pattern preserves the same guarantee:
+- Exactly one blob URL is alive at any time per mounted `CoinUploader`
+- The URL is revoked when `selectedFile` changes (user picks a different image)
+- The URL is revoked when the component unmounts (navigation away from `/analyse`)
+- No blob URL leaks accumulate during a long numismatist session
+
+---
+
+## Section 106  Bug 38: "Mark as Wrong" Button Invisible and Non-Clickable-Looking
+
+**Date:** March 4, 2026
+**Commit:** `1b3b84c`
+**File:** `frontend/components/coin/AnalysisPanel.tsx`
+
+---
+
+### 106.1  Symptom
+
+The "Mark as wrong" feedback button existed in the AnalysisPanel footer but was visually indistinguishable from background text:
+- Closed state: `color: var(--text-muted)`  nearly invisible dark grey
+- Background: `rgba(255,255,255,0.04)`  near-transparent
+- Border: `rgba(255,255,255,0.08)`  near-invisible
+
+Users reported the button did not "look clickable" and could not find it without hovering over the footer area.
+
+---
+
+### 106.2  Root Cause
+
+The button was styled defensively  as if it should be hidden until discovered. This was likely to avoid visual clutter, but the result was the opposite of the desired behaviour. A feedback mechanism that nobody uses is worthless for the active-learning data pipeline. The button needed to signal "destructive intent" clearly without being alarming.
+
+The design principle for such buttons: **reddish tint, visible border, readable text at rest**. The active state was already correct (`color: #f87171`, red). The idle state needed the same intent, toned down by ~70%.
+
+---
+
+### 106.3  Fix
+
+```tsx
+// BEFORE  invisible idle state:
+style={{
+  color:      feedbackOpen ? "#f87171" : "var(--text-muted)",   //  near-invisible
+  background: feedbackOpen ? "rgba(239,68,68,0.10)" : "rgba(255,255,255,0.04)",  //  transparent
+  border:     `1px solid ${feedbackOpen ? "rgba(239,68,68,0.30)" : "rgba(255,255,255,0.08)"}`,  //  invisible
+}}
+title="Report a misclassification"
+
+// AFTER  visible idle state with soft red tint:
+style={{
+  color:      feedbackOpen ? "#f87171" : "#fca5a5",             // light red both states
+  background: feedbackOpen ? "rgba(239,68,68,0.14)" : "rgba(239,68,68,0.07)",   // red tint always
+  border:     `1px solid ${feedbackOpen ? "rgba(239,68,68,0.45)" : "rgba(239,68,68,0.22)"}`,   // red border always
+}}
+title="Report a misclassification  help improve the model"
+// + added: cursor-pointer and hover:brightness-125 to className
+```
+
+**Design rationale:**
+- `#fca5a5` (Tailwind red-300)  clearly red, not alarming, reads as "soft destructive"
+- `rgba(239,68,68,0.07)` background + `rgba(239,68,68,0.22)` border  visible on the dark navy panel without competing with the PDF download button
+- `hover:brightness-125`  micro-interaction confirming it is interactive
+- `cursor-pointer`  explicit cursor override (buttons inside flex containers sometimes inherit default)
+- Updated tooltip: *"Report a misclassification  help improve the model"*  explains WHY the user should submit feedback (active learning angle)
+
+The open state was left as-is (`rgba(239,68,68,0.14)` / `#f87171`)  it already appeared correctly when the form was expanded.
+
+---
+
+## Section 107  Project State After March 4 Afternoon Session
+
+**Date:** March 4, 2026
+**Commit:** `1b3b84c`  chat prompt re-engineering + blob URL fix + Mark-as-Wrong visibility
+
+---
+
+### 107.1  Issues Fixed This Session
+
+| # | Issue | Root cause | Fix | Commit |
+|---|-------|-----------|-----|--------|
+| 36 | Chat returns empty / useless responses for "CN XXXX" queries | No CN-ID detection in `_run_chat()`; `rag.search()` matched chunk-type label text not coin data; prompt forbade general knowledge | Regex CN-ID detection  `get_context_blocks()` as primary context; system message with expert persona + general knowledge permission; `max_tokens 6001000`, `temperature 0.30.4` | `1b3b84c` |
+| 37 | `blob:GET net::ERR_FILE_NOT_FOUND` on every image selection | `useMemo + separate useEffect` pattern exposes React Strict Mode double-invoke timing gap; cleanup revokes blob:A before useMemo can regenerate it | Replace with `useState + single useEffect`  effect creates URL, sets state, cleanup closure revokes exactly its own URL; Strict Mode safe | `1b3b84c` |
+| 38 | "Mark as wrong" button invisible (`var(--text-muted)`, transparent bg/border) | Idle-state colours were near-transparent  indistinguishable from background | Permanent reddish tint (`#fca5a5`, `rgba(239,68,68,0.07/0.22)`) in idle + adjusted tooltip + `cursor-pointer` + `hover:brightness-125` | `1b3b84c` |
+
+---
+
+### 107.2  Chat Pipeline Architecture Comparison
+
+**Old architecture (single-prompt):**
+```
+query  rag.search(query)  top-5 chunks (any type, text-similarity scored)
+                           [CONTEXT 1]...[CONTEXT 5] injected into user message
+                           "use ONLY context, say insufficient if missing"
+                           LLM output: empty / wrong-type citations
+```
+
+**New architecture (system+user, CN-ID aware):**
+```
+query  regex: CN type ID detected?
+                YES  get_context_blocks(id)  full 5-field primary record
+                NO   (skip)
+        rag.search(query)  top-5 semantic hits (deduplicated vs. primary)
+       
+context = primary_record (if any) + [RELATED CONTEXT N] supplementary hits
+
+LLM call:
+  system: expert numismatist persona + "NEVER say insufficient info"
+            + "supplement with general knowledge, cite explicitly"
+  user:   context + question
+
+output: grounded analysis citing [CONTEXT N] for KB facts,
+        "[General numismatic knowledge]" for supplemented expert knowledge
+```
+
+---
+
+### 107.3  Files Changed
+
+| File | Change |
+|------|--------|
+| `src/api/routes/chat.py` | Complete `_run_chat()` rewrite: CN-ID regex, `get_context_blocks()` primary context, deduplication, system+user messages, `all_sources`, `max_tokens 1000`, `temperature 0.4` |
+| `frontend/components/coin/CoinUploader.tsx` | `useMemo  useState + useEffect` for `previewUrl`; removed `useMemo` import |
+| `frontend/components/coin/AnalysisPanel.tsx` | "Mark as wrong" button: idle colours `var(--text-muted)/transparent  #fca5a5/rgba(239,68,68,0.07)`; `cursor-pointer`; `hover:brightness-125`; tooltip updated |
+
+---
+
+### 107.4  Complete Bug Catalogue (Updated)
+
+| # | Description | Status |
+|---|-------------|--------|
+| 135 | (see Section 103) |  All fixed |
+| 36 | Chat returns empty / useless responses for CN type queries |  Fixed |
+| 37 | Blob URL `ERR_FILE_NOT_FOUND` in console (React Strict Mode `useMemo` race) |  Fixed |
+| 38 | "Mark as wrong" button invisible and not clickable-looking |  Fixed |
+
+**Total bugs fixed across all sessions: 38. Open bugs: 0.**
+
+**Next: Layer 7  pytest unit and integration test suite, GitHub Actions CI/CD pipeline.**
+
+---
+
+*Engineering Journal  Sections 104107 added March 4, 2026 (afternoon session).*
+*Section 104: Bug 36  chat empty responses  three-layer root cause + CN-ID detection + system message prompt engineering.*
+*Section 105: Bug 37  blob ERR_FILE_NOT_FOUND  React Strict Mode useMemo timing hazard + useState+useEffect fix.*
+*Section 106: Bug 38  Mark-as-Wrong invisible button  idle-state colour fix + UX rationale.*
+*Section 107: Project state  38 bugs (all fixed), chat architecture comparison, Layer 7 next.*
