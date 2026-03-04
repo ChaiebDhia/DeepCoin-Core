@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: March 3, 2026 — Enterprise chat page redesign (v2), AI Chat CTA in AnalysisPanel (conf<70%), TutorialModal floating guide, admin access restriction page. HEAD: 06116a5. Layer 7 (Tests + CI/CD) is next.
+# Last updated: March 4, 2026 — Prompt injection guard (ChatMessage Literal roles), chat SSE streaming (POST /api/chat/stream + chatQueryStream + streaming cursor), explore date_range fix, stale comment cleanup. HEAD: pending commit. Layer 7 (Tests + CI/CD) is next.
 
 ---
 
@@ -1267,7 +1267,8 @@ pytest (9.0.2)      # unit testing (34 tests across 3 files)
 | `47245da` | feat: auth-guard Analyse CTA (HeroSection), NavLinks Server Component refactor (public-only links), health dot moved left |
 | `391e62e` | feat: POST/GET /api/subscribers (thread-safe, idempotent), data/subscribers.json gitignored |
 | `932a67f` | feat: /about + /docs pages (Server Components), /explore gallery (Client Component), admin subscriber panel, Next.js route handler proxy for X-API-Key |
-| `06116a5` | feat: enterprise chat redesign v2, AI Chat CTA in AnalysisPanel, TutorialModal, admin access guide ← LATEST |
+| `06116a5` | feat: enterprise chat redesign v2, AI Chat CTA in AnalysisPanel, TutorialModal, admin access guide |
+| pending   | fix: prompt injection guard (ChatMessage Literal), chat SSE streaming, explore date_range, classify stale comment ← LATEST |
 
 ---
 
@@ -1796,6 +1797,21 @@ tsc: 0 errors | build: clean (5 routes)
 **Homepage redesign + 4 post-Layer-6 bug fixes: ✅ COMPLETE (80c682e → 8a820b4).**
 **Navigation overhaul + subscriber endpoint + new public pages + AI Chat + admin panels + 3 bug fixes: ✅ COMPLETE (47245da → d1a6783).**
 **Enterprise chat redesign v2, AI Chat CTA, TutorialModal, admin access guide: ✅ COMPLETE (06116a5).**
+**Prompt injection guard + Chat SSE streaming + explore date_range fix + stale comment cleanup: ✅ COMPLETE (pending commit).**
+
+```
+Fix:  Prompt injection — ChatMessage(BaseModel) with role: Literal["user","assistant"]
+      replaces list[dict[str,str]] in ChatRequest.conversation_history;
+      Pydantic v2 rejects "system" role at HTTP 422 before any LLM call.
+Feat: POST /api/chat/stream — SSE endpoint; daemon-thread + asyncio.Queue pattern;
+      "sources" event first, then per-token "delta" events, then "done".
+Feat: chatQueryStream() in lib/api.ts — native fetch + ReadableStream; ChatStreamCallbacks.
+Feat: chat/page.tsx handleSubmit rewritten for streaming; placeholder AI message + blinking
+      cursor; onDelta appends tokens in-place; onDone clears cursor; abort on unmount.
+Fix:  _build_item() in kb.py: record.get("date_range") or record.get("date","") — explore
+      page coin cards now show correct date_range instead of empty string.
+Fix:  classify.py comment: removed stale "history_append writes to SQLite" reference.
+```
 
 ```
 Feat: enterprise chat page redesign (424 lines) — EmptyState, MessageBubble, SourceChip, GoogleSearchCTA,

@@ -88,7 +88,12 @@ def _build_item(type_id: int, record: dict[str, Any], engine: Any) -> dict[str, 
         "type_id":          tid_str,
         "denomination":     record.get("denomination", ""),
         "region":           record.get("region", ""),
-        "date_range":       record.get("date_range", ""),
+        # WHY fallback to "date" key:
+        #   The CN scraper stores the date under the "date" field in the
+        #   metadata JSON.  The "date_range" alias was added later but most
+        #   records only have "date".  Try the alias first for forward-
+        #   compatibility; fall back to the canonical "date" field.
+        "date_range":       record.get("date_range") or record.get("date", ""),
         "material":         record.get("material", ""),
         "mint":             record.get("mint", ""),
         "authority":        record.get("authority", ""),

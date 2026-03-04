@@ -291,10 +291,9 @@ async def classify(
         logger.error("classification persist failed (non-fatal): %s", hist_exc, exc_info=True)
 
     # ── 8. Write audit row (PostgreSQL, non-fatal) ────────────────────────────
-    # WHY after history_append:
-    #   history_append writes to SQLite (the legacy store).  The audit row goes
-    #   to PostgreSQL via the async session.  Doing them in sequence keeps the
-    #   code linear and easy to read.  A failure in audit write is non-fatal.
+    # WHY async INSERT here:
+    #   The pipeline has finished; the event loop is free.  We write directly
+    #   to the classifications table using the async SQLAlchemy session.
     # WHY non-fatal:
     #   Audit failures must never surface as a 500 to the user.  The primary
     #   mission (classification + PDF) has already succeeded.

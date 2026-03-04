@@ -31,7 +31,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import {
-  chatQuery, listChatSessions, getChatSession,
+  chatQueryStream, listChatSessions, getChatSession,
   createChatSession, appendChatSession, deleteChatSession,
 } from "@/lib/api";
 import type { ChatSource, ChatSessionSummary, ChatMessageRecord } from "@/types/api";
@@ -47,6 +47,8 @@ type Message = {
   provider?:       string;
   error?:          boolean;
   userQuery?:      string;
+  /** True while SSE token stream is still open for this message. */
+  streaming?:      boolean;
 };
 
 /*  constants  */
@@ -245,7 +247,23 @@ function MessageBubble({ msg }: { msg: Message }) {
             boxShadow: isUser ? "0 1px 8px rgba(212,168,83,0.10)" : "0 1px 8px rgba(0,0,0,0.15)",
           }}
         >
-          {msg.content}
+          {msg.content || msg.streaming
+            ? (
+              <>
+                {msg.content || (
+                  <span className="opacity-40 text-xs">Thinking…</span>
+                )}
+                {msg.streaming && (
+                  /* Blinking cursor — visible while SSE token stream is open */
+                  <span
+                    className="inline-block w-[2px] h-[1em] align-middle ml-[2px] rounded-full animate-pulse"
+                    style={{ background: "rgba(167,139,250,0.85)" }}
+                  />
+                )}
+              </>
+            )
+            : null
+          }
         </div>
 
         {/* Assistant meta */}
@@ -578,32 +596,112 @@ function ChatPageInner() {
       .map(m => ({ role: m.role, content: m.content }));
 
     const userMsg: Message = { id: crypto.randomUUID(), role: "user" as const, content: q };
-    setMessages(prev => [...prev, userMsg]);
+    const aiId             = crypto.randomUUID();
+
+    // Add user message + empty AI placeholder in ONE state update.
+    // WHY together: guarantees the AI placeholder exists before the first
+    // onDelta callback fires — prevents a momentary flash of only the user turn.
+    setMessages(prev => [
+      ...prev,
+      userMsg,
+      {
+        id: aiId, role: "assistant" as const, content: "",
+        sources: [], provider: "", userQuery: q, streaming: true,
+      },
+    ]);
     setInput("");
     setLoading(true);
 
+    // Local accumulator — updated synchronously inside callbacks so that
+    // after `await chatQueryStream` resolves we have the definitive final
+    // values for session persistence, without reading potentially-stale state.
+    const streamed = {
+      content:  "",
+      sources:  [] as ChatSource[],
+      provider: "",
+      hasError: false,
+    };
+
     let assistantMsg: Message;
     try {
-      const res = await chatQuery(q, 5, top5Labels, priorHistory);
+      await chatQueryStream(
+        q, 5, top5Labels, priorHistory,
+        {
+          onSources: (sources, provider) => {
+            streamed.sources  = sources;
+            streamed.provider = provider;
+            setMessages(prev => prev.map(m =>
+              m.id === aiId ? { ...m, sources, provider } : m
+            ));
+          },
+          onDelta: (delta) => {
+            streamed.content += delta;
+            setMessages(prev => prev.map(m =>
+              m.id === aiId ? { ...m, content: m.content + delta } : m
+            ));
+          },
+          onError: (detail) => {
+            streamed.hasError = true;
+            setMessages(prev => prev.map(m =>
+              m.id === aiId
+                ? {
+                    ...m,
+                    content: `Sorry, I couldn't reach the AI right now.\n\n${detail}\n\nPlease check that the DeepCoin backend is running and try again.`,
+                    error:    true,
+                    streaming: false,
+                  }
+                : m
+            ));
+          },
+          onDone: () => {
+            // Mark streaming complete so the blinking cursor disappears
+            setMessages(prev => prev.map(m =>
+              m.id === aiId ? { ...m, streaming: false } : m
+            ));
+          },
+        },
+        undefined,   // chat page does not have an AbortController; cancel via navigation
+      );
+
+      // Safety-net: ensure streaming flag is cleared even if onDone was missed
+      setMessages(prev => prev.map(m =>
+        m.id === aiId ? { ...m, streaming: false } : m
+      ));
+
       assistantMsg = {
-        id: crypto.randomUUID(), role: "assistant" as const,
-        content: res.answer, sources: res.sources, provider: res.provider, userQuery: q,
+        id: aiId, role: "assistant" as const,
+        content:  streamed.content,
+        sources:  streamed.sources,
+        provider: streamed.provider,
+        userQuery: q,
+        error:    streamed.hasError,
       };
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      assistantMsg = {
-        id: crypto.randomUUID(), role: "assistant" as const,
-        content: `Sorry, I couldn't reach the knowledge base right now.\n\n${msg}\n\nPlease check that the DeepCoin backend is running and try again.`,
-        error: true,
-      };
+      const isAbort = err instanceof Error && err.name === "AbortError";
+      if (isAbort) {
+        // User cancelled — remove the empty placeholder cleanly
+        setMessages(prev => prev.filter(m => m.id !== aiId));
+      } else {
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        setMessages(prev => prev.map(m =>
+          m.id === aiId
+            ? {
+                ...m,
+                content: `Sorry, I couldn't reach the knowledge base right now.\n\n${msg}\n\nPlease check that the DeepCoin backend is running and try again.`,
+                error:    true,
+                streaming: false,
+              }
+            : m
+        ));
+      }
+      assistantMsg = { id: aiId, role: "assistant" as const, content: "", error: true };
     }
 
-    setMessages(prev => [...prev, assistantMsg]);
     setLoading(false);
     setTimeout(() => inputRef.current?.focus(), 50);
 
-    // Persist to DB (auth-only; skip on error messages)
-    if (isAuthed && !assistantMsg.error) {
+    // Persist to DB (auth-only; skip on error messages or aborted/empty streams)
+    if (isAuthed && !assistantMsg.error && streamed.content) {
       try {
         if (!currentSessionId.current) {
           // First exchange — create a new session

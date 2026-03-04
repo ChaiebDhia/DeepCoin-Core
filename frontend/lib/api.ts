@@ -34,6 +34,7 @@ import type {
   AdminAnalysesResponse,
   AdminUsersResponse,
   ChatResponse,
+  ChatSource,
   ChatMessageRecord,
   ChatSessionDetail,
   ChatSessionListResponse,
@@ -548,6 +549,142 @@ export async function chatQuery(
   } catch (err) {
     throw toApiError(err);
   }
+}
+
+// ── Chat SSE streaming ────────────────────────────────────────────────────────
+
+/**
+ * Callbacks invoked as SSE events arrive from POST /api/chat/stream.
+ *
+ * WHY callbacks (not an async generator or observable):
+ *   Callbacks are the simplest API for a React component: the caller wires
+ *   each callback to a setState/setMessages call and the component re-renders
+ *   on every token.  An async generator would require the caller to drive an
+ *   iteration loop, which creates awkward interleaving with React state updates.
+ */
+export interface ChatStreamCallbacks {
+  /** Called once, before any tokens, with the KB sources used as context. */
+  onSources?: (sources: ChatSource[], provider: string) => void;
+  /** Called once per LLM token with the incremental text delta. */
+  onDelta?:   (delta: string) => void;
+  /** Called on LLM error (non-fatal — the message can show an inline error). */
+  onError?:   (detail: string) => void;
+  /** Called when the stream completes (after the "done" SSE event). */
+  onDone?:    () => void;
+}
+
+/**
+ * Open a Server-Sent Events stream for a chat query.
+ *
+ * WHAT:
+ *   POSTs to /api/chat/stream and reads the response body as an SSE stream
+ *   via the native Fetch ReadableStream API.  Tokens arrive one-by-one and
+ *   are forwarded to the caller via callbacks, enabling live "AI typing" UX.
+ *
+ * WHY native fetch (not Axios):
+ *   Axios buffers the entire response before resolving the promise.  SSE
+ *   requires reading the response body incrementally as bytes arrive.  The
+ *   Fetch API's ReadableStream gives direct access to the raw byte stream
+ *   without buffering — the only correct tool for this job.
+ *
+ * WHY NEXT_PUBLIC_CLASSIFY_URL (direct to FastAPI):
+ *   SSE streams cannot pass through the Next.js rewrites proxy without
+ *   buffering.  Direct browser → FastAPI connection bypasses the proxy and
+ *   delivers tokens with sub-100 ms latency per chunk.
+ *
+ * @param query               Natural language numismatic question
+ * @param nSources            KB chunks to fetch (default 5)
+ * @param top5Labels          CNN top-5 type IDs for primary context
+ * @param conversationHistory Prior turns for multi-turn memory
+ * @param callbacks           Event handlers (onSources, onDelta, onError, onDone)
+ * @param signal              AbortSignal — cancel mid-stream (e.g. user clicks Cancel)
+ */
+export async function chatQueryStream(
+  query:               string,
+  nSources             = 5,
+  top5Labels:          string[]                                   = [],
+  conversationHistory: Array<{ role: string; content: string }>  = [],
+  callbacks:           ChatStreamCallbacks,
+  signal?:             AbortSignal,
+): Promise<void> {
+  const CLASSIFY_BASE = process.env.NEXT_PUBLIC_CLASSIFY_URL ?? "";
+  const url = `${CLASSIFY_BASE}/api/chat/stream`;
+
+  const res = await fetch(url, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({
+      query,
+      n_sources:            nSources,
+      top5_labels:          top5Labels,
+      conversation_history: conversationHistory,
+    }),
+    signal,
+  });
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => res.statusText);
+    throw new Error(`Chat stream error ${res.status}: ${detail}`);
+  }
+
+  if (!res.body) {
+    throw new Error("Chat stream: response body is null");
+  }
+
+  const reader  = res.body.getReader();
+  const decoder = new TextDecoder();
+  let   buffer  = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      // Decode the current chunk and append to the line buffer.
+      // { stream: true } tells TextDecoder to hold partial multi-byte chars
+      // until more bytes arrive — essential for non-ASCII (e.g. Greek legends).
+      buffer += decoder.decode(value, { stream: true });
+
+      // SSE events are separated by a blank line (\n\n).
+      // Split on that boundary; the last segment may be an incomplete event
+      // (no trailing \n\n yet) — keep it in the buffer for the next read.
+      const events = buffer.split("\n\n");
+      buffer = events.pop() ?? "";
+
+      for (const eventText of events) {
+        const line = eventText.trim();
+        if (!line.startsWith("data: ")) continue;
+
+        try {
+          const evt = JSON.parse(line.slice(6)) as {
+            type:     "sources" | "delta" | "error" | "done";
+            sources?: ChatSource[];
+            provider?: string;
+            delta?:   string;
+            detail?:  string;
+          };
+
+          if (evt.type === "sources") {
+            callbacks.onSources?.(evt.sources ?? [], evt.provider ?? "");
+          } else if (evt.type === "delta") {
+            callbacks.onDelta?.(evt.delta ?? "");
+          } else if (evt.type === "error") {
+            callbacks.onError?.(evt.detail ?? "Unknown streaming error");
+          } else if (evt.type === "done") {
+            callbacks.onDone?.();
+            return;
+          }
+        } catch {
+          // Silently skip malformed JSON chunks — network hiccups can
+          // produce partial lines; the stream continues normally.
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  callbacks.onDone?.();
 }
 
 // ── Chat session history ──────────────────────────────────────────────────────
