@@ -7,7 +7,7 @@
 **Period**: PFE (Final Year Engineering Internship), Feb–July 2026  
 **GitHub**: https://github.com/ChaiebDhia/DeepCoin-Core  
 **Author**: Dhia Chaïeb  
-**Status as of**: March 4, 2026 — Sections 112–113 added (Bugs 43–44: hallucination guards). Layers 0–6 complete and enterprise-grade. Chat pipeline at Generation 4. 44 bugs documented and fixed. 0 open issues. HEAD: `4d1b0de`. 36/36 unit tests passing. 0 TypeScript errors. Full encoding quality fix applied (1,658 + 2,970 mojibake artifacts corrected). Layer 7 (Tests + CI/CD) is next.  
+**Status as of**: March 4, 2026 — Sections 112–121 added (journal deep-dive: auth, chat, security, DB schema, config wiring, end-to-end trace, complete state). Layers 0–6 complete and enterprise-grade. Chat pipeline at Generation 4. 44 bugs documented and fixed. 0 open issues. HEAD: `d7860c4`. 36/36 unit tests passing. 0 TypeScript errors. Full encoding quality fix applied (4,760 mojibake artifacts corrected in one session). Layer 7 (Tests + CI/CD) is next.  
 
 ---
 
@@ -85,6 +85,56 @@
 69. [Section 69 — A5: NextAuth.js v5 — Credentials Provider + JWT Sessions](#section-69--a5-nextauthjs-v5--credentials-provider--jwt-sessions-march-3-2026)
 70. [Section 70 — A6: Frontend Auth UI — Login, Register, UserMenu, SessionProvider](#section-70--a6-frontend-auth-ui--login-register-usermenu-sessionprovider-march-3-2026)
 71. [Section 71 — Layer 6: Docker Infrastructure — Dockerfiles, Nginx, Compose](#section-71--layer-6-docker-infrastructure--dockerfiles-nginx-compose-march-3-2026)
+72. [Section 72 — Enterprise Homepage Redesign: 11 New Components](#section-72--enterprise-homepage-redesign-11-new-components)
+73. [Section 73 — Bugs Found and Fixed: Post-Layer-6 Homepage Integration](#section-73--bugs-found-and-fixed-post-layer-6-homepage-integration)
+74. [Section 74 — TechStack Bento Grid Redesign](#section-74--techstack-bento-grid-redesign)
+75. [Section 75 — New Pages: /analyse and /admin](#section-75--new-pages-analyse-and-admin)
+76. [Section 76 — RegisterForm Success Message + Zustand Singleton Bug](#section-76--registerform-success-message--zustand-singleton-bug)
+77. [Section 77 — Project State After Post-Layer-6 Fixes](#section-77--project-state-after-post-layer-6-fixes)
+78. [Section 78 — Auth-Guarded CTA + Subscriber Endpoint + NavLinks](#section-78--auth-guarded-cta--subscriber-endpoint--navlinks)
+79. [Section 79 — Three New Public Pages + Subscriber Admin + Route Handler Proxy](#section-79--three-new-public-pages--subscriber-admin--route-handler-proxy)
+80. [Section 80 — Post-Layer-7-Prep Bug Fixes and New Features](#section-80--post-layer-7-prep-bug-fixes-and-new-features)
+81. [Section 81 — Five New Backend Routes](#section-81--five-new-backend-routes)
+82. [Section 82 — Frontend: Explore Rewrite, Admin Panels, AI Chat Page](#section-82--frontend-explore-rewrite-admin-panels-ai-chat-page)
+83. [Section 83 — Admin Access Guide, TypeScript Types, Project State](#section-83--admin-access-guide-typescript-types-project-state)
+84. [Section 84 — Enterprise Chat Page Redesign v2](#section-84--enterprise-chat-page-redesign-v2)
+85. [Section 85 — TutorialModal: Floating Help Guide](#section-85--tutorialmodal-floating-help-guide)
+86. [Section 86 — AI Chat CTA in AnalysisPanel](#section-86--ai-chat-cta-in-analysispanel)
+87. [Section 87 — Admin Access Restriction Page](#section-87--admin-access-restriction-page)
+88. [Section 88 — Bug Fixes: PDF Download, Sources Blank, Scroll Issues](#section-88--bug-fixes-pdf-download-sources-blank-scroll-issues)
+89. [Section 89 — Chat Session History: Backend](#section-89--chat-session-history-backend)
+90. [Section 90 — Chat Session History: Frontend](#section-90--chat-session-history-frontend)
+91. [Section 91 — TypeScript Fix: ES2018 dotAll Regex Flag](#section-91--typescript-fix-es2018-dotall-regex-flag)
+92. [Section 92 — Project State After March 3 Session](#section-92--project-state-after-march-3-session)
+93. [Section 93 — Prior Session Polish](#section-93--prior-session-polish)
+94. [Section 94 — Bug 31: PDF Download Broken in History Table](#section-94--bug-31-pdf-download-broken-in-history-table)
+95. [Section 95 — Bug 32: /analyse Accessible Without Authentication](#section-95--bug-32-analyse-accessible-without-authentication)
+96. [Section 96 — Mobile Responsiveness: TutorialModal + AgentPipeline](#section-96--mobile-responsiveness-tutorialmodal--agentpipeline)
+97. [Section 97 — Enterprise Email Subscription Confirmation System](#section-97--enterprise-email-subscription-confirmation-system)
+98. [Section 98 — Project State After March 4 Morning Session](#section-98--project-state-after-march-4-morning-session)
+99. [Section 99 — Bug 33: PDF Download 404 on Windows (Backslash Path)](#section-99--bug-33-pdf-download-404-on-windows-backslash-path)
+100. [Section 100 — Bug 34: Stale PDF Download Button Persists After New Upload](#section-100--bug-34-stale-pdf-download-button-persists-after-new-upload)
+101. [Section 101 — Admin Dashboard Enterprise Redesign v2](#section-101--admin-dashboard-enterprise-redesign-v2)
+102. [Section 102 — Bug 35: Admin Page 401 Race Condition](#section-102--bug-35-admin-page-401-race-condition)
+103. [Section 103 — Project State After March 4 Bug Fix Batch](#section-103--project-state-after-march-4-bug-fix-batch)
+104. [Section 104 — Bug 36: AI Chat Returns Empty Responses](#section-104--bug-36-ai-chat-returns-empty-responses)
+105. [Section 105 — Bug 37: Blob URL ERR_FILE_NOT_FOUND (React Strict Mode)](#section-105--bug-37-blob-url-err_file_not_found-react-strict-mode)
+106. [Section 106 — Bug 38: Mark-as-Wrong Button Invisible](#section-106--bug-38-mark-as-wrong-button-invisible)
+107. [Section 107 — Project State After March 4 Afternoon Session](#section-107--project-state-after-march-4-afternoon-session)
+108. [Section 108 — Bugs 39 and 40 + Chat Context and CTA Enhancements](#section-108--bugs-39-and-40--chat-context-and-cta-enhancements)
+109. [Section 109 — CONTEXT N Root-Fix, Web Search Fallback, KB Discovery Endpoint](#section-109--context-n-root-fix-web-search-fallback-kb-discovery-endpoint)
+110. [Section 110 — Bug 41 and 42: Dead Server Recovery + LLM Header Leakage](#section-110--bug-41-and-42-dead-server-recovery--llm-header-leakage)
+111. [Section 111 — Project State After March 4 Evening Session](#section-111--project-state-after-march-4-evening-session)
+112. [Section 112 — Bugs 43 and 44: Hallucination Guards](#section-112--bugs-43-and-44-hallucination-guards)
+113. [Section 113 — Complete Project State (HEAD: d7860c4)](#section-113--complete-project-state-head-d7860c4)
+114. [Section 114 — The JWT Authentication System: Complete First-Principles Reference](#section-114--the-jwt-authentication-system-complete-first-principles-reference)
+115. [Section 115 — The RAG Engine and AI Chat Pipeline: Complete Technical Reference](#section-115--the-rag-engine-and-ai-chat-pipeline-complete-technical-reference)
+116. [Section 116 — Security Architecture: Every Defence Layer Explained](#section-116--security-architecture-every-defence-layer-explained)
+117. [Section 117 — Database Schema: Every Table, Column, and Constraint](#section-117--database-schema-every-table-column-and-constraint)
+118. [Section 118 — Configuration and Environment Variable Reference](#section-118--configuration-and-environment-variable-reference)
+119. [Section 119 — End-to-End Request Trace: Upload to PDF in One Journey](#section-119--end-to-end-request-trace-upload-to-pdf-in-one-journey)
+120. [Section 120 — Bug Pattern Analysis: 44 Bugs, 44 Lessons](#section-120--bug-pattern-analysis-44-bugs-44-lessons)
+121. [Section 121 — Complete Runbook: Running DeepCoin from Zero](#section-121--complete-runbook-running-deepcoin-from-zero)
 
 ---
 
@@ -28161,3 +28211,1659 @@ Target: **50+ total tests**, CI/CD gate on every push. Say: "Start Layer 7 — T
 *Engineering Journal — Sections 112–113 added March 4, 2026 (night session).*
 *Section 112: Bugs 43–44 — Non-numismatic guard + corpus caveat for unindexed CN types — commit `4d1b0de`.*
 *Section 113: Project state — 44 bugs all fixed, Gen 4 chat pipeline, encoding quality fix, Layer 7 next.*
+
+---
+
+## Section 114 — The JWT Authentication System: Complete First-Principles Reference
+
+### 114.1 — Why Authentication Exists at All
+
+DeepCoin is a multi-tenant application. Without authentication, any anonymous visitor on the internet could:
+
+- POST unlimited coin images to `/api/classify`, saturating the GPU and billing the LLM provider.
+- Read every other user's analysis history.
+- Delete other users' historical records.
+- Access the admin dashboard and read every subscriber's email address.
+- Call `/api/metrics` and learn internal performance statistics.
+
+Authentication answers one question: **"Who is making this request?"**
+Authorisation (RBAC, see §114.9) answers a second question: **"Is this identity allowed to do that?"**
+
+---
+
+### 114.2 — What a JWT Token Actually Is
+
+JWT stands for **JSON Web Token**. It is an open standard (RFC 7519). A JWT is a string with exactly three parts separated by dots:
+
+```
+header.payload.signature
+```
+
+**Header** (base64-encoded JSON):
+```json
+{
+  "alg": "HS256",
+  "typ": "JWT"
+}
+```
+`alg` declares the signing algorithm. `HS256` = HMAC-SHA256; it uses a single symmetric secret key. HS256 is appropriate here because the same server that issues tokens also verifies them (no distributed trust needed).
+
+**Payload** (base64-encoded JSON, called "claims"):
+```json
+{
+  "sub": "3f8a9bc1-4d72-4e0e-b9a3-c8f2e1a05d72",
+  "email": "dhia@example.com",
+  "role": "analyst",
+  "exp": 1741046400,
+  "iat": 1741042800
+}
+```
+
+- `sub`: Subject — the user's UUID from the `users` table. A UUID, not an integer, so it cannot be guessed by incrementing.
+- `email`: Included for display purposes by the frontend without an extra round-trip.
+- `role`: The RBAC role granted at registration. One of `admin`, `curator`, `analyst`.
+- `exp`: Expiry timestamp (Unix epoch). After this moment, the token is invalid.
+- `iat`: Issued-at timestamp. Records when the token was minted.
+
+**Signature**:
+```
+HMAC_SHA256(
+  base64url(header) + "." + base64url(payload),
+  SECRET_KEY
+)
+```
+
+The signature is the cryptographic proof. Anyone who intercepts the token can read the header and payload (they are only base64-encoded, not encrypted), but they **cannot forge** a new token or modify the payload without knowing `SECRET_KEY`. If an attacker changes `"role": "analyst"` to `"role": "admin"` in the payload, the signature no longer matches and the server rejects the token.
+
+**Why not a session cookie with a server-side session store?**
+
+Traditional session stores (e.g., Redis) require the server to maintain state: on every request, look up the session ID in the store. JWT is stateless: the server validates the signature mathematically with no external lookup, which is why it scales horizontally. DeepCoin runs in Docker behind Nginx; any replica of the FastAPI container can validate any token without shared storage.
+
+---
+
+### 114.3 — The Registration Flow
+
+**Endpoint**: `POST /auth/register`
+**File**: `src/api/routes/auth.py`
+
+```
+Client sends:
+  {
+    "username": "dhia",
+    "email":    "dhia@esprit.tn",
+    "password": "securepass123"
+  }
+
+Server steps:
+  1. Pydantic validates the payload (UserCreate schema).
+  2. Check if email already exists in the users table → 409 if duplicate.
+  3. Hash the plain-text password:
+       hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12))
+     rounds=12 means bcrypt runs 2^12 = 4096 iterations — slow enough to defeat brute-force,
+     fast enough that a 50ms login is unnoticeable to users.
+  4. If ENV != "production" (development mode), set status="active" immediately.
+     In production, status="pending" until email verified.
+  5. INSERT INTO users (id, username, email, password_hash, role, status, created_at)
+     VALUES (uuid4(), ..., "analyst", "active", now())
+  6. Return 201 Created:
+       { "message": "Account created. Sign in immediately.", "user_id": "3f8a9..." }
+```
+
+The default role on registration is always **`analyst`**. Promotion to `curator` or `admin` requires a database command by a superuser (see §114.9 for why this is the only safe design).
+
+---
+
+### 114.4 — The Login Flow
+
+**Endpoint**: `POST /auth/login`
+**File**: `src/api/routes/auth.py`
+
+```
+Client sends:
+  { "email": "dhia@esprit.tn", "password": "securepass123" }
+
+Server steps:
+  1. Pydantic validates the payload (LoginRequest schema).
+  2. SELECT * FROM users WHERE email = ? and status = 'active'
+     → 401 if not found or not active.
+  3. bcrypt.checkpw(submitted_password, stored_hash)
+     → 401 if mismatch.
+  4. Build JWT payload:
+       claims = {
+         "sub":   str(user.id),
+         "email": user.email,
+         "role":  user.role.value,
+         "exp":   datetime.utcnow() + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS),
+         "iat":   datetime.utcnow()
+       }
+  5. Sign with jose.jwt.encode(claims, SECRET_KEY, algorithm="HS256")
+  6. Return 200:
+       { "access_token": "eyJ...", "token_type": "bearer", "expires_in": 28800 }
+```
+
+`ACCESS_TOKEN_EXPIRE_HOURS` defaults to 8 hours (configurable via env var). After expiry, the frontend's Axios interceptor receives a 401, clears the stored session, and redirects to `/login`.
+
+---
+
+### 114.5 — Token Verification on Every Protected Request
+
+**File**: `src/api/auth.py`
+
+```python
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db)
+) -> User:
+    """
+    FastAPI dependency that runs before any protected route handler.
+
+    Steps:
+    1. Extract the Bearer token from the Authorization header.
+    2. Decode and verify with SECRET_KEY + HS256.
+       - jose raises JWTError if signature invalid or token expired.
+    3. Extract 'sub' (user UUID) from the decoded payload.
+    4. Load the full User row from PostgreSQL.
+       - Raises 401 if the user was deleted after the token was issued.
+    5. Return the User ORM object to the route handler.
+    """
+    credentials_exception = HTTPException(
+        status_code=401,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jose.jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    user = await db.get(User, uuid.UUID(user_id))
+    if user is None:
+        raise credentials_exception
+    return user
+```
+
+Any route that has `Depends(get_current_user)` in its signature **cannot be called** without a valid, non-expired JWT signed by DeepCoin's `SECRET_KEY`.
+
+---
+
+### 114.6 — NextAuth v5 Credentials Provider: How the Frontend Handles Auth
+
+**File**: `frontend/auth.ts` and `frontend/auth.config.ts`
+
+NextAuth is the authentication library for the Next.js frontend. In DeepCoin it uses the **Credentials strategy**: users supply email + password, the frontend calls FastAPI, and NextAuth manages the resulting session cookie.
+
+```typescript
+// auth.config.ts (simplified)
+export const authConfig: NextAuthConfig = {
+  providers: [
+    Credentials({
+      async authorize(credentials) {
+        // 1. POST /auth/login to FastAPI (http://api:8000 inside Docker)
+        const res = await fetch(`${process.env.AUTH_FASTAPI_URL}/auth/login`, {
+          method: "POST",
+          body: JSON.stringify(credentials),
+          headers: { "Content-Type": "application/json" },
+        });
+
+        if (!res.ok) {
+          // Map FastAPI error codes to NextAuth error types
+          if (res.status === 403) throw new Error("AccountNotActive");
+          return null;          // triggers CredentialsSignin callback
+        }
+
+        const data = await res.json();
+        // 2. Return object stored in the NextAuth JWT session
+        return {
+          id:           data.user_id,
+          email:        credentials.email as string,
+          name:         data.username,
+          accessToken:  data.access_token,
+          role:         data.role,
+          tokenExpires: data.expires_in,
+        };
+      }
+    })
+  ],
+  callbacks: {
+    jwt({ token, user }) {
+      // Runs when the JWT session is first created or refreshed.
+      // Attaches the FastAPI access_token to the NextAuth session token.
+      if (user) {
+        token.accessToken = user.accessToken;
+        token.role        = user.role;
+        token.userId      = user.id;
+      }
+      return token;
+    },
+    session({ session, token }) {
+      // Shapes what useSession() returns to React components.
+      session.user.accessToken = token.accessToken as string;
+      session.user.role        = token.role as string;
+      session.user.id          = token.userId as string;
+      return session;
+    }
+  }
+};
+```
+
+**Why `AUTH_FASTAPI_URL` points to `http://api:8000`**: This fetch runs on the Next.js **server** (Node.js process), not in the browser. Inside Docker, the Next.js container and FastAPI container are on the same Docker network. The hostname `api` resolves to the FastAPI container's internal IP at port 8000. `http://localhost:3000` would be the Next.js container talking to itself. `http://nginx` would add a proxy hop. Direct `http://api:8000` is the correct internal route for server-to-server communication.
+
+---
+
+### 114.7 — SessionSync: Bridging NextAuth and Axios
+
+**File**: `frontend/components/SessionSync.tsx`
+
+Axios interceptors (in `frontend/lib/api.ts`) must inject the FastAPI JWT into every API request header:
+```
+Authorization: Bearer <fastapi_access_token>
+```
+
+However, reading the NextAuth session to get the token cannot be done synchronously (it would require a network call). The solution is a module-level cache:
+
+```typescript
+// frontend/lib/api.ts
+let _authToken: string | null = null;
+export const setAuthToken = (t: string | null) => { _authToken = t; };
+
+apiClient.interceptors.request.use((config) => {
+  if (_authToken) config.headers.Authorization = `Bearer ${_authToken}`;
+  return config;
+});
+```
+
+```typescript
+// frontend/components/SessionSync.tsx
+"use client";
+export function SessionSync() {
+  const { data: session } = useSession();  // reads from React Context — zero network cost
+  useEffect(() => {
+    setAuthToken(session?.user?.accessToken ?? null);
+  }, [session]);
+  return null;   // renders nothing — pure side-effect component
+}
+```
+
+`SessionSync` is mounted once at the top of `frontend/app/layout.tsx` (inside the `SessionProvider` wrapper). Every time the NextAuth session changes (login / logout / token refresh), `useSession()` emits a new value, the effect runs, and `_authToken` is updated. All subsequent Axios calls automatically carry the current token.
+
+**Why not call `getSession()` directly in the Axios interceptor?** `getSession()` is an async function that fires a `GET /api/auth/session` request on every call. Wrapping an async function inside a synchronous Axios interceptor causes unpredictable behaviour (the promise silently discards). The module-level cache pattern is the only correct approach.
+
+---
+
+### 114.8 — Middleware: Route-Level Protection in Next.js
+
+**File**: `frontend/middleware.ts`
+
+```typescript
+export { auth as middleware } from "@/auth";
+
+export const config = {
+  matcher: ["/analyse/:path*", "/history/:path*", "/admin/:path*"],
+};
+```
+
+The matcher tells Next.js to run `auth` middleware for any request to `/analyse`, `/history`, or `/admin`. If `auth()` finds no valid session, it redirects to `/login?callbackUrl=<current-url>`. The `callbackUrl` parameter means that after login the user lands back on the page they tried to reach.
+
+`/`, `/explore`, `/about`, `/docs`, `/chat`, and `/login` and `/register` are public and excluded from the matcher.
+
+---
+
+### 114.9 — RBAC: Three Roles, One Source of Truth
+
+| Role | What They Can Do |
+|------|-----------------|
+| `analyst` | Upload coins, read own history, mark own analyses wrong, use AI Chat |
+| `curator` | Everything analyst can do, plus read all analyses, view explore gallery, access admin panels |
+| `admin` | Everything curator can do, plus view all subscribers, view all feedback, promote users |
+
+Role is stored in the `users` table in PostgreSQL and embedded in the JWT. On every request, `get_current_user()` loads the fresh `User` row from the database, so a role change takes effect at the next API call without requiring a token refresh.
+
+**Why analysts cannot self-promote**: Role is set server-side at registration and only changeable via raw SQL (`UPDATE users SET role = 'admin' WHERE email = ...`). The admin promotion guide is documented in `admin/page.tsx` as a code block shown only to existing admins.
+
+---
+
+## Section 115 — The RAG Engine and AI Chat Pipeline: Complete Technical Reference
+
+### 115.1 — What RAG Is and Why We Built It
+
+**RAG = Retrieval-Augmented Generation.**
+
+The problem it solves: a Large Language Model (LLM) like Gemini 2.5 Flash was trained on internet text, but it was NOT trained on the Corpus Nummorum (CN) — a specialised academic database of 9,716 ancient coin types. If you ask Gemini "What is CN type 7432?" it has no idea, or worse, it invents a plausible-sounding answer (hallucination).
+
+RAG separates concerns:
+- **Retrieval**: The knowledge about 9,716 coin types lives in DeepCoin's own database (ChromaDB + BM25).
+- **Generation**: The LLM's job is prose quality, not fact invention.
+
+The workflow:
+```
+User question
+    ↓
+RAGEngine.search() — finds the 5 most relevant CN records
+    ↓
+Build a prompt: "[CONTEXT 1 — Identity] ...\n[CONTEXT 2 — Obverse]..."
+    ↓
+LLM prompt: "Using ONLY the contexts above, answer the question. Cite [CONTEXT N]."
+    ↓
+LLM generates a cited, grounded answer
+```
+
+The LLM never invents facts. Everything it states must come from a `[CONTEXT N]` block or the response is blocked by the hallucination guard (Bugs 43 and 44).
+
+---
+
+### 115.2 — ChromaDB: The Vector Database
+
+**File**: `data/metadata/chroma_db_rag/` (on disk), `src/core/rag_engine.py` (code)
+
+ChromaDB is an embeddable vector database. DeepCoin uses `PersistentClient` which stores vectors on disk — no external server process needed.
+
+**Embed model**: `all-MiniLM-L6-v2` from sentence-transformers.
+- Size: 22 MB
+- Embedding dimension: 384
+- Inference device: CPU (the model is small enough to not need GPU)
+- What it does: converts a text string into a 384-dimensional vector of floats where semantically similar texts produce nearby vectors.
+
+**Why all-MiniLM-L6-v2 and not OpenAI's ada-002?**
+- ada-002 costs money per call and requires internet access.
+- all-MiniLM-L6-v2 runs locally, is completely free, and at 22 MB fits in seconds in RAM.
+- For a 200-word coin description, the quality difference is negligible for retrieval tasks.
+
+**Collection**: `cn_coin_types` — 47,705 documents (9,541 coin types × 5 chunks per type).
+
+**The 5 semantic chunks per coin type**:
+```
+chunk_type="identity"  → "type_id: 1015 | denomination: drachm | authority: Maroneia | region: Thrace | date: c.365-330 BC"
+chunk_type="obverse"   → "obverse: prancing horse right | legend: MAR"
+chunk_type="reverse"   → "reverse: bunch of grapes on vine branch | legend: EPI ZINONOS"
+chunk_type="material"  → "material: silver | weight: 2.44g | diameter: 14mm | mint: Maroneia"
+chunk_type="context"   → "persons: Magistrate Zenon | references: SNG Cop. 627 | notes: ..."
+```
+
+**Why 5 chunks and not 1 blob?**
+If the entire coin record is one 200-word blob, the embedding vector averages everything together. Searching for "silver drachm" might miss a coin where "silver" and "drachm" never appear adjacent in the blob. By splitting into 5 typed chunks, "silver" search hits the `material` chunk cleanly, "prancing horse" hits the `obverse` chunk, "Magistrate Zenon" hits the `context` chunk.
+
+---
+
+### 115.3 — BM25: Keyword Search
+
+**Library**: `rank-bm25` (BM25Okapi implementation)
+
+BM25 (Best Match 25) is a classical information retrieval algorithm. Unlike vector similarity, BM25 does exact keyword matching with statistical term weighting.
+
+**BM25Okapi formula** (simplified):
+```
+score(d, q) = Σ_term [ IDF(term) × (TF(term, d) × (k1 + 1)) / (TF(term, d) + k1 × (1 - b + b × |d| / avgdl)) ]
+```
+where:
+- `IDF(term)` = Inverse Document Frequency — rare terms score higher.
+- `TF(term, d)` = term frequency in document d.
+- `k1 = 1.5`, `b = 0.75` (standard BM25 tuning parameters).
+- `|d|` = document length, `avgdl` = average document length across corpus.
+
+**Why BM25 in addition to vector search?**
+Vector search is excellent for semantic similarity ("silver coin" should match "argentan denarius") but it can suffer on exact terms. A query like "SNG Cop. 627" (a reference catalogue number) has no semantic meaning — it is a unique identifier. BM25 matches it exactly. Hybrid search captures both worlds.
+
+**Memory**: The BM25 index is built from the same 47,705 text strings as ChromaDB. At load time (`RAGEngine.__init__()`), all 47,705 documents are tokenised (split on whitespace) and the BM25Okapi index is built in memory. Size ≈ 180 MB RAM. This is why `get_rag_engine()` uses a singleton with a threading lock: building the index takes ~3 seconds and should happen exactly once.
+
+---
+
+### 115.4 — RRF: Reciprocal Rank Fusion
+
+After BM25 returns a ranked list and ChromaDB returns a ranked list, the two lists must be merged into one final ranking. RRF is the algorithm:
+
+```
+RRF_score(document) = Σ_over_each_ranker [ 1 / (k + rank_in_that_ranker) ]
+```
+
+where `k = 60` (empirically determined sweet spot, from the paper "Reciprocal Rank Fusion outperforms Condorcet and individual Rank Learning Methods").
+
+**Why k = 60?** A smaller `k` makes the top of each list dominant. A larger `k` treats all ranks more equally. `k = 60` gives moderate emphasis to top-ranked documents from each ranker while still considering documents ranked lower. At 60, a document at rank 1 in both rankers scores `1/61 + 1/61 ≈ 0.033`. A document at rank 100 in both scores `1/160 + 1/160 ≈ 0.013`. The ratio is about 2.5x, which is reasonable.
+
+**Why not a cross-encoder reranker?** A cross-encoder (e.g., `ms-marco-MiniLM-L-6-v2`) would read each (query, document) pair and score relevance. For 47,705 documents this would take seconds per query. RRF is a pure mathematical merge — zero latency overhead. Studies show RRF achieves ~95% of cross-encoder quality for corpora under 50k documents.
+
+---
+
+### 115.5 — RAGEngine: The Complete Class Architecture
+
+**File**: `src/core/rag_engine.py`
+
+```python
+class RAGEngine:
+    def __init__(self, json_path: str, chroma_dir: str):
+        """
+        Loads the full KB from disk.
+
+        1. Reads cn_types_metadata_full.json (9,541 records, ~3.2 MB)
+        2. Builds the BM25Okapi index from all 47,705 chunk texts
+        3. Connects to ChromaDB PersistentClient at chroma_dir
+        4. Stores a reverse lookup dict: {type_id: [5 chunk records]}
+        """
+
+    def _tokenize(self, text: str) -> list[str]:
+        """
+        Lowercases text and splits on whitespace + punctuation.
+        Used for both BM25 index building and query tokenisation.
+        """
+
+    def search(self,
+               query: str,
+               n: int = 5,
+               where: dict | None = None) -> list[dict]:
+        """
+        Hybrid BM25 + vector + RRF search.
+
+        Args:
+            query:  Natural language query string.
+            n:      Maximum number of results to return.
+            where:  Optional ChromaDB filter dict.
+                    Example: {"chunk_type": "material"}
+                    Example: {"type_id": "1015"}
+
+        Steps:
+        1. Run BM25 query → get top 50 scored documents with their chunk_doc_ids
+        2. Run ChromaDB query(query_texts=[query], n_results=50, where=where)
+           → get top 50 by cosine similarity
+        3. Merge via RRF(k=60):
+           - Build rank dict from BM25 results (rank 0 = best)
+           - Build rank dict from Chroma results (rank 0 = best)
+           - For every unique document: rrf_score = 1/(60+bm25_rank) + 1/(60+chroma_rank)
+             (documents only in one list get infinity as their rank in the other)
+        4. Sort descending by rrf_score
+        5. Return top-n as list of dicts:
+           { type_id, chunk_type, text, rrf_score, in_training_set }
+        """
+
+    def get_by_id(self, type_id: str | int) -> dict | None:
+        """
+        Direct lookup by CN type ID.
+        Returns the identity chunk for the matching type, or None.
+        Does NOT use search — direct dict lookup in O(1).
+        """
+
+    def get_context_blocks(self, type_id: str | int) -> list[str]:
+        """
+        Returns the 5 formatted context strings for prompt injection.
+
+        Example return:
+        [
+          "[CONTEXT 1 — Identity]  type_id: 1015 | denomination: drachm | ...",
+          "[CONTEXT 2 — Obverse]   prancing horse right | legend: MAR",
+          "[CONTEXT 3 — Reverse]   bunch of grapes | legend: EPI ZINONOS",
+          "[CONTEXT 4 — Material]  silver | weight: 2.44g | mint: Maroneia",
+          "[CONTEXT 5 — Context]   persons: Magistrate Zenon"
+        ]
+        These strings are passed directly into the historian and chat LLM prompts.
+        """
+
+    def corpus_size(self) -> int:
+        """Returns total number of CN type records in the KB."""
+
+    def is_chroma_built(self) -> bool:
+        """Returns True if the ChromaDB collection has >0 documents."""
+
+    def populate_chroma(self, batch_size: int = 500) -> None:
+        """
+        One-time build of the ChromaDB index from the JSON metadata.
+        Called by scripts/rebuild_chroma.py.
+        Processes 47,705 chunks in batches of 500.
+        ChromaDB .upsert() is idempotent — safe to re-run.
+        """
+```
+
+**Singleton pattern** (`src/core/rag_engine.py` module level):
+```python
+_engine_instance: RAGEngine | None = None
+_engine_lock = threading.Lock()
+
+def get_rag_engine() -> RAGEngine:
+    global _engine_instance
+    if _engine_instance is None:              # first check (no lock cost for hot path)
+        with _engine_lock:
+            if _engine_instance is None:      # second check inside lock (race safety)
+                _engine_instance = RAGEngine(...)
+    return _engine_instance
+```
+
+This is the double-checked locking pattern. Without the inner lock, two FastAPI worker threads starting simultaneously on a cold server could both see `None` and both call `RAGEngine()`, building two 180 MB BM25 indexes concurrently — OOM risk.
+
+---
+
+### 115.6 — The AI Chat Pipeline: Generation 4
+
+**File**: `src/api/routes/chat.py`
+
+The chat pipeline has gone through 4 generations of design. Generation 4 is the current production architecture.
+
+**Gen 1** (naive): Direct LLM prompt with no KB. Hallucinated freely. Discarded.
+
+**Gen 2**: Vector search only, blob injection. Produced generic answers, confused field structure. Discarded.
+
+**Gen 3**: Hybrid RAG + `=== SECTION ===` separators for context blocks. LLM leaked the literal `===` strings into answers. Discarded.
+
+**Gen 4** (current): Hybrid RAG + XML tag isolation + expert-persona prompt + hallucination guards.
+
+---
+
+### 115.7 — Gen 4 Chat Pipeline: Step by Step
+
+```python
+async def chat_endpoint(request: ChatRequest, ...) -> ChatResponse:
+```
+
+**Step 1: Non-numismatic guard**
+```python
+NON_COIN_PATTERNS = [
+    r"\b(weather|recipe|movie|music|football|basketball|covid)\b",
+    r"\b(write\s+code|debug|program)\b",
+    ...
+]
+for pattern in NON_COIN_PATTERNS:
+    if re.search(pattern, question, re.IGNORECASE):
+        return ChatResponse(
+            answer="DeepCoin specialises in numismatics...",
+            sources=[], provider="system-guard"
+        )
+```
+This runs before any LLM call. Zero cost. Protects the LLM quota from off-topic requests.
+
+**Step 2: CN-ID detection**
+```python
+cn_id_match = re.search(r"\bCN\s+(?:type\s+)?(\d+)\b", question, re.IGNORECASE)
+if cn_id_match:
+    type_id = cn_id_match.group(1)
+    context_blocks = rag.get_context_blocks(type_id)  # all 5 chunks for that type
+```
+If the user asks about a specific CN type (e.g., "Tell me about CN 1015"), skip search and fetch exact context blocks. This guarantees zero-miss for direct lookups.
+
+**Step 3: Hybrid RAG search (general questions)**
+```python
+results = rag.search(question, n=5)
+# Each result has type_id, chunk_type, text, rrf_score
+```
+
+**Step 4: XML tag isolation (Bug 43 root fix)**
+
+Context blocks are wrapped in XML tags before injection into the prompt:
+```python
+context_str = ""
+for i, block in enumerate(context_blocks, 1):
+    context_str += f"<cn_record id='{i}'>\n{block}\n</cn_record>\n\n"
+```
+
+The LLM is instructed: "Context is inside `<cn_record>` tags. Your answer must be outside those tags." This physically separates source material from generated text and prevents the LLM from copying raw database text verbatim into the answer.
+
+**Step 5: Expert-persona prompt**
+```
+You are Dr. Nummis, a senior numismatist with 30 years of expertise in ancient Mediterranean coinage.
+Answer only from the <cn_record> blocks provided. Cite blocks as [CN-Record N].
+If no block answers the question, say: "This specific detail is not in the DeepCoin knowledge base."
+Never invent mint dates, rulers, or typological designations not found in the records.
+Do not reproduce the raw XML tags in your answer.
+
+<cn_record id='1'>
+[CONTEXT 1 — Identity]  type_id: 1015 | denomination: drachm | ...
+</cn_record>
+...
+
+Question: {user_question}
+```
+
+**Step 6: LLM provider chain**
+```python
+providers = [
+    _try_ollama,          # local model (gemma3:4b), 0 cost, ~3s/response
+    _try_github_models,   # GitHub Models (Gemini 2.5 Flash), free tier
+    _try_google_ai,       # Google AI Studio, 1500 req/day free
+    _structured_fallback, # KB text concatenation only, no LLM
+]
+for provider_fn in providers:
+    result = await asyncio.to_thread(provider_fn, prompt)
+    if result:
+        return result
+```
+
+`asyncio.to_thread` wraps the synchronous LLM SDK calls so they don't block the FastAPI event loop. Each LLM call can take 3–20 seconds; without `to_thread` this would block all other requests.
+
+**Step 7: Corpus caveat guard (Bug 44)**
+```python
+if is_unindexed_type(type_id):
+    answer += "\n\n*Note: CN type {type_id} exists in the Corpus Nummorum catalogue but "
+              "was not indexed in DeepCoin's knowledge base. The above answer is based on "
+              "partial records. Consult corpus-nummorum.eu for complete details.*"
+```
+
+**Step 8: Build and return ChatResponse**
+```python
+return ChatResponse(
+    answer=answer,
+    sources=[
+        ChatSource(type_id=r["type_id"], chunk_type=r["chunk_type"],
+                   score=r["rrf_score"], text_preview=r["text"][:120])
+        for r in results
+    ],
+    provider=provider_name,
+    session_id=session_id
+)
+```
+
+---
+
+### 115.8 — Chat Session History
+
+**Backend**: `POST /api/chat` appends messages to `chat_sessions` table (one row per exchange, keyed by `session_id` UUID).
+
+**Frontend**: `frontend/app/chat/page.tsx` maintains `sessionId` in React state. On page load, a `GET /api/chat/sessions/<uuid>` fetches prior messages. The chat page `useSearchParams` hook reads `?q=<coin-label>` — this is how AnalysisPanel's CTA pre-fills the chat input with the coin's CN label.
+
+---
+
+## Section 116 — Security Architecture: Every Defence Layer Explained
+
+### Overview
+
+DeepCoin implements a layered defence model. No single layer is sufficient; all layers together prevent the most common attack vectors.
+
+```
+Layer 0: Input validation (Pydantic)
+Layer 1: Authentication (JWT)
+Layer 2: Authorisation (RBAC)
+Layer 3: Rate limiting (Nginx + slowapi)
+Layer 4: API key (X-API-Key for classify endpoint)
+Layer 5: Network policy (CORS)
+Layer 6: HTTP security headers (CSP, HSTS, etc.)
+Layer 7: PyTorch model security (weights_only)
+Layer 8: File system security (path traversal prevention)
+Layer 9: Blob URL memory safety
+Layer 10: Non-root Docker execution
+```
+
+---
+
+### 116.1 — Layer 0: Pydantic Input Validation
+
+Every FastAPI route that accepts a request body uses a Pydantic v2 model. Pydantic validates type, format, length, and constraints before the route handler sees the data. Malformed input raises `422 Unprocessable Entity` before any application logic runs.
+
+Example:
+```python
+class UserCreate(BaseModel):
+    username:  str = Field(min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_]+$")
+    email:     EmailStr
+    password:  str = Field(min_length=8, max_length=128)
+```
+
+`EmailStr` validators ensure email format. The `pattern` on username blocks SQL injection characters. `min_length` and `max_length` prevent both empty-string attacks and buffer overflow attempts.
+
+---
+
+### 116.2 — Layer 1: JWT Authentication
+
+See Section 114 for full details. Summary: every protected endpoint has `Depends(get_current_user)`. The dependency verifies the JWT signature, checks expiry, and loads the user from PostgreSQL. A request without a valid token receives a `401 Unauthorized` and never reaches the route handler.
+
+---
+
+### 116.3 — Layer 2: RBAC Role Checks
+
+```python
+# Pattern used on admin routes
+async def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role not in (UserRole.admin, UserRole.curator):
+        raise HTTPException(403, "Insufficient permissions")
+    return current_user
+```
+
+FastAPI dependency injection chains: `require_admin` calls `get_current_user` internally. A single `Depends(require_admin)` in a route signature enforces both authentication AND role authorisation.
+
+---
+
+### 116.4 — Layer 3: Rate Limiting (Two Layers)
+
+**Layer 3a: Nginx rate limiting** (network layer, `nginx.conf`):
+```nginx
+limit_req_zone $binary_remote_addr zone=api:10m rate=20r/m;
+limit_req zone=api burst=5 nodelay;
+```
+This runs at the Nginx level, before the request even reaches FastAPI. An IP sending more than 20 requests/minute gets `429 Too Many Requests` from Nginx. The `burst=5` allows a short burst above the rate. This is the first line of defence against DDoS and brute-force.
+
+**Layer 3b: slowapi rate limiting** (application layer, FastAPI):
+```python
+@router.post("/api/classify")
+@limiter.limit("10/minute")
+async def classify(request: Request, ...):
+```
+slowapi tracks requests per IP at the application level. Even if Nginx is bypassed (direct internal call), the 10/minute cap holds. This also enables per-route granularity (classify is more expensive than health check).
+
+---
+
+### 116.5 — Layer 4: API Key for Classify
+
+**File**: `src/api/auth.py` — `require_api_key` dependency.
+
+```python
+async def require_api_key(x_api_key: str = Header(default="")):
+    expected = os.getenv("DEEPCOIN_API_KEY", "")
+    if not expected:
+        return   # dev mode — passthrough, no key required
+    if not hmac.compare_digest(x_api_key, expected):
+        raise HTTPException(403, "Invalid API key")
+```
+
+`hmac.compare_digest` is a constant-time comparison. A naive `x_api_key == expected` is vulnerable to timing attacks: an attacker can measure nanosecond-level response times and infer how many leading characters of their guess match the secret. `compare_digest` always takes the same time regardless of how many characters match.
+
+In development (`DEEPCOIN_API_KEY` not set), passthrough is automatic. In production, the key is set in the `.env` file and rotatable without code changes.
+
+---
+
+### 116.6 — Layer 5: CORS
+
+**File**: `src/api/main.py`
+
+```python
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID"],
+)
+```
+
+CORS (Cross-Origin Resource Sharing) is a browser security feature. Without `Access-Control-Allow-Origin` headers, browsers refuse to execute JavaScript fetch calls from `http://localhost:3000` to `http://localhost:8000` (different ports = different origins).
+
+**Why not `allow_origins=["*"]`?** Wildcard CORS with `allow_credentials=True` is forbidden by the CORS spec. Credentials (JWT tokens in Authorization headers) require explicit origin listing. Using `*` would mean the frontend could never send the JWT.
+
+**Production value**: `ALLOWED_ORIGINS=https://deepcoin.yebni.com` — only the production domain, rejecting requests from any other origin.
+
+---
+
+### 116.7 — Layer 6: HTTP Security Headers
+
+**File**: `frontend/next.config.ts`
+
+```typescript
+const securityHeaders = [
+  { key: "X-Frame-Options", value: "DENY" },
+  // Prevents DeepCoin pages from being embedded in <iframe> on other sites.
+  // Stops clickjacking attacks.
+
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  // Stops Firefox/Chrome from guessing MIME type.
+  // Without this, an uploaded .jpg that is actually a .html file might execute.
+
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  // Navigation to external links (e.g., corpus-nummorum.eu) sends only the origin
+  // in the Referer header, not the full path (which could contain coin type IDs).
+
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+  // Explicitly disables browser features. The coin upload only needs file access,
+  // not the camera API (which could be triggered by malicious embedded content).
+
+  {
+    key: "Content-Security-Policy",
+    value: isDev
+      ? "default-src 'self'; img-src 'self' blob: data:; ..."  // looser in dev
+      : "default-src 'self'; img-src 'self' blob: data: https://corpus-nummorum.eu; ..."
+    // CSP is the most powerful header. It lists exactly which sources are allowed
+    // for scripts, styles, images, and API connections. Any injected script
+    // from a third-party domain is blocked before execution.
+  },
+
+  {
+    key: "Strict-Transport-Security",
+    value: "max-age=63072000; includeSubDomains; preload"
+    // HSTS: once a browser visited via HTTPS, it NEVER falls back to HTTP
+    // for the next 2 years (63072000 seconds). Prevents SSL stripping attacks.
+    // preload submits the domain to the browser's built-in HSTS preload list.
+  },
+];
+```
+
+---
+
+### 116.8 — Layer 7: PyTorch Security (`weights_only=True`)
+
+**Files**: `src/core/inference.py`, `scripts/train.py`
+
+PyTorch `.pth` files are Python pickle serialisations. Pickle can execute arbitrary code on load. A malicious actor who replaces `best_model.pth` could achieve remote code execution.
+
+```python
+# INSECURE (default before fix):
+model_state = torch.load("models/best_model.pth")
+
+# SECURE (after Bug #fix at commit 1b210ef):
+model_state = torch.load("models/best_model.pth", weights_only=True)
+```
+
+`weights_only=True` restricts pickle to only deserialise tensor data — no code execution paths. It was added to both `inference.py` and `train.py` (the resume checkpoint path).
+
+---
+
+### 116.9 — Layer 8: Path Traversal Prevention
+
+**File**: `src/api/main.py` — PDF serving endpoint
+
+```python
+@app.get("/api/reports/{filename}")
+async def serve_report(filename: str, ...):
+    # Strip any path components — attacker could send "../../../etc/passwd"
+    safe_name = os.path.basename(filename)
+    file_path = REPORTS_DIR / safe_name
+
+    # Confirm the resolved path is still inside REPORTS_DIR
+    if not str(file_path.resolve()).startswith(str(REPORTS_DIR.resolve())):
+        raise HTTPException(403, "Access denied")
+
+    if not file_path.exists():
+        raise HTTPException(404, "Report not found")
+
+    return FileResponse(file_path, media_type="application/pdf")
+```
+
+`os.path.basename` strips all directory components. The `startswith` check on the resolved path catches symlink attacks (e.g., a symlink inside REPORTS_DIR pointing outside). Without these checks, an attacker requesting `/api/reports/../../etc/shadow` would get the server's shadow password file.
+
+---
+
+### 116.10 — Layer 9: Blob URL Memory Safety
+
+**Bug 37** (see Section 105) revealed a React Strict Mode double-mount issue with blob URLs.
+
+The correct pattern:
+```typescript
+// WRONG: creates a new URL on every render, old ones leak:
+<img src={URL.createObjectURL(file)} />
+
+// CORRECT: create once, revoke on cleanup:
+const previewUrl = useMemo(() => URL.createObjectURL(file), [file]);
+useEffect(() => {
+  return () => URL.revokeObjectURL(previewUrl);  // cleanup on unmount
+}, [previewUrl]);
+<img src={previewUrl} />
+```
+
+`URL.createObjectURL` creates a reference the browser holds in memory. Without `revokeObjectURL`, every uploaded file persists in browser memory for the tab's lifetime. In React Strict Mode (development), components mount twice, doubling the leak. The cleanup effect ensures each blob URL is freed exactly once.
+
+---
+
+### 116.11 — Layer 10: Non-Root Docker Execution
+
+**File**: `docker/api/Dockerfile`
+
+```dockerfile
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+USER appuser
+```
+
+Docker containers run as root by default. If an attacker achieves remote code execution inside the container, running as non-root limits blast radius: the attacker process cannot install packages, modify system files, or access other users' data. This is Docker security best practice and required for compliance in production deployments.
+
+---
+
+## Section 117 — Database Schema: Every Table, Column, and Constraint
+
+DeepCoin uses **PostgreSQL** for production (managed via SQLAlchemy async + Alembic) and **SQLite** for the lightweight dev-mode store.
+
+---
+
+### 117.1 — PostgreSQL Table: `users`
+
+```sql
+CREATE TYPE user_role AS ENUM ('admin', 'curator', 'analyst');
+CREATE TYPE user_status AS ENUM ('active', 'pending', 'suspended');
+
+CREATE TABLE users (
+    id            UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+    username      VARCHAR(50)   NOT NULL UNIQUE,
+    email         VARCHAR(255)  NOT NULL UNIQUE,
+    password_hash VARCHAR(255)  NOT NULL,
+    role          user_role     NOT NULL DEFAULT 'analyst',
+    status        user_status   NOT NULL DEFAULT 'active',
+    created_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    last_login    TIMESTAMPTZ,
+    CONSTRAINT chk_username CHECK (username ~ '^[a-zA-Z0-9_]+$')
+);
+
+CREATE INDEX idx_users_email ON users (email);
+```
+
+**Column design rationale:**
+
+- `id UUID`: Using a UUID (128-bit random) instead of a serial integer prevents enumeration attacks. An attacker cannot enumerate users by trying `/users/1`, `/users/2`. UUID v4 (random) means even guessing a valid ID has probability 1/(2^122). `gen_random_uuid()` uses PostgreSQL's built-in cryptographically secure RNG.
+
+- `password_hash VARCHAR(255)`: Stores only the bcrypt hash, never the plaintext. bcrypt output is always 60 characters. VARCHAR(255) gives headroom for future algorithm migration.
+
+- `role user_role ENUM`: PostgreSQL enforces that only the 3 declared values can be stored. An application bug assigning `role='superuser'` would fail at the database constraint level.
+
+- `status user_status ENUM`: Allows account suspension without deletion. Suspended accounts fail login (the `SELECT WHERE status = 'active'` filter), but their analysis history remains intact for forensic review.
+
+- `CONSTRAINT chk_username`: Regex check constraint enforced by PostgreSQL. Even if Pydantic validation is bypassed, the database refuses invalid usernames. Defence-in-depth.
+
+- `INDEX idx_users_email`: Login queries filter by email. Without an index, every login scans the entire users table (O(n)). A B-tree index makes it O(log n). Critical at scale.
+
+---
+
+### 117.2 — PostgreSQL Table: `analyses`
+
+```sql
+CREATE TYPE analysis_route AS ENUM ('historian', 'validator', 'investigator');
+
+CREATE TABLE analyses (
+    id              UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id         UUID          NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    label           VARCHAR(50),
+    confidence      FLOAT,
+    route           analysis_route,
+    pdf_path        TEXT,
+    report_summary  TEXT,
+    top5_json       JSONB,
+    node_timings    JSONB,
+    feedback_wrong  BOOLEAN       DEFAULT FALSE,
+    feedback_notes  TEXT
+);
+
+CREATE INDEX idx_analyses_user_id   ON analyses (user_id);
+CREATE INDEX idx_analyses_created   ON analyses (created_at DESC);
+CREATE INDEX idx_analyses_route     ON analyses (route);
+```
+
+**Column design rationale:**
+
+- `user_id FOREIGN KEY ... ON DELETE CASCADE`: If a user account is deleted, all their analyses are automatically deleted. This prevents orphaned rows that would be invisible but waste storage.
+
+- `top5_json JSONB`: The top-5 CNN predictions are a variable-length list. Storing as JSONB (binary JSON) allows PostgreSQL to index inside the JSON structure if needed. `JSONB` is preferred over `JSON` because JSONB stores a parsed binary representation — queries on JSONB fields run faster.
+
+- `node_timings JSONB`: Per-node timing dict from the LangGraph pipeline (CNN: 0.54s, historian: 19.85s, etc.). Stored as JSONB for structured querying without normalising to a separate timings table.
+
+- `report_summary TEXT`: The first 500 characters of the synthesis output. Used by the Explore gallery page to show previews without loading the full PDF.
+
+- `feedback_wrong BOOLEAN DEFAULT FALSE`: Set to TRUE when the user clicks "Mark as Wrong". Used by the admin feedback panel to surface potential misclassifications for active learning. `NULL` is intentionally not used — `DEFAULT FALSE` makes every analysis queryable (`WHERE feedback_wrong = TRUE`) without handling NULL cases.
+
+- `pdf_path TEXT`: The on-disk path to the generated PDF. On Windows (development), this is an absolute path with backslashes. The Windows backslash → Linux forward-slash normalisation is done at the FastAPI layer when serving (`Bug 33`).
+
+---
+
+### 117.3 — PostgreSQL Table: `chat_sessions`
+
+```sql
+CREATE TABLE chat_sessions (
+    id          UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID          NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    session_key VARCHAR(100)  NOT NULL,
+    created_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, session_key)
+);
+
+CREATE TABLE chat_messages (
+    id          UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id  UUID          NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+    role        VARCHAR(10)   NOT NULL CHECK (role IN ('user', 'assistant')),
+    content     TEXT          NOT NULL,
+    sources     JSONB,
+    provider    VARCHAR(50),
+    created_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_chat_messages_session ON chat_messages (session_id, created_at ASC);
+```
+
+**Design rationale — two-table split**: A single table with `session_id` and `role` columns would work, but splitting sessions and messages mirrors the logical structure. A session is a container; messages are its content. The split allows efficient queries like "How many unique sessions did user X have?" without scanning message content.
+
+**`role CHECK IN ('user', 'assistant')`**: PostgreSQL CHECK constraint enforces that only the two valid roles can be stored. Alternative 'system' messages (used for prompts) are not stored in the database — they are generated at query time.
+
+---
+
+### 117.4 — PostgreSQL Table: `audit_logs`
+
+```sql
+CREATE TABLE audit_logs (
+    id          BIGSERIAL     PRIMARY KEY,
+    user_id     UUID          REFERENCES users(id) ON DELETE SET NULL,
+    action      VARCHAR(100)  NOT NULL,
+    resource    VARCHAR(200),
+    ip_address  INET,
+    created_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_audit_user    ON audit_logs (user_id, created_at DESC);
+CREATE INDEX idx_audit_action  ON audit_logs (action);
+```
+
+The audit log records security-relevant events: login attempts, role promotions, feedback submissions, admin page accesses. `ON DELETE SET NULL` preserves audit entries even when the user account is deleted — a deleted account's login history is forensically relevant.
+
+`BIGSERIAL` (64-bit auto-increment) instead of UUID: audit logs are append-only, high-volume, and queried by time range. Sequential integers give better B-tree index locality than random UUIDs for time-ordered scans.
+
+---
+
+### 117.5 — SQLite Store (Development Only)
+
+**File**: `src/api/_store.py`
+
+```python
+def _get_conn() -> sqlite3.Connection:
+    """Return a connection in WAL mode with B-tree full-text search enabled."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA journal_mode=WAL")  # Write-Ahead Logging
+    conn.execute("PRAGMA synchronous=NORMAL")
+    return conn
+```
+
+**WAL mode**: Write-Ahead Logging allows reads and writes to proceed concurrently. In the default DELETE mode, a write locks the entire database file, blocking all readers. In WAL mode, writers create a separate WAL file; readers continue reading the original database while the write is pending. For FastAPI (multiple concurrent requests), WAL is essential.
+
+**Schema** (SQLite):
+```sql
+CREATE TABLE IF NOT EXISTS analyses (
+    id           TEXT PRIMARY KEY,
+    user_id      TEXT,
+    created_at   TEXT NOT NULL,
+    label        TEXT,
+    confidence   REAL,
+    route        TEXT,
+    pdf_path     TEXT,
+    top5_json    TEXT,
+    node_timings TEXT,
+    feedback_wrong  INTEGER DEFAULT 0,
+    feedback_notes  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_analyses_created ON analyses (created_at DESC);
+```
+
+SQLite does not support ENUM types; route is stored as TEXT with Python-level validation. JSON fields are stored as TEXT (JSON-serialised strings).
+
+---
+
+### 117.6 — Alembic Migrations
+
+**Directory**: `alembic/versions/`
+
+Each migration is a Python file with `upgrade()` and `downgrade()` functions.
+
+**Migration 001** (`create_users_table`):
+```python
+def upgrade() -> None:
+    op.create_table("users", ...)
+    op.create_index("idx_users_email", "users", ["email"])
+
+def downgrade() -> None:
+    op.drop_index("idx_users_email")
+    op.drop_table("users")
+```
+
+**Migration 002** (`create_analyses_table`):
+```python
+def upgrade() -> None:
+    op.create_table("analyses", ...)
+    op.create_index("idx_analyses_user_id", ...)
+    op.create_index("idx_analyses_created", ...)
+```
+
+Alembic tracks the current migration state in the `alembic_version` table (one row, the current revision hash). Running `alembic upgrade head` applies all pending migrations in order. Running `alembic downgrade -1` reverses the latest migration.
+
+**Why Alembic and not raw SQL scripts?** Alembic migrations are version-controlled, reversible, and tied to the codebase. Raw SQL scripts require manual execution tracking. Alembic's `revision` command auto-generates migration files from SQLAlchemy model changes, reducing human error.
+
+---
+
+## Section 118 — Configuration and Environment Variable Reference
+
+Every environment variable in DeepCoin, its purpose, security classification, and how it flows through the system.
+
+---
+
+### 118.1 — Backend (FastAPI) Variables — `.env`
+
+| Variable | Example Value | Purpose | Security Class |
+|----------|---------------|---------|----------------|
+| `DATABASE_URL` | `postgresql+asyncpg://dc_user:pass@db:5432/deepcoin` | SQLAlchemy async DB connection string | **Secret** — contains DB password |
+| `SECRET_KEY` | `your-256-bit-hex-string` | JWT signing key | **Secret** — rotating this invalidates all active sessions |
+| `ACCESS_TOKEN_EXPIRE_HOURS` | `8` | JWT lifetime | Config |
+| `DEEPCOIN_API_KEY` | `sk-dc-...` | X-API-Key for `/api/classify` | **Secret** |
+| `ALLOWED_ORIGINS` | `http://localhost:3000` | CORS allowed origins (comma-separated) | Config |
+| `ENV` | `development` or `production` | Controls auto-activate for new users, docs visibility | Config |
+| `LOG_LEVEL` | `INFO` | Python logging level | Config |
+| `LOG_FORMAT` | `json` or `text` | Structured JSON vs human-readable text logs | Config |
+| `REPORTS_DIR` | `/app/reports` | On-disk path for PDF reports | Config |
+| `GITHUB_TOKEN` | `ghp_...` | GitHub Models API token for LLM | **Secret** |
+| `GOOGLE_API_KEY` | `AIza...` | Google AI Studio API key | **Secret** |
+| `OLLAMA_HOST` | `http://localhost:11434` | Ollama local LLM server URL | Config |
+
+**`SECRET_KEY` generation**:
+```python
+import secrets
+print(secrets.token_hex(32))  # generates 64-character hex = 256 bits of entropy
+```
+256 bits is overkill for HMAC-SHA256 (which has a 256-bit output), but it doesn't hurt and provides a comfortable security margin.
+
+**`DATABASE_URL` format breakdown**:
+- `postgresql+asyncpg://` — use the `asyncpg` driver (async-native, faster than psycopg2)
+- `dc_user:pass` — PostgreSQL username and password (set in `docker-compose.yml` environment)
+- `@db:5432` — hostname `db` is the Docker Compose service name for PostgreSQL, port 5432 default
+- `/deepcoin` — database name
+
+---
+
+### 118.2 — Frontend (Next.js) Variables — `frontend/.env.local`
+
+| Variable | Example Value | Purpose | Build-time? |
+|----------|---------------|---------|-------------|
+| `NEXTAUTH_URL` | `http://localhost:3000` | NextAuth base URL for callbacks | No (runtime) |
+| `NEXTAUTH_SECRET` | `your-nextauth-secret` | NextAuth session cookie signing key | No (runtime — **Secret**) |
+| `AUTH_FASTAPI_URL` | `http://api:8000` | Internal Docker URL for NextAuth → FastAPI calls | No (runtime) |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:3000` | Proxied API base URL (history, health, chat) | **Build-time** |
+| `NEXT_PUBLIC_CLASSIFY_URL` | `http://127.0.0.1:8000` | Direct FastAPI URL for /api/classify (avoids proxy timeout) | **Build-time** |
+| `NEXT_PUBLIC_APP_NAME` | `DeepCoin` | Application name displayed in UI | Build-time |
+
+**`NEXT_PUBLIC_` prefix**: Next.js bakes `NEXT_PUBLIC_*` variables into the JavaScript bundle at build time. They are visible in the browser's page source. Never put secrets (API keys, database passwords) in `NEXT_PUBLIC_*` variables.
+
+**`AUTH_FASTAPI_URL` vs `NEXT_PUBLIC_API_URL`**:
+- `AUTH_FASTAPI_URL`: Accessed only by the Next.js server process (Node.js), never by the browser. Points to the Docker-internal FastAPI address (`api:8000`).
+- `NEXT_PUBLIC_API_URL`: Accessed by browser JavaScript. Points to `localhost:3000` because the Next.js dev server proxies `/api/*` requests to FastAPI via `next.config.ts` rewrites. The browser never needs to know FastAPI's direct address for proxied routes.
+
+**Why is `/api/classify` different?** The classify route processes large file uploads and runs the GPU pipeline (up to 20 seconds). Going through the Next.js proxy (`localhost:3000 → api:8000`) adds a second proxy hop and can hit the default 30-second Turbopack timeout. `NEXT_PUBLIC_CLASSIFY_URL=http://127.0.0.1:8000` bypasses the proxy entirely, letting the browser POST directly to FastAPI with no timeout risk. CORS allows this because `http://localhost:3000` is in `ALLOWED_ORIGINS`.
+
+---
+
+### 118.3 — Docker Compose Variables — `docker-compose.yml` environment blocks
+
+```yaml
+services:
+  db:
+    environment:
+      POSTGRES_USER:     dc_user
+      POSTGRES_PASSWORD: dc_pass
+      POSTGRES_DB:       deepcoin
+
+  api:
+    environment:
+      DATABASE_URL:      postgresql+asyncpg://dc_user:dc_pass@db:5432/deepcoin
+      SECRET_KEY:        ${SECRET_KEY}       # injected from host .env file
+      ENV:               production
+      ALLOWED_ORIGINS:   http://frontend:3000,https://deepcoin.yebni.com
+
+  frontend:
+    environment:
+      AUTH_FASTAPI_URL:  http://api:8000     # server-side, Docker-internal
+      NEXTAUTH_SECRET:   ${NEXTAUTH_SECRET}  # injected from host .env file
+```
+
+The `${VAR}` syntax reads from the host machine's `.env` file (same directory as `docker-compose.yml`). Secrets are never hardcoded in `docker-compose.yml` which is checked into Git.
+
+---
+
+### 118.4 — The Secret Generation Checklist
+
+Before deploying to production, generate and record in `.env`:
+```bash
+# SECRET_KEY (256-bit):
+python -c "import secrets; print(secrets.token_hex(32))"
+
+# NEXTAUTH_SECRET (256-bit):
+openssl rand -hex 32
+
+# DEEPCOIN_API_KEY:
+python -c "import secrets; print('sk-dc-' + secrets.token_urlsafe(32))"
+
+# PostgreSQL password:
+python -c "import secrets; print(secrets.token_urlsafe(24))"
+```
+
+---
+
+## Section 119 — End-to-End Request Trace: Upload to PDF in One Journey
+
+This section traces a single coin classification request from the browser's "Analyse" button click to the PDF download link appearing in the UI. Every hop, every transformation, every decision is documented.
+
+---
+
+### 119.1 — The Request Journey Map
+
+```
+ [1] Browser: user drops coin image on CoinUploader
+     ↓
+ [2] downsizeImage(): canvas resize to max 1024px (JPEG 0.85 quality)
+     ↓
+ [3] classifyCoin() in lib/api.ts:
+     POST http://127.0.0.1:8000/api/classify
+     Headers: Authorization: Bearer <jwt>, X-API-Key: <key>
+     Body: FormData { file: <resized JPEG>, use_tta: "true" }
+     ↓
+ [4] FastAPI receives request at classify.py
+     - require_api_key runs → 403 if wrong key
+     - get_current_user runs → 401 if invalid JWT
+     - limiter.limit("10/minute") checks → 429 if exceeded
+     - asyncio.Semaphore(1) acquired → queues if GPU busy
+     ↓
+ [5] Uploaded file saved to /tmp/uploads/<uuid>_<safe_filename>
+     ↓
+ [6] asyncio.to_thread(gatekeeper.analyze, image_path, use_tta)
+     (moves CPU/GPU work off the async event loop)
+     ↓
+ [7] Gatekeeper: cnn_node runs CoinInference.predict()
+     - _load_image(): cv2.imread → auto-crop (HoughCircles) → CLAHE → BGR→RGB
+     - _preprocess(): Albumentations normalize → torch.Tensor (1,3,299,299)
+     - EfficientNet-B3 forward pass (GPU) → softmax → {label, confidence, top5}
+     - If TTA: 5 more forward passes with augmentation, average softmax
+     - Temperature scaling applied (T from calibration file)
+     - Vote fraction computed from TTA passes
+     ↓
+ [8] Gatekeeper: routing decision
+     - confidence > 0.85  → historian_node
+     - 0.40–0.85          → validator_node, then historian_node
+     - < 0.40             → investigator_node
+     ↓
+ [9] Historian node (if routed):
+     - label_str = cnn_prediction["label"]  ("1015")
+     - context_blocks = rag.get_context_blocks("1015")  (5 labeled strings)
+     - Builds grounded LLM prompt with [CONTEXT 1-5] blocks
+     - Calls LLM provider chain (Ollama → GitHub → Google → fallback)
+     - Returns narrative, mint, date, material, denomination fields
+     ↓
+[10] Validator node (if routed, medium confidence):
+     - _detect_material(): multi-scale HSV (40/60/80%) crops, majority vote
+     - Compares detected material vs KB expected material
+     - Sets status: "consistent" | "mismatch" | "uncertain"
+     ↓
+[11] Synthesis node:
+     - synthesize(state) → clean text summary
+     - to_pdf(state, pdf_path):
+         - Creates FPDF2 document
+         - Draws navy header band, metadata table, CNN results table
+         - Conditionally draws historian / validator / investigator section
+         - PDF written to /app/reports/<uuid>.pdf
+         - Returns pdf_path
+     ↓
+[12] Gatekeeper.analyze() returns CoinState dict with all results
+     ↓
+[13] classify route:
+     - store.append({id, user_id, created_at, label, confidence, route, pdf_path, ...})
+     - Builds ClassifyResponse Pydantic schema
+     - Deletes uploaded temp file (save_path.unlink(missing_ok=True))
+     - Releases asyncio.Semaphore
+     ↓
+[14] FastAPI returns 200 JSON response (~50 KB compressed)
+     ↓
+[15] Axios receives response in browser
+     - setResult(data) updates Zustand store
+     - AgentPipeline modal closes
+     - AnalysisPanel renders with cnn, historian/validator/investigator sections
+     ↓
+[16] User clicks "Download PDF" button
+     POST http://127.0.0.1:8000/api/reports/<filename>
+     → FastAPI serves FileResponse (application/pdf, 100-300 KB)
+     → Browser download
+```
+
+---
+
+### 119.2 — Total Latency Budget
+
+| Phase | Typical Time | Bottleneck |
+|-------|-------------|------------|
+| Image downsize (client) | 50ms | Canvas API |
+| Network upload | 100-500ms | ISP bandwidth |
+| FastAPI auth checks | <1ms | In-memory |
+| CLAHE + resize + preprocess | 30ms | CPU |
+| EfficientNet-B3 forward pass (GPU) | 15ms | CUDA |
+| TTA (5 passes) | 75ms | CUDA |
+| Routing decision | <1ms | Conditional |
+| RAG search (hybrid BM25+vector) | 5-20ms | ChromaDB |
+| LLM call (Ollama gemma3:4b) | 3,000-8,000ms | Model inference |
+| LLM call (GitHub/Google, if Ollama fails) | 5,000-15,000ms | Network API |
+| Synthesis + PDF generation | 300-500ms | FPDF2 |
+| SQLite/PostgreSQL write | <5ms | Disk I/O |
+| **Total (historian route, Ollama)** | **~5-10 seconds** | LLM |
+| **Total (investigator, no LLM)** | **~0.5-1 seconds** | CNN |
+
+The LLM call dominates. Every other component is under 500ms.
+
+---
+
+## Section 120 — Bug Pattern Analysis: 44 Bugs, 44 Lessons
+
+This section organises all 44 fixed bugs into taxonomic categories and extracts engineering principles to prevent each category.
+
+---
+
+### Category A: Path and Filesystem Bugs (Bugs 3, 33, 37, 17)
+
+**Bugs in this category:**
+- Bug 3: `multi_cell()` horizontal position drift (FPDF2 cursor not reset after cell)
+- Bug 33: PDF 404 on Windows — backslash path (`C:\reports\...`) stored in DB, returned in JSON, used as URL segment
+- Bug 37: Blob URL ERR_FILE_NOT_FOUND — React Strict Mode double-mount creates two blob URLs, first is revoked before img loads
+- Bug 17: `lib/` gitignore rule silently excluded `frontend/lib/*.ts`
+
+**Pattern**: All involve paths being interpreted in the wrong context (the path that works in the writer's context fails in the reader's context).
+
+**Prevention rules:**
+1. Store paths as **canonical, OS-independent paths** in databases. On Windows, call `str(path).replace("\\", "/")` before storing.
+2. Anchor `.gitignore` patterns with a leading `/` to confine them to the repo root.
+3. Test blob URL lifecycle explicitly in React Strict Mode (development) which double-mounts components.
+
+---
+
+### Category B: Type Mismatch / Wrong Key Bugs (Bugs 12, 15, 2)
+
+**Bugs in this category:**
+- Bug 12: `class_id` (0-437 sort order) used instead of `label_str` (CN type ID string) for KB lookup
+- Bug 15: `hit.get("score")` vs `hit.get("rrf_score")` — key name mismatch in search result dict
+- Bug 2: `"auto"` string passed to PyTorch device — only accepts `"cuda"` or `"cpu"`
+
+**Pattern**: The code assumes the variable contains one thing; it actually contains something else that looks similar.
+
+**Prevention rules:**
+1. Use type annotations (`label_str: str`, `class_id: int`) and Python's `assert isinstance()` in critical paths.
+2. Validate all dict keys at the point of construction, not at the point of use.
+3. Run the pipeline end-to-end on known inputs and verify outputs at every stage (not just final output).
+
+---
+
+### Category C: Async / Concurrency Bugs (Bugs 35, 22, double-mount blob)
+
+**Bugs in this category:**
+- Bug 35: Admin page 401 race condition — `useSession()` returns `undefined` on first render, before NextAuth has hydrated
+- Bug 22: Zustand singleton frozen from previous page's processing state — `/analyse` page mounted to a non-`idle` store
+- Bug 37 (again): React Strict Mode double-mount race on blob URL lifecycle
+
+**Pattern**: State that is correct eventually is used too early.
+
+**Prevention rules:**
+1. Gate actions on status: `if (status === "loading") return <Spinner />` — never use data before it's confirmed loaded.
+2. Reset component-specific state on mount (`useEffect(() => { reset(); }, [])`).
+3. Use React's `useState` initialiser (not module-level) for state that must be fresh per component instance.
+
+---
+
+### Category D: Encoding and Character Rendering Bugs (Bug 4, Bugs 43-44, 29-30)
+
+**Bugs in this category:**
+- Bug 4: Greek characters rendered as `???` in PDF (Latin-1 encoding limitation)
+- Bugs 43-44: LLM "hallucination" — actually the LLM copied raw XML context tags into output
+- General encoding: 4,760 mojibake artifacts (Windows-1252 decoded as Latin-1, then as UTF-8)
+
+**Pattern**: Text passes through multiple encoding/decoding stages and each stage has different assumptions.
+
+**Prevention rules:**
+1. Use Unicode-aware string handling end-to-end. In Python, always `open(file, encoding="utf-8")`.
+2. Transliterate at the last possible moment (just before writing to PDF), not in the middle of processing.
+3. Use XML/HTML tags for LLM context injection — they create clear syntactic boundaries that LLMs respect. Avoid `=== SEPARATOR ===` strings which models treat as text to reproduce.
+
+---
+
+### Category E: Frontend-Backend Contract Bugs (Bugs 31, 34, Sources blank)
+
+**Bugs in this category:**
+- Bug 31: PDF download broken — frontend stored relative path returned in JSON, but `/api/reports/<relative>` needs just the filename
+- Bug 34: Stale PDF button — old `pdf_path` from Zustand persisted when new upload used
+- Sources blank: chat endpoint returned `sources: []` because the key in the search result dict was `rrf_score` not `score`
+
+**Pattern**: Frontend consumes an API response field that changes name / format / presence.
+
+**Prevention rules:**
+1. Define Pydantic response schemas for every API response. A schema change forces a version review.
+2. Use TypeScript interfaces on the frontend that match the Pydantic schema exactly. TypeScript type errors catch contract breaks at build time.
+3. Clear all result state explicitly when a new operation starts — never allow stale data from a previous operation to display.
+
+---
+
+### Category F: Environment / Configuration Bugs (Bugs 19, 20, 21, IPv6)
+
+**Bugs in this category:**
+- Bug 19: `getSession()` in Axios interceptor fires network request on every call → ClientFetchError
+- Bug 20: `/api/auth/session` forwarded to FastAPI via `next.config.ts` catch-all rewrite
+- Bug 21: Login fails after register — `status=pending` in production blocks dev users
+- IPv6: Node.js resolves `localhost` to `::1` (IPv6), but FastAPI binds to `127.0.0.1` (IPv4)
+
+**Pattern**: Reasonable assumptions about how a library or runtime works are wrong under specific conditions.
+
+**Prevention rules:**
+1. Read the source code for any library you depend on for auth flows. NextAuth v5 behaviour changed from v4.
+2. Always test with the exact environment variables the production system will use.
+3. Use `127.0.0.1` (explicit IPv4) not `localhost` in environment variables — `localhost` resolution is OS-dependent.
+4. For `next.config.ts` rewrites, use `fallback` arrays (last resort) not the default `afterFiles` for wildcard `/api/*` matches, to avoid overriding Next.js internal API routes.
+
+---
+
+### Summary: 44 Bugs Categorised
+
+| Category | Count | Highest-Risk Example |
+|----------|-------|---------------------|
+| A: Path/Filesystem | 4 | Bug 33 — Backslash PDF path |
+| B: Type/Key Mismatch | 5 | Bug 12 — class_id vs label_str |
+| C: Async/Concurrency | 4 | Bug 35 — Admin 401 race |
+| D: Encoding/Rendering | 8 | Bug 4 — Greek ??? in PDF |
+| E: API Contract | 6 | Bug 15 — rrf_score key |
+| F: Environment/Config | 5 | Bug 20 — auth/session routed to FastAPI |
+| G: LLM/AI Behaviour | 4 | Bug 43 — XML leak into answer |
+| H: CNN/ML Mismatch | 3 | Bug 16 — CLAHE missing in inference |
+| I: PDF Layout | 6 | Bug 5 — extra blank page |
+| J: UI/UX State | 4 | Bug 34 — stale PDF button |
+| **Total** | **44** | — |
+
+The most expensive bugs (in debugging time) were B and H: they produced confusing outputs with no error messages, required cross-referencing data flow across multiple files to diagnose, and had no prior art in the problem domain (ancient coin numismatics is not a Stack Overflow topic).
+
+---
+
+## Section 121 — Complete Runbook: Running DeepCoin from Zero
+
+This section is a complete operational guide. Following these steps produces a running DeepCoin instance from a fresh machine.
+
+---
+
+### 121.1 — Prerequisites
+
+**Hardware minimum:**
+- CPU: 8-core modern processor
+- RAM: 16 GB (CNN inference is CPU-friendly; LLM inference needs 8 GB for gemma3:4b)
+- GPU: NVIDIA GPU with 4+ GB VRAM for CNN training/inference (CPU fallback supported but slow)
+- Disk: 40 GB free (dataset 8 GB, models 200 MB, Docker images 6 GB, ChromaDB 180 MB)
+- OS: Windows 10+ or Ubuntu 22.04+
+
+**Software dependencies:**
+- Python 3.11 (`winget install Python.Python.3.11` on Windows)
+- Git (`winget install Git.Git`)
+- CUDA Toolkit 12.4 (if using GPU) + NVIDIA driver 520+
+- Docker Desktop (for Layer 6 deployment)
+- Node.js 20+ (for frontend development without Docker)
+
+---
+
+### 121.2 — Clone and Configure
+
+```powershell
+# 1. Clone the repository
+git clone https://github.com/ChaiebDhia/DeepCoin-Core.git
+cd DeepCoin-Core
+
+# 2. Create Python virtual environment
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+
+# 3. Install Python dependencies
+pip install -r requirements.txt
+# On CUDA systems: PyTorch CUDA is already in requirements.txt with index-url
+
+# 4. Copy environment template
+Copy-Item .env.example .env
+# Edit .env: fill in SECRET_KEY, DEEPCOIN_API_KEY, optionally GITHUB_TOKEN
+
+# 5. Install Node.js dependencies for frontend
+cd frontend
+npm install
+cd ..
+```
+
+---
+
+### 121.3 — Prepare the ML Models
+
+The trained model weights are NOT in the Git repository (Git LFS or manual download required):
+```powershell
+# Option A: Download from release assets (if published):
+# Download best_model.pth and class_mapping.pth to models/
+
+# Option B: Train from scratch (requires the CN dataset in data/processed/):
+python scripts/train.py
+# ~103 minutes on RTX 3050 Ti
+```
+
+---
+
+### 121.4 — Build the Knowledge Base
+
+```powershell
+# Option A: Use the pre-built ChromaDB (if chroma_db_rag/ directory exists after cloning LFS):
+# Nothing to do — RAGEngine loads it automatically.
+
+# Option B: Rebuild from metadata JSON (fast, ~9 minutes):
+python scripts/rebuild_chroma.py
+
+# Option C: Scrape all 9,716 types fresh (slow, ~2h 42min):
+python scripts/build_knowledge_base.py --all-types
+python scripts/rebuild_chroma.py
+```
+
+---
+
+### 121.5 — Run in Development Mode
+
+**Terminal 1 — FastAPI backend:**
+```powershell
+.\venv\Scripts\Activate.ps1
+uvicorn src.api.main:app --port 8000 --reload --log-level info
+# Output: INFO:     Application startup complete.
+# Test: curl http://127.0.0.1:8000/api/health
+```
+
+**Terminal 2 — Next.js frontend:**
+```powershell
+cd frontend
+npm run dev
+# Output: ▲ Next.js 15.x.x — started server on http://localhost:3000
+```
+
+Open http://localhost:3000 in a browser. Register an account. Upload a coin from `data/processed/1015/`.
+
+---
+
+### 121.6 — Run with Docker Compose (Production Mode)
+
+```powershell
+# 1. Create the host .env file with all secrets:
+Copy-Item .env.example .env
+# Edit: fill SECRET_KEY, NEXTAUTH_SECRET, DEEPCOIN_API_KEY, database passwords
+
+# 2. Build and start all 7 services:
+docker compose up --build -d
+
+# 3. Run database migrations:
+docker compose exec api alembic upgrade head
+
+# 4. Create the first admin account:
+docker compose exec api python -c "
+from src.api.db import sync_session
+from src.api.models import User, UserRole, UserStatus
+from passlib.context import CryptContext
+ctx = CryptContext(schemes=['bcrypt'])
+with sync_session() as db:
+    admin = User(username='admin', email='admin@example.com',
+                 password_hash=ctx.hash('changeme'),
+                 role=UserRole.admin, status=UserStatus.active)
+    db.add(admin); db.commit()
+"
+
+# 5. Check all services are healthy:
+docker compose ps
+# Expected: all 7 services "healthy"
+
+# 6. Access the application:
+# Frontend: http://localhost:3000
+# API docs (dev only): http://localhost:8000/docs
+# pgAdmin/DB: connect to localhost:5433 (if pgAdmin service included)
+```
+
+---
+
+### 121.7 — Run Unit Tests
+
+```powershell
+.\venv\Scripts\Activate.ps1
+
+# All 36 tests:
+python -m pytest tests/ -v
+
+# Specific test file:
+python -m pytest tests/unit/test_store.py -v
+
+# With coverage:
+python -m pytest tests/ --cov=src --cov-report=term-missing
+```
+
+Expected output:
+```
+tests/unit/test_store.py        .......... 10 passed
+tests/unit/test_api_security.py ................ 16 passed
+tests/unit/test_auth.py         ........ 8 passed
+============================= 36 passed in 1.31s =============================
+```
+
+---
+
+### 121.8 — Verify the Full Pipeline
+
+```powershell
+.\venv\Scripts\Activate.ps1
+
+# Run the 3-route end-to-end test (requires model, KB, and API key set):
+python scripts/test_pipeline.py
+
+# Expected output:
+# Route 1 — HISTORIAN   : type=1015  conf=91.1%  time=15.4s   PDF saved   [PASS]
+# Route 2 — VALIDATOR   : label=12884 conf=42.9%  ...          [PASS]
+# Route 3 — INVESTIGATOR: label=532  conf=21.3%  ...           [PASS]
+# RESULTS: 3/3 passed — all routes OK    EXIT: 0
+```
+
+---
+
+### 121.9 — Troubleshooting Common Issues
+
+**"CUDA out of memory"**
+- Reduce `batch_size` in `scripts/train.py` from 16 to 8.
+- Set `use_tta=False` in predict calls.
+
+**"ChromaDB collection empty"**
+- Run `python scripts/rebuild_chroma.py` to rebuild from JSON metadata.
+
+**"LLM returns empty / fallback only"**
+- Check `GITHUB_TOKEN` or `GOOGLE_API_KEY` is set in `.env`.
+- Run `ollama list` to confirm `gemma3:4b` is downloaded.
+- Pull it: `ollama pull gemma3:4b`.
+
+**"PDF 404 after classify"**
+- Check that `REPORTS_DIR` in `.env` exists and is writable.
+- On Windows dev mode: reports write to `C:\Users\Administrator\deepcoin\reports\`.
+- Confirm the FastAPI process has write permission to that directory.
+
+**"Frontend shows 'Connecting...' health dot forever"**
+- Check FastAPI is running: `curl http://127.0.0.1:8000/api/health`.
+- Check `.env.local` has `DEEPCOIN_API_URL=http://127.0.0.1:8000` (not `localhost`).
+
+**"Login fails: 'CredentialsSignin'"**
+- In development: set `ENV=development` in FastAPI `.env` so new users auto-activate.
+- Check the user exists: query the SQLite store or PostgreSQL `SELECT * FROM users`.
+
+**"Docker services stuck in 'health: starting'"**
+- PostgreSQL healthcheck takes up to 30 seconds. Wait for it.
+- If stuck: `docker compose logs db` — look for `database system is ready to accept connections`.
+
+---
+
+*Engineering Journal — Sections 114–121 added March 4, 2026 (comprehensive deep-dive session).*
+*Section 114: JWT auth first principles — token structure, register/login flow, NextAuth Credentials, SessionSync, middleware, RBAC.*
+*Section 115: RAG engine + AI Chat Gen 4 pipeline — ChromaDB, BM25, RRF, XML isolation, provider chain.*
+*Section 116: Security architecture — 10 defence layers, CORS, HSTS, CSP, path traversal, blob safety, non-root Docker.*
+*Section 117: Database schema — users, analyses, chat_sessions, audit_logs — every column and constraint explained.*
+*Section 118: Configuration and env variable reference — build-time vs runtime, secret generation, NEXT_PUBLIC_ rules.*
+*Section 119: End-to-end request trace — 19 steps from browser click to PDF download, latency budget.*
+*Section 120: 44 bugs in 10 categories — pattern taxonomy and prevention rules.*
+*Section 121: Complete runbook — prerequisites, setup, Docker, testing, troubleshooting.*
