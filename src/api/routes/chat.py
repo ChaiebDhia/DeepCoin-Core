@@ -193,8 +193,9 @@ def _run_chat(query: str, n_sources: int, top5_labels: list[str] | None = None) 
             # the type is not in the corpus — skip those as primary context.
             if f"(no identity data for type {detected_id})" not in context_str:
                 primary_context = (
-                    f"=== CORPUS NUMMORUM COMPLETE RECORD: CN TYPE {detected_id} ===\n"
+                    f"<cn_record id=\"{detected_id}\">\n"
                     f"{context_str}\n"
+                    f"</cn_record>\n"
                 )
                 record = rag.get_by_id(int(detected_id))
                 if record:
@@ -232,8 +233,9 @@ def _run_chat(query: str, n_sources: int, top5_labels: list[str] | None = None) 
                 cand_context = rag.get_context_blocks(candidate_id_int)
                 if f"(no identity data for type {label_str})" not in cand_context:
                     primary_context += (
-                        f"=== CNN CANDIDATE #{rank}: CN TYPE {label_str} ===\n"
-                        f"{cand_context}\n\n"
+                        f"<cn_candidate rank=\"{rank}\" id=\"{label_str}\">\n"
+                        f"{cand_context}\n"
+                        f"</cn_candidate>\n\n"
                     )
                     cand_record = rag.get_by_id(candidate_id_int)
                     if cand_record:
@@ -282,7 +284,7 @@ def _run_chat(query: str, n_sources: int, top5_labels: list[str] | None = None) 
         snippet    = hit.get("document", hit.get("text", ""))[:300]
         n          = len(supplementary_lines) + 1
         supplementary_lines.append(
-            f"--- CN Type {type_id} ({chunk_type}) ---\n{snippet}"
+            f"<related_type id=\"{type_id}\" aspect=\"{chunk_type}\">\n{snippet}\n</related_type>"
         )
         supplementary_sources.append(ChatSource(
             type_id    = type_id,
@@ -306,28 +308,33 @@ def _run_chat(query: str, n_sources: int, top5_labels: list[str] | None = None) 
 
     # ── 5. Build system + user messages ─────────────────────────────────────
     system_message = (
-        "You are DeepCoin AI, an expert numismatist and ancient historian specializing "
-        "in the Corpus Nummorum (CN) database — a DFG-funded scholarly catalogue of "
-        "9,716 ancient coin types spanning Greek, Hellenistic, Roman provincial, and "
-        "imperial mints from the 7th century BC to the 4th century AD.\n\n"
-        "YOUR RESPONSE RULES:\n"
-        "1. WRITE IN NATURAL PROSE. When referencing a Corpus Nummorum record, write "
-        "   naturally: 'CN Type 1015 is a silver drachm from Maroneia...' or "
-        "   'According to the Corpus Nummorum, this coin...' \n"
-        "   CRITICAL: Do NOT use any form of [CONTEXT N], [CN Type XXXX], [Web: ...] "
-        "   or any other bracket notation in your ANSWER. Those are only labels in the "
-        "   DATA you receive — never repeat them in your response.\n"
-        "2. SUPPLEMENT with your expert numismatic knowledge when data is sparse. "
-        "   Mark supplemented facts with 'Historically,' or 'General numismatic "
-        "   knowledge suggests...'. A sparse KB record for a well-known type is NOT "
-        "   a reason to withhold expertise.\n"
-        "3. STRUCTURE your answer:\n"
-        "   • Identity (denomination, issuing authority, date range)\n"
-        "   • Physical description (obverse, reverse, metal, weight)\n"
-        "   • Historical significance (mint, ruler, dynasty, context)\n"
-        "4. NEVER say 'insufficient information' or 'impossible to answer'. Always "
-        "   provide the most complete assessment possible.\n"
-        "5. Write 2–4 paragraphs in precise, professional English."
+        "You are DeepCoin AI — a world-class expert numismatist and ancient historian "
+        "who has spent decades studying the Corpus Nummorum (CN), a DFG-funded scholarly "
+        "catalogue of 9,716 ancient coin types: Greek, Hellenistic, Roman provincial, "
+        "and imperial mintages from the 7th century BC to the 4th century AD.\n\n"
+        "You will receive database records wrapped in XML-style tags such as "
+        "<cn_record>, <cn_candidate>, <related_type>, and <web_references>. "
+        "These are INTERNAL DATA DELIMITERS — never mention them, never quote them, "
+        "and never reference section headings such as 'Identity', 'Obverse', or "
+        "'Material' in your answer. Extract the facts silently and speak as an expert "
+        "who simply knows them.\n\n"
+        "HOW TO ANSWER:\n"
+        "• Write flowing, authoritative prose — like a museum curator explaining a "
+        "  coin to an interested scholar. 2–4 paragraphs.\n"
+        "• Lead with what the coin IS: denomination, issuing authority, approximate date.\n"
+        "• Describe the physical coin: obverse design, reverse design, metal, weight.\n"
+        "• Place it in historical context: the ruler, the mint city, why it was struck,\n"
+        "  what it tells us about the period.\n"
+        "• When database records are sparse, draw on your expert knowledge naturally. "
+        "  Introduce your own knowledge with phrases like 'Historically,' or 'Within "
+        "  the broader numismatic tradition...' — not as a disclaimer but as enrichment.\n"
+        "• Refer to Corpus Nummorum naturally: 'CN Type 1015 is catalogued as...' or "
+        "  'The Corpus Nummorum records this as a...'\n"
+        "• NEVER say 'the data shows', 'according to context', 'based on the record', "
+        "  'I cannot determine', or any phrase that exposes the pipeline. "
+        "  Speak as if you simply know this from decades of scholarship.\n"
+        "• NEVER say 'insufficient information'. Always give the most complete "
+        "  assessment possible, combining database facts with expert knowledge."
     )
 
     context_section = ""
@@ -335,20 +342,22 @@ def _run_chat(query: str, n_sources: int, top5_labels: list[str] | None = None) 
         context_section += primary_context + "\n"
     if supplementary_lines:
         context_section += (
-            "=== Related Corpus Nummorum Types ===\n"
-            + "\n\n".join(supplementary_lines) + "\n"
+            "<related_types>\n"
+            + "\n\n".join(supplementary_lines)
+            + "\n</related_types>\n"
         )
     if web_context:
         context_section += (
-            "\n=== Web References (scholarly numismatics resources) ===\n"
-            + web_context + "\n"
+            "<web_references>\n"
+            + web_context
+            + "\n</web_references>\n"
         )
 
     user_message = (
-        f"{context_section}\n"
-        f"NUMISMATIC QUESTION: {query}\n\n"
-        "Provide a complete, authoritative numismatic analysis using the context above "
-        "and your expert knowledge."
+        f"<scholarly_database>\n{context_section}</scholarly_database>\n\n"
+        f"QUESTION: {query}\n\n"
+        "Answer as a world-class numismatist. Do not reference any XML tags, section "
+        "headers, or data delimiters in your response."
     )
 
     # ── 6. Call LLM (reuse historian's provider chain) ─────────────────────
@@ -376,7 +385,7 @@ def _run_chat(query: str, n_sources: int, top5_labels: list[str] | None = None) 
                 {"role": "user",   "content": user_message},
             ],
             max_tokens  = 1000,
-            temperature = 0.4,
+            temperature = 0.6,
         )
         answer = response.choices[0].message.content or ""
         # Strip thinking artifacts from reasoning models (DeepSeek-R1, o1, etc.)
