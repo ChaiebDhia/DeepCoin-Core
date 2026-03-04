@@ -183,16 +183,28 @@ function TableSkeleton({ cols }: { cols: number }) {
 
 // -- Tab: Overview -----------------------------------------------------------
 
-function OverviewTab({ isPrivileged }: { isPrivileged: boolean }) {
+function OverviewTab({
+  isPrivileged,
+  sessionStatus,
+}: {
+  isPrivileged:  boolean;
+  sessionStatus: string;
+}) {
+  const authed = sessionStatus === "authenticated";
+
   const { data: health, isLoading: healthLoading } = useQuery({
-    queryKey:       ["health"],
-    queryFn:        getHealth,
+    queryKey:        ["health"],
+    queryFn:         getHealth,
     refetchInterval: 30_000,
+    // health endpoint is public — no auth needed; always enabled
   });
 
   const { data: historyData } = useQuery({
     queryKey: ["history", 0, 5],
     queryFn:  () => getHistory(0, 5),
+    // WHY enabled: JWT isn't in _authToken until SessionSync's useEffect runs.
+    // Without this guard the query fires before the token arrives → 401.
+    enabled:  authed,
   });
 
   return (
@@ -353,7 +365,8 @@ function OverviewTab({ isPrivileged }: { isPrivileged: boolean }) {
 
 // -- Tab: All Analyses -------------------------------------------------------
 
-function AnalysesTab() {
+function AnalysesTab({ sessionStatus }: { sessionStatus: string }) {
+  const authed = sessionStatus === "authenticated";
   const [page,   setPage]   = useState(1);
   const [route,  setRoute]  = useState("");
   const [search, setSearch] = useState("");
@@ -367,6 +380,7 @@ function AnalysesTab() {
       search || undefined,
     ),
     staleTime: 30_000,
+    enabled:   authed,
   });
 
   return (
@@ -536,13 +550,15 @@ function AnalysesTab() {
 
 // -- Tab: Corrections --------------------------------------------------------
 
-function CorrectionsTab() {
+function CorrectionsTab({ sessionStatus }: { sessionStatus: string }) {
+  const authed = sessionStatus === "authenticated";
   const [page, setPage] = useState(1);
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "feedback", page],
     queryFn:  () => getAdminFeedback((page - 1) * PAGE_SIZE, PAGE_SIZE),
     staleTime: 30_000,
+    enabled:   authed,
   });
 
   return (
@@ -679,13 +695,15 @@ function CorrectionsTab() {
 
 // -- Tab: Subscribers --------------------------------------------------------
 
-function SubscribersTab() {
+function SubscribersTab({ sessionStatus }: { sessionStatus: string }) {
+  const authed = sessionStatus === "authenticated";
   const [subPage, setSubPage] = useState(1);
 
   const { data: subscribers = [], isLoading } = useQuery<Subscriber[]>({
     queryKey: ["admin", "subscribers"],
     queryFn:  () => fetch("/api/admin/subscribers").then(r => r.ok ? r.json() : []),
     staleTime: 60_000,
+    enabled:   authed,
   });
 
   const totalPages = Math.max(1, Math.ceil(subscribers.length / SUB_PER_PAGE));
@@ -971,10 +989,10 @@ export default function AdminPage() {
           exit={{ opacity: 0, y: -6 }}
           transition={{ duration: 0.18 }}
         >
-          {activeTab === "overview"    && <OverviewTab isPrivileged={isPrivileged} />}
-          {activeTab === "analyses"    && <AnalysesTab />}
-          {activeTab === "corrections" && <CorrectionsTab />}
-          {activeTab === "subscribers" && <SubscribersTab />}
+          {activeTab === "overview"    && <OverviewTab isPrivileged={isPrivileged} sessionStatus={sessionStatus} />}
+          {activeTab === "analyses"    && <AnalysesTab    sessionStatus={sessionStatus} />}
+          {activeTab === "corrections" && <CorrectionsTab sessionStatus={sessionStatus} />}
+          {activeTab === "subscribers" && <SubscribersTab sessionStatus={sessionStatus} />}
         </motion.div>
       </AnimatePresence>
 
