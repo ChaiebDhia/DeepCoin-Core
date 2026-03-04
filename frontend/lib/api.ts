@@ -32,6 +32,7 @@ import type {
   ExploreListResponse,
   AdminFeedbackResponse,
   AdminAnalysesResponse,
+  AdminUsersResponse,
   ChatResponse,
   ChatMessageRecord,
   ChatSessionDetail,
@@ -453,6 +454,67 @@ export async function getAdminAnalyses(
 // ── AI Chat ───────────────────────────────────────────────────────────────────
 
 /**
+ * GET /api/admin/users
+ *
+ * Paginated user list. Admin-only.
+ */
+export async function getAdminUsers(
+  skip   = 0,
+  limit  = 20,
+  search?: string,
+): Promise<AdminUsersResponse> {
+  try {
+    const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
+    if (search && search.trim()) params.set("search", search.trim());
+    const { data } = await apiClient.get<AdminUsersResponse>(`/admin/users?${params}`);
+    return data;
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+/**
+ * PATCH /api/admin/users/{id}/role
+ *
+ * Change a user's RBAC role. Admin-only.
+ */
+export async function updateUserRole(userId: string, role: string): Promise<void> {
+  try {
+    await apiClient.patch(`/admin/users/${userId}/role`, { role });
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+/**
+ * PATCH /api/admin/users/{id}/status
+ *
+ * Suspend or reactivate a user account. Admin-only.
+ */
+export async function updateUserStatus(userId: string, status: string): Promise<void> {
+  try {
+    await apiClient.patch(`/admin/users/${userId}/status`, { status });
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+/**
+ * DELETE /api/admin/users/{id}
+ *
+ * Permanently delete a user account. Admin-only.
+ */
+export async function deleteAdminUser(userId: string): Promise<void> {
+  try {
+    await apiClient.delete(`/admin/users/${userId}`);
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+// ── AI Chat ─── (continues below) ────────────────────────────────────────────
+
+/**
  * POST /api/chat
  *
  * Ask the DeepCoin AI a natural-language numismatic question.
@@ -461,12 +523,16 @@ export async function getAdminAnalyses(
  *
  * @param query     The question (max 500 chars)
  * @param nSources  Number of KB chunks to retrieve (default 5)
+ * @param top5Labels CNN top-5 type IDs injected as primary context
+ * @param conversationHistory Prior {role, content} turns for multi-turn memory
  */
 export async function chatQuery(
   query: string,
   nSources = 5,
   /** Top-5 CNN predicted CN type IDs — injected as primary context in the backend */
   top5Labels: string[] = [],
+  /** Prior conversation turns — gives the LLM multi-turn context */
+  conversationHistory: Array<{ role: string; content: string }> = [],
 ): Promise<ChatResponse> {
   // Uses classifyApiClient (direct to FastAPI, 180 s timeout) — same reason as
   // classifyCoin: the LLM call can take 8–20 s; the Next.js proxy would time out.
@@ -474,8 +540,9 @@ export async function chatQuery(
   try {
     const { data } = await classifyApiClient.post<ChatResponse>("/api/chat", {
       query,
-      n_sources:   nSources,
-      top5_labels: top5Labels,
+      n_sources:            nSources,
+      top5_labels:          top5Labels,
+      conversation_history: conversationHistory,
     });
     return data;
   } catch (err) {

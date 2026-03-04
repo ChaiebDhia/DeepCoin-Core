@@ -71,10 +71,20 @@ class ChatRequest(BaseModel):
                       blocks at the top of the LLM context — before the
                       semantic search results.  This lets the chat AI compare
                       all 5 candidates instead of only the top-1.
+        conversation_history — Optional list of prior {role, content} pairs
+                      representing earlier turns in the current session.
+                      Injected into the LLM messages array between the system
+                      prompt and the current user question, giving the model
+                      full multi-turn context.  Capped at the last 6 entries
+                      (3 user+assistant pairs) server-side for token efficiency.
     """
-    query:       str       = Field(..., min_length=1, max_length=500, description="Numismatic question")
-    n_sources:   int       = Field(5, ge=1, le=10, description="Number of KB chunks to retrieve")
-    top5_labels: list[str] = Field(default_factory=list, description="Top-5 CNN predicted CN type IDs")
+    query:                str             = Field(..., min_length=1, max_length=500, description="Numismatic question")
+    n_sources:            int             = Field(5, ge=1, le=10, description="Number of KB chunks to retrieve")
+    top5_labels:          list[str]       = Field(default_factory=list, description="Top-5 CNN predicted CN type IDs")
+    conversation_history: list[dict[str, str]] = Field(
+        default_factory=list,
+        description="Prior {role, content} turns for multi-turn context (max 6 entries used)",
+    )
 
 
 class ChatSource(BaseModel):
@@ -138,7 +148,12 @@ def _web_search(query: str, max_results: int = 4) -> str:
         return ""
 
 
-def _run_chat(query: str, n_sources: int, top5_labels: list[str] | None = None) -> dict[str, Any]:
+def _run_chat(
+    query:                str,
+    n_sources:            int,
+    top5_labels:          list[str] | None      = None,
+    conversation_history: list[dict[str, str]]  = (),
+) -> dict[str, Any]:
     """
     Execute a complete RAG → LLM chat pipeline synchronously.
 
@@ -437,12 +452,20 @@ def _run_chat(query: str, n_sources: int, top5_labels: list[str] | None = None) 
         return {"answer": answer, "sources": [s.model_dump() for s in all_sources], "provider": provider}
 
     try:
+        # ── Build message list ──────────────────────────────────────────────
+        # Structure: [system] → [prior turns (≤ 6)] → [current user]
+        # WHY cap at 6 (3 exchanges): each turn adds ~200-600 tokens.
+        # Keeping 3 exchanges = enough context for follow-up questions without
+        # blowing the 8k token budget on long conversations.
+        prior_turns = list(conversation_history or ())[-6:]  # cap server-side
+        messages_for_llm: list[dict[str, str]] = [
+            {"role": "system", "content": system_message},
+            *prior_turns,
+            {"role": "user",   "content": user_message},
+        ]
         response = client.chat.completions.create(
             model       = model,
-            messages    = [
-                {"role": "system", "content": system_message},
-                {"role": "user",   "content": user_message},
-            ],
+            messages    = messages_for_llm,
             max_tokens  = 1000,
             temperature = 0.6,
         )
@@ -499,7 +522,13 @@ async def chat(
         With structured fallback (no LLM): < 100 ms
     """
     try:
-        result = await asyncio.to_thread(_run_chat, body.query, body.n_sources, body.top5_labels)
+        result = await asyncio.to_thread(
+            _run_chat,
+            body.query,
+            body.n_sources,
+            body.top5_labels,
+            body.conversation_history,
+        )
     except Exception as exc:
         logger.error("chat endpoint error: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Chat pipeline error: {exc}")

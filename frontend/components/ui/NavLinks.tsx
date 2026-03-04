@@ -13,10 +13,28 @@
  *   Brand  |  [desktop links]  |  Health · UserMenu · Hamburger
  */
 
-import Link from "next/link";
+import Link        from "next/link";
+import { usePathname } from "next/navigation";
 
-const linkCls =
-  "px-3 py-1.5 rounded-md text-sm text-[var(--text-secondary)] hover:text-white hover:bg-[var(--surface-2)] transition-colors";
+/**
+ * Returns true when the nav link should be highlighted.
+ * - Hash links (/#features) are never active (they anchor to the homepage).
+ * - All other links are active when the pathname starts with the href
+ *   (e.g. /chat → active, /chat/session-123 → also active).
+ */
+function isActive(href: string, pathname: string): boolean {
+  if (href.startsWith("/#")) return false;
+  // Exact match for root; prefix match for all others.
+  if (href === "/") return pathname === "/";
+  return pathname === href || pathname.startsWith(href + "/");
+}
+
+const baseCls =
+  "px-3 py-1.5 rounded-md text-sm transition-all relative";
+const inactiveCls =
+  "text-[var(--text-secondary)] hover:text-white hover:bg-[var(--surface-2)]";
+const activeCls =
+  "text-white font-semibold";
 
 export const NAV_LINKS = [
   { href: "/#features", label: "Features" },
@@ -27,13 +45,29 @@ export const NAV_LINKS = [
 ];
 
 export function NavLinks() {
+  const pathname = usePathname();
+
   return (
     <nav className="hidden md:flex items-center gap-1">
-      {NAV_LINKS.map(l => (
-        <Link key={l.href} href={l.href} className={linkCls}>
-          {l.label}
-        </Link>
-      ))}
+      {NAV_LINKS.map(l => {
+        const active = isActive(l.href, pathname);
+        return (
+          <Link
+            key={l.href}
+            href={l.href}
+            className={`${baseCls} ${active ? activeCls : inactiveCls}`}
+          >
+            {l.label}
+            {/* Gold underline bar for active page */}
+            {active && (
+              <span
+                className="absolute bottom-0 left-3 right-3 h-[2px] rounded-full"
+                style={{ background: "var(--brand-gold, #d4a853)" }}
+              />
+            )}
+          </Link>
+        );
+      })}
     </nav>
   );
 }

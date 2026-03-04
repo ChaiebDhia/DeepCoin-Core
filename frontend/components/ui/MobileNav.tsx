@@ -25,6 +25,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link                             from "next/link";
+import { usePathname }                  from "next/navigation";
 import { Menu, X, Cpu, BookOpen, MessageSquare, FlaskConical, Globe, FileText } from "lucide-react";
 import { useSession }                   from "next-auth/react";
 import { NAV_LINKS }                    from "@/components/ui/NavLinks";
@@ -41,6 +42,7 @@ export function MobileNav() {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const { data: session } = useSession();
+  const pathname = usePathname();
 
   // Close on Escape
   useEffect(() => {
@@ -99,19 +101,35 @@ export function MobileNav() {
             >
               Navigation
             </p>
-            {NAV_LINKS.map(l => (
-              <Link
-                key={l.href}
-                href={l.href}
-                role="menuitem"
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-[var(--surface-2)]"
-                style={{ color: "var(--text-secondary)" }}
-              >
-                <span style={{ color: "var(--text-muted)" }}>{ICON_MAP[l.href]}</span>
-                {l.label}
-              </Link>
-            ))}
+            {NAV_LINKS.map(l => {
+              const active = !l.href.startsWith("/#") && (
+                pathname === l.href || pathname.startsWith(l.href + "/")
+              );
+              return (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  role="menuitem"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-[var(--surface-2)]"
+                  style={{
+                    color:      active ? "var(--brand-gold, #d4a853)" : "var(--text-secondary)",
+                    fontWeight: active ? 600 : undefined,
+                  }}
+                >
+                  <span style={{ color: active ? "var(--brand-gold, #d4a853)" : "var(--text-muted)" }}>
+                    {ICON_MAP[l.href]}
+                  </span>
+                  {l.label}
+                  {active && (
+                    <span
+                      className="ml-auto w-1.5 h-1.5 rounded-full"
+                      style={{ background: "var(--brand-gold, #d4a853)" }}
+                    />
+                  )}
+                </Link>
+              );
+            })}
           </div>
 
           {/* Divider + auth shortcuts */}

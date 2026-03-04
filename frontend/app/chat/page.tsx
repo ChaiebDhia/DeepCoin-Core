@@ -51,6 +51,29 @@ type Message = {
 
 /*  constants  */
 
+/**
+ * Module-level navigation cache.
+ *
+ * WHY module-level (not useState / Zustand):
+ *   React component state is destroyed when the component unmounts (e.g.
+ *   when the user navigates to /history and back to /chat).  The module
+ *   itself stays loaded for the lifetime of the browser tab — a JS module
+ *   is never garbage-collected while the page is open.  Writing conversation
+ *   state here means navigating away and back restores the exact same chat
+ *   session WITHOUT requiring a new server round-trip or a global Zustand store.
+ *
+ *   sessionStorage would also work but requires JSON serialisation/deserialisation
+ *   and loses ChatSource objects that contain nested arrays.  The module ref
+ *   stores the live objects directly.
+ *
+ * LIFECYCLE:  cleared when the user clicks "New chat" or starts a fresh session.
+ */
+const _chatCache: {
+  messages:         Message[];
+  currentSessionId: string | null;
+  input:            string;
+} = { messages: [], currentSessionId: null, input: "" };
+
 const STARTERS = [
   { icon: "", text: "What silver coins were minted in Athens?" },
   { icon: "", text: "Tell me about tetradrachms from the Seleucid empire" },
@@ -448,8 +471,8 @@ function ChatPageInner() {
   const { data: session }       = useSession();
   const isAuthed                = !!session?.user;
 
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input,    setInput]    = useState("");
+  const [messages, setMessages] = useState<Message[]>(_chatCache.messages);
+  const [input,    setInput]    = useState(_chatCache.input);
   const [loading,  setLoading]  = useState(false);
 
   // History state
@@ -457,12 +480,21 @@ function ChatPageInner() {
   const [sessions,       setSessions]       = useState<ChatSessionSummary[]>([]);
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
   const [loadingSession, setLoadingSession] = useState(false);
-  const currentSessionId                    = useRef<string | null>(null);
+  const currentSessionId                    = useRef<string | null>(_chatCache.currentSessionId);
 
-  const threadRef   = useRef<HTMLDivElement>(null);
-  const inputRef    = useRef<HTMLInputElement>(null);
+  const threadRef    = useRef<HTMLDivElement>(null);
+  const inputRef     = useRef<HTMLInputElement>(null);
   const didAutoQuery = useRef(false);
   const prevMsgCount = useRef(0);
+  // Mirror messages in a ref so handleSubmit can read them without
+  // being added to useCallback dependencies (avoids stale closure).
+  const messagesRef  = useRef<Message[]>([]);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+
+  // Write-through to the navigation cache so state survives unmount ↔ remount
+  // (e.g. user navigates to /history then comes back).
+  useEffect(() => { _chatCache.messages = messages; }, [messages]);
+  useEffect(() => { _chatCache.input    = input;    }, [input]);
 
   // Scroll-to-bottom: only on new message or while loading (not on source toggle)
   useEffect(() => {
@@ -488,6 +520,7 @@ function ChatPageInner() {
     try {
       const detail = await getChatSession(id);
       currentSessionId.current = id;
+      _chatCache.currentSessionId = id;
       const restored: Message[] = detail.messages.map(m => ({
         id:       crypto.randomUUID(),
         role:     m.role,
@@ -510,6 +543,7 @@ function ChatPageInner() {
       setSessions(prev => prev.filter(s => s.id !== id));
       if (currentSessionId.current === id) {
         currentSessionId.current = null;
+        _chatCache.currentSessionId = null;
         setMessages([]);
       }
     } catch {
@@ -519,6 +553,9 @@ function ChatPageInner() {
 
   const handleNewChat = useCallback(() => {
     currentSessionId.current = null;
+    _chatCache.currentSessionId = null;
+    _chatCache.messages = [];
+    _chatCache.input    = "";
     setMessages([]);
     setInput("");
     inputRef.current?.focus();
@@ -533,6 +570,13 @@ function ChatPageInner() {
     if (!query.trim() || loading) return;
     const q = query.trim();
 
+    // Capture prior conversation turns BEFORE adding the new user message.
+    // We use messagesRef (not messages state) to avoid stale closures without
+    // adding messages to this callback's dependency array.
+    const priorHistory = messagesRef.current
+      .slice(-6)   // last 3 exchanges = 6 messages
+      .map(m => ({ role: m.role, content: m.content }));
+
     const userMsg: Message = { id: crypto.randomUUID(), role: "user" as const, content: q };
     setMessages(prev => [...prev, userMsg]);
     setInput("");
@@ -540,7 +584,7 @@ function ChatPageInner() {
 
     let assistantMsg: Message;
     try {
-      const res = await chatQuery(q, 5, top5Labels);
+      const res = await chatQuery(q, 5, top5Labels, priorHistory);
       assistantMsg = {
         id: crypto.randomUUID(), role: "assistant" as const,
         content: res.answer, sources: res.sources, provider: res.provider, userQuery: q,
@@ -568,6 +612,7 @@ function ChatPageInner() {
             messages: [toRecord(userMsg), toRecord(assistantMsg)],
           });
           currentSessionId.current = created.id;
+          _chatCache.currentSessionId = created.id;
           // Prepend to sidebar list (if already loaded)
           setSessions(prev => [
             { id: created.id, title: created.title, created_at: created.created_at, updated_at: created.updated_at, msg_count: 2 },

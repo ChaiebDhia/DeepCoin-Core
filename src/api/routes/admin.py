@@ -28,6 +28,7 @@ AUTH MODEL:
 from __future__ import annotations
 
 import math
+from pathlib import Path
 from typing import Any
 
 from fastapi             import APIRouter, Depends, HTTPException, Query
@@ -36,7 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm      import joinedload
 
 from src.api.auth.deps      import get_current_user
-from src.api.db.models      import Classification, Feedback, User, UserRole
+from src.api.db.models      import Classification, Feedback, User, UserRole, UserStatus
 from src.api.db.session     import get_db
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
@@ -223,3 +224,245 @@ async def list_all_analyses(
         "limit": limit,
         "pages": math.ceil(total / limit) if limit else 1,
     }
+
+# ── GET /api/admin/users ──────────────────────────────────────────────────────
+
+@router.get(
+    "/users",
+    summary = "Paginated user list (admin only)",
+)
+async def list_users(
+    skip:   int         = Query(0,  ge=0),
+    limit:  int         = Query(20, ge=1, le=100),
+    search: str | None  = Query(None, description="Partial match on email or display name"),
+    db:     AsyncSession = Depends(get_db),
+    current_user: User   = Depends(get_current_user),
+) -> dict[str, Any]:
+    """
+    Return a paginated list of all registered users with their role, status,
+    email, display name, created date, and analysis count.
+
+    WHAT: Admins need a single view to manage all platform accounts — promote
+    an analyst to curator, suspend a spammer, or verify how many analyses a
+    specific user submitted.
+
+    WHY analyses_count as a sub-select:
+        Loading all classifications for each user (via joinedload) would be a
+        full table scan.  A correlated COUNT sub-query is O(log n) on the
+        FK index and never materialises all rows.
+
+    ACCESS: admin-only (not curator — user management is a high-privilege action).
+    """
+    if current_user.role != UserRole.admin:
+        raise HTTPException(
+            status_code = 403,
+            detail      = "Requires admin role.",
+        )
+
+    # ── build query ─────────────────────────────────────────────────────────
+    base = select(User).order_by(desc(User.created_at))
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        base = base.where(
+            User.email.ilike(term) | User.display_name.ilike(term)
+        )
+
+    rows_q = base.offset(skip).limit(limit)
+    rows   = (await db.execute(rows_q)).scalars().unique().all()
+
+    # ── total count ─────────────────────────────────────────────────────────
+    count_q = select(func.count()).select_from(User)
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        count_q = count_q.where(
+            User.email.ilike(term) | User.display_name.ilike(term)
+        )
+    total = (await db.execute(count_q)).scalar_one()
+
+    # ── per-user analysis counts (one query, not N+1) ──────────────────────
+    user_ids = [r.id for r in rows]
+    counts: dict[str, int] = {}
+    if user_ids:
+        cnt_q = (
+            select(Classification.user_id, func.count(Classification.id).label("n"))
+            .where(Classification.user_id.in_(user_ids))
+            .group_by(Classification.user_id)
+        )
+        for row_id, n in (await db.execute(cnt_q)).all():
+            counts[row_id] = n
+
+    items = [
+        {
+            "id":           u.id,
+            "email":        u.email,
+            "display_name": u.display_name,
+            "role":         u.role.value,
+            "status":       u.status.value,
+            "created_at":   u.created_at.isoformat() if u.created_at else None,
+            "last_login_at": u.last_login_at.isoformat() if u.last_login_at else None,
+            "analyses_count": counts.get(u.id, 0),
+        }
+        for u in rows
+    ]
+
+    return {
+        "items": items,
+        "total": total,
+        "skip":  skip,
+        "limit": limit,
+        "pages": math.ceil(total / limit) if limit else 1,
+    }
+
+
+# ── PATCH /api/admin/users/{user_id}/role ─────────────────────────────────────
+
+class RoleUpdateBody(dict):
+    """Thin wrapper — validated by FastAPI from the JSON body."""
+    pass
+
+
+@router.patch(
+    "/users/{user_id}/role",
+    summary = "Change a user's role (admin only)",
+)
+async def update_user_role(
+    user_id:      str,
+    body:         dict[str, Any],
+    db:           AsyncSession  = Depends(get_db),
+    current_user: User          = Depends(get_current_user),
+) -> dict[str, Any]:
+    """
+    Promote or demote a user's RBAC role.
+
+    WHAT: Changes user.role to one of admin | curator | analyst.
+          Returns the updated user record.
+
+    SAFETY GUARD: An admin cannot demote their own account (to prevent
+    accidentally locking themselves out of the admin panel).  A second
+    admin can do it.
+
+    ACCESS: admin-only.
+    """
+    if current_user.role != UserRole.admin:
+        raise HTTPException(status_code=403, detail="Requires admin role.")
+
+    new_role_str = body.get("role", "").strip().lower()
+    valid_roles  = {r.value for r in UserRole}
+    if new_role_str not in valid_roles:
+        raise HTTPException(
+            status_code = 422,
+            detail      = f"Invalid role '{new_role_str}'. Must be one of: {', '.join(valid_roles)}",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    target: User | None = result.scalar_one_or_none()
+    if target is None:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    # Prevent self-demotion
+    if target.id == current_user.id and new_role_str != UserRole.admin.value:
+        raise HTTPException(
+            status_code = 409,
+            detail      = "You cannot demote your own admin account.",
+        )
+
+    target.role = UserRole(new_role_str)
+    await db.commit()
+    await db.refresh(target)
+
+    return {
+        "id":    target.id,
+        "email": target.email,
+        "role":  target.role.value,
+    }
+
+
+# ── PATCH /api/admin/users/{user_id}/status ───────────────────────────────────
+
+@router.patch(
+    "/users/{user_id}/status",
+    summary = "Suspend or reactivate a user account (admin only)",
+)
+async def update_user_status(
+    user_id:      str,
+    body:         dict[str, Any],
+    db:           AsyncSession  = Depends(get_db),
+    current_user: User          = Depends(get_current_user),
+) -> dict[str, Any]:
+    """
+    Toggle a user account between active and suspended.
+
+    WHAT: Sets user.status to 'active' or 'suspended'.
+          Suspended users receive HTTP 403 on every authenticated request.
+
+    USE CASE: Suspend a spam account without deleting its history.
+
+    ACCESS: admin-only.
+    """
+    if current_user.role != UserRole.admin:
+        raise HTTPException(status_code=403, detail="Requires admin role.")
+
+    new_status_str = body.get("status", "").strip().lower()
+    valid_statuses = {s.value for s in UserStatus}
+    if new_status_str not in valid_statuses:
+        raise HTTPException(
+            status_code = 422,
+            detail      = f"Invalid status '{new_status_str}'. Must be one of: {', '.join(valid_statuses)}",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    target: User | None = result.scalar_one_or_none()
+    if target is None:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    if target.id == current_user.id:
+        raise HTTPException(status_code=409, detail="You cannot change your own status.")
+
+    target.status = UserStatus(new_status_str)
+    await db.commit()
+    await db.refresh(target)
+
+    return {
+        "id":     target.id,
+        "email":  target.email,
+        "status": target.status.value,
+    }
+
+
+# ── DELETE /api/admin/users/{user_id} ─────────────────────────────────────────
+
+@router.delete(
+    "/users/{user_id}",
+    status_code = 204,
+    summary     = "Permanently delete a user account (admin only)",
+)
+async def delete_user(
+    user_id:      str,
+    db:           AsyncSession  = Depends(get_db),
+    current_user: User          = Depends(get_current_user),
+) -> None:
+    """
+    Hard-delete a user account from the database.
+
+    WHAT: Removes the User row.  Because all FK columns on
+    Classifications / Feedback / AuditLog use ON DELETE SET NULL,
+    the user's historical analyses are preserved but unlinked
+    (user_id becomes NULL, shown as "guest" in admin views).
+
+    SAFETY: Admin cannot delete their own account.
+
+    ACCESS: admin-only.
+    """
+    if current_user.role != UserRole.admin:
+        raise HTTPException(status_code=403, detail="Requires admin role.")
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    target: User | None = result.scalar_one_or_none()
+    if target is None:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    if target.id == current_user.id:
+        raise HTTPException(status_code=409, detail="You cannot delete your own account.")
+
+    await db.delete(target)
+    await db.commit()

@@ -28,9 +28,9 @@
  *   (Bug 33 fix: admin.py rsplit("/") -- Path.name).
  */
 
-import { useState }                from "react";
+import { useState, useEffect }     from "react";
 import { useSession }              from "next-auth/react";
-import { useQuery }                from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import Link                        from "next/link";
 import { redirect }                from "next/navigation";
@@ -38,14 +38,15 @@ import {
   Activity, Database, Cpu, FileText, Github, ExternalLink,
   CheckCircle, AlertTriangle, XCircle, BarChart3,
   BookOpen, Shield, Mail, Download, UserCheck, MessageSquareWarning,
-  Search, ChevronLeft, ChevronRight, LayoutDashboard, Users,
-  FileBarChart2, ThumbsDown,
+  Search, ChevronLeft, ChevronRight, LayoutDashboard, Users, Trash2,
+  FileBarChart2, ThumbsDown, UserCog,
 } from "lucide-react";
 
 import {
   getHealth, getHistory, getAdminFeedback, getAdminAnalyses, pdfDownloadUrl,
+  getAdminUsers, updateUserRole, updateUserStatus, deleteAdminUser,
 } from "@/lib/api";
-import type { HistorySummary, FeedbackItem, AdminAnalysisItem } from "@/types/api";
+import type { HistorySummary, FeedbackItem, AdminAnalysisItem, AdminUserItem } from "@/types/api";
 
 // -- Types -------------------------------------------------------------------
 
@@ -61,7 +62,7 @@ type Subscriber = {
   status?:       string;
 };
 
-type TabId = "overview" | "analyses" | "corrections" | "subscribers";
+type TabId = "overview" | "analyses" | "corrections" | "subscribers" | "users";
 
 // -- Constants ---------------------------------------------------------------
 
@@ -811,6 +812,215 @@ function SubscribersTab({ sessionStatus }: { sessionStatus: string }) {
   );
 }
 
+// -- UsersTab ----------------------------------------------------------------
+
+const USER_STATUS_COLORS: Record<string, string> = {
+  active:    "#22c55e",
+  suspended: "#ef4444",
+  pending:   "#f59e0b",
+};
+
+function UsersTab({ sessionStatus }: { sessionStatus: string }) {
+  const authed      = sessionStatus === "authenticated";
+  const queryClient = useQueryClient();
+  const [page,    setPage]    = useState(1);
+  const [search,  setSearch]  = useState("");
+  const [dSearch, setDSearch] = useState("");
+  const PAGE_LIMIT            = 20;
+
+  // Debounce search  500 ms
+  useEffect(() => {
+    const t = setTimeout(() => { setDSearch(search); setPage(1); }, 500);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const skip = (page - 1) * PAGE_LIMIT;
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin", "users", skip, PAGE_LIMIT, dSearch],
+    queryFn:  () => getAdminUsers(skip, PAGE_LIMIT, dSearch || undefined),
+    staleTime: 30_000,
+    enabled:   authed,
+  });
+
+  const items      = data?.items ?? [];
+  const totalPages = data?.pages ?? 1;
+  const total      = data?.total ?? 0;
+
+  // Mutation helpers
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+
+  async function handleRoleChange(userId: string, role: string) {
+    try {
+      await updateUserRole(userId, role);
+      invalidate();
+    } catch (e: unknown) {
+      alert((e as Error).message ?? "Failed to update role");
+    }
+  }
+
+  async function handleStatusToggle(userId: string, currentStatus: string) {
+    const newStatus = currentStatus === "suspended" ? "active" : "suspended";
+    try {
+      await updateUserStatus(userId, newStatus);
+      invalidate();
+    } catch (e: unknown) {
+      alert((e as Error).message ?? "Failed to update status");
+    }
+  }
+
+  async function handleDelete(userId: string, email: string) {
+    if (!window.confirm(`Permanently delete user "${email}"?\nAll their analyses will be de-associated (not deleted).`)) return;
+    try {
+      await deleteAdminUser(userId);
+      invalidate();
+    } catch (e: unknown) {
+      alert((e as Error).message ?? "Failed to delete user");
+    }
+  }
+
+  return (
+    <div
+      className="rounded-xl border overflow-hidden"
+      style={{ borderColor: "var(--border)", backgroundColor: "var(--surface-1)" }}
+    >
+      {/* Header */}
+      <div
+        className="flex flex-wrap items-center gap-3 px-5 py-3.5 border-b"
+        style={{ borderColor: "var(--border)" }}
+      >
+        <UserCog size={14} style={{ color: "var(--brand-gold)" }} />
+        <span className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>Users</span>
+        <span
+          className="text-[10px] font-black px-2 py-0.5 rounded-full tabular-nums"
+          style={{ backgroundColor: "rgba(212,168,83,0.15)", color: "var(--brand-gold)" }}
+        >
+          {total.toLocaleString()}
+        </span>
+        <div
+          className="ml-auto flex items-center gap-2 px-3 py-1.5 rounded-lg flex-1 min-w-[180px] max-w-xs"
+          style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
+        >
+          <Search size={12} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search by email…"
+            className="bg-transparent text-xs outline-none w-full"
+            style={{ color: "var(--text-primary)" }}
+          />
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              {["Email", "Name", "Role", "Status", "Joined", "Analyses", "Actions"].map(h => (
+                <th
+                  key={h}
+                  className="px-4 py-3 text-left font-semibold whitespace-nowrap"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <TableSkeleton cols={7} />
+            ) : items.length ? (
+              items.map((u: AdminUserItem) => (
+                <tr
+                  key={u.id}
+                  className="border-b last:border-0 hover:bg-[var(--surface-2)] transition-colors"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  {/* Email */}
+                  <td className="px-4 py-3 font-mono max-w-[200px] truncate" style={{ color: "var(--text-secondary)" }}>
+                    {u.email}
+                  </td>
+
+                  {/* Display name */}
+                  <td className="px-4 py-3" style={{ color: "var(--text-muted)" }}>
+                    {u.display_name ?? "—"}
+                  </td>
+
+                  {/* Role badge + change select */}
+                  <td className="px-4 py-3">
+                    <select
+                      value={u.role}
+                      onChange={e => handleRoleChange(u.id, e.target.value)}
+                      className="text-[10px] font-bold px-2 py-0.5 rounded-full border-0 outline-none cursor-pointer"
+                      style={{
+                        backgroundColor: `${ROLE_COLORS[u.role] ?? "#6b7280"}20`,
+                        color:           ROLE_COLORS[u.role] ?? "#6b7280",
+                      }}
+                    >
+                      <option value="admin">admin</option>
+                      <option value="curator">curator</option>
+                      <option value="analyst">analyst</option>
+                    </select>
+                  </td>
+
+                  {/* Status badge + toggle */}
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => handleStatusToggle(u.id, u.status)}
+                      title={u.status === "suspended" ? "Click to reactivate" : "Click to suspend"}
+                      className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full transition-opacity hover:opacity-70"
+                      style={{
+                        backgroundColor: `${USER_STATUS_COLORS[u.status] ?? "#6b7280"}20`,
+                        color:           USER_STATUS_COLORS[u.status] ?? "#6b7280",
+                      }}
+                    >
+                      {u.status}
+                    </button>
+                  </td>
+
+                  {/* Joined */}
+                  <td className="px-4 py-3 whitespace-nowrap tabular-nums" style={{ color: "var(--text-muted)" }}>
+                    {u.created_at
+                      ? new Date(u.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
+                      : "—"}
+                  </td>
+
+                  {/* Analyses count */}
+                  <td className="px-4 py-3 tabular-nums text-center" style={{ color: "var(--text-secondary)" }}>
+                    {u.analyses_count}
+                  </td>
+
+                  {/* Delete */}
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => handleDelete(u.id, u.email)}
+                      title="Delete user"
+                      className="p-1.5 rounded-lg transition-colors hover:bg-red-500/10"
+                      style={{ color: "#f87171" }}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={7} className="px-5 py-10 text-center">
+                  <Users size={20} className="mx-auto mb-2" style={{ color: "var(--text-muted)" }} />
+                  <p style={{ color: "var(--text-muted)" }}>No users match your search.</p>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <Pagination page={page} pages={totalPages} onChange={setPage} />
+    </div>
+  );
+}
+
 // -- Main component ----------------------------------------------------------
 
 const TABS: {
@@ -823,6 +1033,7 @@ const TABS: {
   { id: "analyses",    label: "Analyses",    icon: FileBarChart2,        privileged: true  },
   { id: "corrections", label: "Corrections", icon: MessageSquareWarning, privileged: true  },
   { id: "subscribers", label: "Subscribers", icon: Mail,                 privileged: true  },
+  { id: "users",       label: "Users",       icon: UserCog,              privileged: true  },
 ];
 
 export default function AdminPage() {
@@ -993,6 +1204,7 @@ export default function AdminPage() {
           {activeTab === "analyses"    && <AnalysesTab    sessionStatus={sessionStatus} />}
           {activeTab === "corrections" && <CorrectionsTab sessionStatus={sessionStatus} />}
           {activeTab === "subscribers" && <SubscribersTab sessionStatus={sessionStatus} />}
+          {activeTab === "users"       && <UsersTab       sessionStatus={sessionStatus} />}
         </motion.div>
       </AnimatePresence>
 

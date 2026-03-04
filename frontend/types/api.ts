@@ -174,6 +174,26 @@ export interface AdminAnalysesResponse {
   pages: number;
 }
 
+/** One user row in the admin users table. */
+export interface AdminUserItem {
+  id:               string;
+  email:            string;
+  display_name:     string | null;
+  role:             "admin" | "curator" | "analyst";
+  status:           "pending" | "active" | "suspended";
+  created_at:       string | null;
+  last_login_at:    string | null;
+  analyses_count:   number;
+}
+
+export interface AdminUsersResponse {
+  items: AdminUserItem[];
+  total: number;
+  skip:  number;
+  limit: number;
+  pages: number;
+}
+
 // ── Chat types ────────────────────────────────────────────────────────────────
 
 export interface ChatSource {
