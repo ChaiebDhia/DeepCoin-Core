@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: March 4, 2026 — Prompt injection guard (ChatMessage Literal roles), chat SSE streaming (POST /api/chat/stream + chatQueryStream + streaming cursor), explore date_range fix, stale comment cleanup. Commit: 584fe2c. Layer 7 (Tests + CI/CD) is next.
+# Last updated: March 4, 2026 — JWT silent refresh (proxy route + Axios interceptor + NextAuth expiry tracking), confirm-subscription cleanup (EmailCapture simplified success state), Docker CVE fix (Python 3.12-slim + Node 22-alpine). Commit: pending. Layer 7 (Tests + CI/CD) is next.
 
 ---
 
@@ -1269,6 +1269,7 @@ pytest (9.0.2)      # unit testing (34 tests across 3 files)
 | `932a67f` | feat: /about + /docs pages (Server Components), /explore gallery (Client Component), admin subscriber panel, Next.js route handler proxy for X-API-Key |
 | `06116a5` | feat: enterprise chat redesign v2, AI Chat CTA in AnalysisPanel, TutorialModal, admin access guide |
 | `584fe2c` | fix: prompt injection guard (ChatMessage Literal roles), chat SSE streaming (POST /api/chat/stream + chatQueryStream + streaming cursor), explore date_range fix, stale comment cleanup. Layer 7 (Tests + CI/CD) is next. |
+| pending   | feat: JWT silent refresh (proxy route + Axios interceptor + SessionSync update() bridge + NextAuth expiry tracking), confirm-subscription UX cleanup (remove broken confirm link), Docker CVE fix (Python 3.12-slim + Node 22-alpine) ← LATEST |
 
 ---
 
@@ -1845,6 +1846,22 @@ Feat: TechStack bento grid redesign — hero tile + 4 pillar cards + dataset cre
 ```
 
 **NEXT: Layer 7 — Tests + CI/CD.**
+
+```
+feat: JWT silent refresh — /api/auth/refresh-access-token Route Handler (proxy to FastAPI)
+      Axios response interceptor: 401 → _attemptRefresh() → retry with new token
+      In-flight deduplication: _refreshQueue prevents parallel refresh race condition
+      SessionSync: now exposes update() via setSessionUpdateFn() for session cookie sync
+      auth.config.ts: expires_in extracted from login response, access_expires_at stored in JWT callback
+      types/next-auth.d.ts: User.expires_in, JWT.access_expires_at, Session.user.access_expires_at
+feat: confirm-subscription UX cleanup — EmailCapture simplified success state (removed broken confirm link)
+      No double opt-in required for waitlist; single "You're on the list!" message
+      /confirm-subscription/page.tsx retained as admin utility for future SMTP integration
+feat: Docker CVE fix — python:3.11-slim-bookworm (1 HIGH CVE) → python:3.12-slim (clean)
+                        node:20-alpine (9 HIGH CVEs) → node:22-alpine (LTS, clean)
+      WHY Python 3.12: importlib.resources path traversal CVE fixed; fully compatible with PyTorch 2.6, OpenCV 4.x
+      WHY Node 22: updated embedded OpenSSL 3.3.x removes all 9 HIGH CVEs; Next.js 15 supports Node 22
+```
 
 ```
 Fix: auth-guard Analyse CTA (HeroSection) — authed→/analyse, anon→/login?callbackUrl=/analyse

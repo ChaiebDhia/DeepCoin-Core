@@ -8,43 +8,47 @@
  * WHAT: Animated form with email input + submit button.
  *       Three states: idle → loading (spinner) → done (success message).
  *
- * ENTERPRISE CONFIRMATION FLOW:
- *   POST /api/subscribers returns { ok, message, confirm_token, email_sent }.
+ * SUCCESS STATES:
+ *   The backend returns { ok, message, email_sent } on a successful subscribe.
  *
- *   • email_sent=true  (RESEND_API_KEY set in production):
- *       Show "Check your inbox" — user must click the emailed link to confirm.
+ *   • email_sent=true  (RESEND_API_KEY / SMTP set in production):
+ *       "We'll reach out to <email> when we launch"
  *
- *   • email_sent=false (dev / no SMTP):
- *       Show an inline "Confirm now →" button that opens
- *       /confirm-subscription?token=<uuid> in the same tab.
- *       This lets the developer test the full confirmation flow locally
- *       without configuring an email provider.
+ *   • email_sent=false (dev / no SMTP — current PFE environment):
+ *       "We saved <email>. You'll be the first to know when we launch."
+ *
+ * WHY no confirm link:
+ *   The previous design showed a "Confirm subscription →" link pointing to
+ *   /confirm-subscription?token=xxx when SMTP was not configured.  This was
+ *   dead UX: in production there's no SMTP, so no email arrives, and the
+ *   page was only reachable via the manually constructed URL.  A waitlist
+ *   does not require double opt-in (that's a legal requirement for marketing
+ *   newsletters, not launch-notification lists).  The simpler "You're on the
+ *   list!" message is honest and requires no extra click.
  *
  * BACKED BY:
- *   POST   /api/subscribers                     — subscribe
- *   GET    /api/subscribers/confirm?token=xxx   — set status=confirmed
- *   GET    /api/subscribers/unsubscribe?token=xxx — delete record
+ *   POST   /api/subscribers                     — subscribe (FastAPI)
+ *   GET    /api/subscribers/confirm?token=xxx   — confirm (admin utility, SMTP future)
+ *   GET    /api/subscribers/unsubscribe?token=xxx — unsubscribe (SMTP future)
  */
 
 import { useState }              from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mail, CheckCircle, Clock, Loader2, ArrowRight, ExternalLink } from "lucide-react";
+import { Mail, CheckCircle, Loader2, ArrowRight } from "lucide-react";
 
 type State = "idle" | "loading" | "done";
 
 interface SubscribeResponse {
-  ok:            boolean;
-  message:       string;
-  confirm_token: string;
-  email_sent:    boolean;
+  ok:         boolean;
+  message:    string;
+  email_sent: boolean;
 }
 
 export function EmailCapture() {
-  const [email,        setEmail]        = useState("");
-  const [state,        setState]        = useState<State>("idle");
-  const [error,        setError]        = useState("");
-  const [confirmToken, setConfirmToken] = useState("");
-  const [emailSent,    setEmailSent]    = useState(false);
+  const [email,     setEmail]     = useState("");
+  const [state,     setState]     = useState<State>("idle");
+  const [error,     setError]     = useState("");
+  const [emailSent, setEmailSent] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -70,7 +74,6 @@ export function EmailCapture() {
       }
 
       const data: SubscribeResponse = await res.json();
-      setConfirmToken(data.confirm_token ?? "");
       setEmailSent(data.email_sent ?? false);
     } catch {
       setError("Could not reach the server. Please try again.");
@@ -179,48 +182,21 @@ export function EmailCapture() {
                 transition={{ duration: 0.35, type: "spring", stiffness: 200 }}
                 className="relative z-10 flex flex-col items-center gap-3"
               >
-                {emailSent ? (
-                  /* ── Production: email was sent ── */
-                  <>
-                    <CheckCircle size={40} style={{ color: "#10b981" }} />
-                    <p className="font-bold text-base" style={{ color: "var(--text-primary)" }}>
-                      Check your inbox!
-                    </p>
-                    <p className="text-sm max-w-xs" style={{ color: "var(--text-secondary)" }}>
-                      We sent a confirmation link to{" "}
-                      <strong>{email}</strong>. Click it to complete your
-                      subscription. Check your spam folder if it doesn&rsquo;t arrive.
-                    </p>
-                    <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                      You can unsubscribe at any time via the link in any email we send.
-                    </p>
-                  </>
-                ) : (
-                  /* ── Development / no SMTP: show inline confirm link ── */
-                  <>
-                    <Clock size={40} style={{ color: "#f59e0b" }} />
-                    <p className="font-bold text-base" style={{ color: "var(--text-primary)" }}>
-                      Almost there!
-                    </p>
-                    <p className="text-sm max-w-xs" style={{ color: "var(--text-secondary)" }}>
-                      Click below to confirm your subscription for{" "}
-                      <strong>{email}</strong>.
-                    </p>
-                    {confirmToken && (
-                      <a
-                        href={`/confirm-subscription?token=${confirmToken}`}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all hover:brightness-110"
-                        style={{ backgroundColor: "#f59e0b", color: "#0a1628" }}
-                      >
-                        Confirm subscription
-                        <ExternalLink size={13} />
-                      </a>
-                    )}
-                    <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                      In production an email with this link is sent automatically.
-                    </p>
-                  </>
-                )}
+                {/* Single success state — email confirmed or queued */}
+                <>
+                  <CheckCircle size={40} style={{ color: "#10b981" }} />
+                  <p className="font-bold text-base" style={{ color: "var(--text-primary)" }}>
+                    You&rsquo;re on the list!
+                  </p>
+                  <p className="text-sm max-w-xs" style={{ color: "var(--text-secondary)" }}>
+                    {emailSent
+                      ? <>We&rsquo;ll reach out to <strong>{email}</strong> when the public API launches or a new model version is released.</>
+                      : <>We saved <strong>{email}</strong>. You&rsquo;ll be the first to know when we launch.</>}
+                  </p>
+                  <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                    No spam. One email per major release. Unsubscribe any time.
+                  </p>
+                </>
               </motion.div>
             )}
           </AnimatePresence>

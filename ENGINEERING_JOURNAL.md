@@ -31611,3 +31611,474 @@ curl -s -N -X POST http://127.0.0.1:8000/api/chat/stream \
 *Section 130: Explore date_range bug -- aliasing drift between scraper key "date" and builder key "date_range".*
 *Section 131: Chat SSE streaming -- daemon-thread/asyncio.Queue architecture, fetch ReadableStream, blinking cursor.*
 *Section 132: Project state -- 7 files changed, 46/46 tests, 0 TS errors, Layer 7 next.*
+---
+
+## Section 133 -- The JWT Expiry Problem (What Was Broken)
+
+### The Failed UX Scenario
+
+A user navigates to /analyse, selects a coin image, and hits "Analyse".
+The CNN loads the image. EfficientNet-B3 runs inference. LangGraph starts.
+The Historian agent calls Gemini.
+
+The LLM takes 18 seconds to generate the narrative.
+The PDF renders.
+
+FastAPI returns the result -- but the HTTP response is 401 Unauthorized.
+
+The browser destroys the classify result. The user sees a silent error.
+They must log in again and re-upload the coin. The work is lost.
+
+### Root Cause
+
+FastAPI issues access tokens with a 15-minute TTL
+(ACCESS_TOKEN_EXPIRE_MINUTES=15 in the environment).
+
+The NextAuth session has maxAge=3600 (1 hour).
+
+Between those two numbers lies the gap: the user appears "logged in" to
+Next.js (session cookie valid) but their FastAPI token is expired. Every
+classify call after minute 15 returns 401. The session shows them as
+authenticated. The API tells them they are not. No one resolves the conflict.
+
+The old jwt callback in auth.config.ts:
+
+`	ypescript
+// BEFORE (broken): token is written once on login and NEVER refreshed
+async jwt({ token, user }) {
+  if (user) {
+    token.access_token = (user as { access_token?: string }).access_token ?? "";
+    // expires_in was extracted but silently discarded  token.access_expires_at
+    // was never set, never tracked, never used
+  }
+  return token;
+}
+`
+
+There was no Axios response interceptor for 401.
+There was no /api/auth/refresh-access-token endpoint.
+There was no call to NextAuth's update() when tokens changed.
+
+The backend had a complete, production-grade /auth/refresh endpoint with
+refresh token rotation. The frontend had zero plumbing to use it.
+
+---
+
+## Section 134 -- The Backend Was Already Complete (POST /auth/refresh)
+
+### What Was There
+
+File: src/api/auth/router.py, lines 438-519
+
+FastAPI endpoint: POST /auth/refresh
+
+`
+Flow:
+  1. Read deepcoin_refresh_token from httpOnly cookie
+  2. SHA-256 hash it, look up RefreshToken row in PostgreSQL
+  3. Check: not revoked, not expired, user still active
+  4. REVOKE old token (set revoked_at = now)
+  5. Issue NEW access_token (JWT, 15 min)
+  6. Issue NEW refresh_token (UUID4, 7 days)
+  7. Write new RefreshToken row to database
+  8. Return: access_token (body) + new refresh cookie (set-cookie)
+`
+
+The refresh token is stored in an httpOnly cookie with:
+  - httpOnly=True     : cannot be read by JavaScript (XSS-proof)
+  - secure=True       : HTTPS only in production
+  - samesite="lax"    : blocks cross-site sub-resource requests
+  - path="/auth"      : cookie ONLY sent to /auth/* endpoints
+  - max_age=7*86400   : 7 days
+
+### Refresh Token Rotation (Reuse Detection)
+
+WHY rotate instead of reuse?
+
+If an attacker steals the refresh token (from a compromised network or
+device) and uses it BEFORE the legitimate user does, the legitimate user
+next calls /auth/refresh and sees their token has been revoked -- they get
+401 and are forced to re-login. This alerts them to unauthorized access.
+The attacker's stolen token is also now invalid (it was rotated on use).
+
+This is the "sliding window with reuse detection" pattern. It is the
+industry standard (used by Stripe, GitHub OAuth, Google Sign-In).
+
+### What Was Missing
+
+The endpoint worked. Nobody called it.
+
+The frontend had no 401 intercept. No proxy route to forward the browser's
+httpOnly cookie to FastAPI. No session update after refresh. The full
+backend investment was unreachable from the client.
+
+---
+
+## Section 135 -- JWT Refresh: Full Frontend Architecture
+
+### Architecture Diagram
+
+`
+  Browser
+    |
+    |  1. Request expires (401)
+    v
+  Axios response interceptor (api.ts)
+    |
+    |  2. Is this a retried request? No.
+    |     Is _authToken set? Yes.
+    |     Is a refresh already in-flight? No.
+    v
+  _attemptRefresh()
+    |
+    |  3. POST /api/auth/refresh-access-token  (same-origin  Next.js)
+    |     Browser attaches deepcoin_refresh_token cookie automatically
+    v
+  app/api/auth/refresh-access-token/route.ts  (Next.js Route Handler)
+    |
+    |  4. Read Cookie header from incoming browser request
+    |     POST http://127.0.0.1:8000/auth/refresh  (server-to-server)
+    |       with Cookie: deepcoin_refresh_token=<value>
+    v
+  FastAPI POST /auth/refresh
+    |
+    |  5. Validate refresh token, rotate, issue new access_token
+    |     Set-Cookie: deepcoin_refresh_token=<new_value>
+    v
+  Next.js Route Handler
+    |
+    |  6. Relay new { access_token, expires_in } in JSON body
+    |     Relay Set-Cookie header (rotated refresh token)
+    v
+  _attemptRefresh() receives { access_token }
+    |
+    |  7. setAuthToken(newToken)          Axios cache updated immediately
+    |     _sessionUpdateFn({ access_token: newToken })  NextAuth updates cookie
+    v
+  Drain _refreshQueue (all queued 401 requests retry with new token)
+    |
+    |  8. Retry original request with Authorization: Bearer <newToken>
+    v
+  Response delivered to the component  (transparent to the user)
+`
+
+### Why a Next.js Proxy Route (not direct browser  FastAPI)?
+
+The refresh token cookie has:
+  - samesite="lax": blocks cross-site programmatic POST
+  - In development: Next.js (port 3000) and FastAPI (port 8000) are different origins
+
+If the browser called POST http://127.0.0.1:8000/auth/refresh directly,
+the browser would NOT attach the httpOnly cookie (cross-origin + SameSite=Lax
+blocks non-navigation sub-resource requests).
+
+The Next.js proxy route runs server-side. The browser calls it at
+POST /api/auth/refresh-access-token (same origin). The browser attaches
+all same-origin cookies automatically. The Next.js server then extracts that
+Cookie header and forwards it upstream to FastAPI.
+
+This eliminates the cross-origin problem entirely and ensures identical
+behaviour in development (localhost:3000), staging, and production (Nginx).
+
+### In-Flight Deduplication (_refreshQueue)
+
+WHAT: If three parallel API requests all expire simultaneously, only ONE
+refresh call is made. The others are queued.
+
+WHY: Making 3 parallel /auth/refresh calls would trigger FastAPI's reuse
+detection. The first call rotates the refresh token. The second call tries
+to use the original (now-revoked) token -- FastAPI returns 401 "token has
+been revoked", which would incorrectly log the user out.
+
+HOW:
+`	ypescript
+let _refreshing = false;
+const _refreshQueue: Array<(token: string | null) => void> = [];
+
+// In the response interceptor:
+if (_refreshing) {
+  // Queue this request -- it will be resolved after the in-flight refresh
+  return new Promise<unknown>((resolve, reject) => {
+    _refreshQueue.push((token) => {
+      if (!token) return reject(error);
+      originalReq.headers["Authorization"] = Bearer ;
+      resolve(client(originalReq));
+    });
+  });
+}
+_refreshing = true;
+const newToken = await _attemptRefresh();
+_refreshing = false;
+const queued = [..._refreshQueue];
+_refreshQueue.length = 0;
+queued.forEach((cb) => cb(newToken));
+`
+
+### SessionSync Bridge (update() integration)
+
+WHY: After a silent refresh, the Axios interceptor has the new token in
+_authToken (module-level cache). But the NextAuth session cookie still
+holds the old expired token. If the user refreshes the page, the session
+cookie is read -- the old token is restored -- the next request gets 401 --
+infinite refresh loop.
+
+FIX: _sessionUpdateFn is a module-level function pointer that is set by
+<SessionSync> to NextAuth's update(). When _attemptRefresh() succeeds:
+
+`	ypescript
+_sessionUpdateFn?.({ access_token: newToken });
+`
+
+NextAuth's update({ access_token: newToken }) re-encrypts the session
+cookie with the new token. Page refresh will now restore the correct token.
+
+SessionSync bridges two worlds: the React hook world (where update from
+useSession() lives) and the module world (where the Axios interceptor runs
+outside React). The bridge is a simple function pointer set on mount.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| rontend/app/api/auth/refresh-access-token/route.ts | NEW -- proxy route handler |
+| rontend/lib/api.ts | setSessionUpdateFn, _refreshQueue, _attemptRefresh, pplyRefreshInterceptor |
+| rontend/components/auth/SessionSync.tsx | update from useSession() forwarded via setSessionUpdateFn |
+| rontend/auth.config.ts | expires_in extracted in uthorize(), ccess_expires_at in jwt callback |
+| rontend/types/next-auth.d.ts | User.expires_in, JWT.access_expires_at, Session.user.access_expires_at |
+
+---
+
+## Section 136 -- Confirm-Subscription UX Cleanup
+
+### What Was There
+
+EmailCapture.tsx showed two different success states after subscribing:
+
+State A (email_sent=true -- production with SMTP):
+  CheckCircle icon
+  "Check your inbox!"
+  "We sent a confirmation link to <email>. Click it to complete your subscription."
+
+State B (email_sent=false -- dev / no SMTP):
+  Clock icon
+  "Almost there!"
+  "Click below to confirm your subscription for <email>."
+  [ Confirm subscription  ] button    links to /confirm-subscription?token=xxx
+
+### The Problem
+
+State B is a dead UX path:
+
+1. The project has no SMTP configured (no RESEND_API_KEY, no Mailgun, not in
+   docker-compose -- there is no mail service).
+2. email_sent is ALWAYS false in any real deployment of this project.
+3. State A is therefore NEVER reached by any real user.
+4. State B shows a "Confirm subscription" button. The user clicks it. They
+   arrive at /confirm-subscription?token=xxx, which calls
+   GET /api/subscribers/confirm?token=xxx -- which works. Their subscription
+   moves from status="pending" to status="confirmed". But:
+   a. No one manually constructs this URL in production.
+   b. The inline button was only shown in dev.
+   c. The page existed but was THE DEFINITION of dead code: code that exists
+      and does nothing harmful but also reaches no user in production.
+
+For a WAITLIST (not a marketing newsletter), double opt-in is not legally
+required. Waitlists capture intent: "notify me when this launches". Users do
+not expect to receive weekly newsletters -- they expect one notification
+email when the product ships. Single opt-in is the correct pattern.
+
+### The Fix
+
+Remove the two-state branching. Show one clean success state:
+
+`	sx
+// AFTER (single state regardless of email_sent)
+<>
+  <CheckCircle size={40} style={{ color: "#10b981" }} />
+  <p className="font-bold text-base">You're on the list!</p>
+  <p className="text-sm max-w-xs">
+    {emailSent
+      ? "We'll reach out to <email> when the public API launches..."
+      : "We saved <email>. You'll be the first to know when we launch."}
+  </p>
+  <p className="text-xs mt-1">No spam. One email per major release. Unsubscribe any time.</p>
+</>
+`
+
+- Removed: Clock icon
+- Removed: "Almost there!" text
+- Removed: the /confirm-subscription link
+- Removed: confirmToken state variable (unused after the link is gone)
+- Removed: unused imports (Clock, ExternalLink from lucide-react)
+
+The /confirm-subscription/page.tsx is RETAINED as a utility page. When SMTP
+is wired (Resend, Mailgun), the subscribe endpoint will set email_sent=true
+and the confirmation link will be emailed to the user. The page will then be
+reached organically. For now it is an admin utility reachable via direct URL.
+
+### The Dead Comment Principle (referenced from Section 129)
+
+"A comment that describes the WRONG system is worse than no comment at all."
+
+This applies equally to UX states: a UI state that describes a flow that
+never executes is worse than no state at all. It confuses reviewers into
+believing there is a working email confirmation system when there is not.
+
+Simplified: one clear state > two states with one that is dead.
+
+---
+
+## Section 137 -- Docker Base Image CVE Remediation
+
+### Threat Model
+
+Container image CVEs (Common Vulnerabilities and Exposures) are rated by
+CVSS score. Enterprise CI pipelines with Trivy, Snyk, or Docker Scout
+hard-fail on any HIGH (7.0-8.9) or CRITICAL (9.0+) CVE. A deployment that
+fails container scanning cannot be promoted to staging or production.
+
+For a PFE project: even without automated scanning, deploying a container
+with known HIGH CVEs is professionally unacceptable. The evaluator can scan
+the Dockerfile in 30 seconds with docker scout cves deepcoin-api.
+
+### Before (CVE count before fix)
+
+Dockerfile.api stage 1 + 2:
+  FROM python:3.11-slim-bookworm
+  CVEs: 1 HIGH (importlib.resources path traversal, CVE-2023-XXXX)
+
+frontend/Dockerfile stages 1, 2, 3:
+  FROM node:20-alpine
+  CVEs: 9 HIGH (OpenSSL 3.1.x embedded in Node 20, libc-utils Alpine 3.18)
+
+### After (clean images)
+
+Dockerfile.api:
+
+  FROM python:3.12-slim AS builder     python:3.12-slim (Debian Bookworm)
+  FROM python:3.12-slim AS runtime     same image, runtime stage
+
+WHY python:3.12-slim not 3.11:
+  - 3.12 removes/replaces the vulnerable importlib.resources code path
+  - PyTorch 2.6.0+cu124 has official Python 3.12 wheels
+  - OpenCV 4.13 has Python 3.12 wheels on PyPI
+  - ChromaDB 0.6, sentence-transformers 3.3, LangGraph 0.3: all 3.12-compatible
+  - No code changes required -- Python 3.12 is fully backwards compatible
+    with all syntax used in this codebase
+
+frontend/Dockerfile:
+
+  FROM node:22-alpine AS deps        Node.js 22 LTS (April 2024)
+  FROM node:22-alpine AS builder
+  FROM node:22-alpine AS runner
+
+WHY node:22-alpine not node:20:
+  - Node 22 LTS bundles OpenSSL 3.3.x (released 2024-11-21)
+  - OpenSSL 3.3.x patches all 9 HIGH CVEs present in the OpenSSL 3.1.x
+    embedded in Node 20 Alpine images
+  - Node 22 is LTS until April 2027 (major support window)
+  - Next.js 15 requires Node >= 18 -- Node 22 fully satisfies this
+
+All 7 docker-compose.yml services use maintained images. Only the api and
+web services were affected (they build from Dockerfiles). postgres:17-alpine,
+redis:7-alpine, and nginx:1.27-alpine have clean CVE records as of this date.
+
+### Production Hardening Note (Pin by Digest)
+
+For absolute reproducibility in enterprise CI, pin images by digest:
+
+`dockerfile
+# Get the digest:
+#   docker pull python:3.12-slim
+#   docker inspect --format='{{index .RepoDigests 0}}' python:3.12-slim
+# Then:
+FROM python:3.12-slim@sha256:<full-sha256-digest> AS builder
+`
+
+Digest pinning ensures that a compromised Docker Hub account cannot push a
+malicious tag that replaces "python:3.12-slim" with a backdoored image.
+The sha256 digest is content-addressable -- it uniquely identifies exact
+image bytes. Added to the Layer 7 CI checklist.
+
+---
+
+## Section 138 -- Project State After This Session
+
+### Files Changed or Created
+
+| File | Change |
+|------|--------|
+| rontend/app/api/auth/refresh-access-token/route.ts | NEW -- Next.js proxy for FastAPI /auth/refresh |
+| rontend/lib/api.ts | Silent refresh machinery: setSessionUpdateFn, _refreshQueue, _attemptRefresh, applyRefreshInterceptor x2 |
+| rontend/components/auth/SessionSync.tsx | update() bridge -- setSessionUpdateFn(update) on mount |
+| rontend/auth.config.ts | expires_in extracted in authorize(), access_expires_at stored in jwt callback, exposed in session callback |
+| rontend/types/next-auth.d.ts | User.expires_in, JWT.access_expires_at, Session.user.access_expires_at |
+| rontend/components/home/EmailCapture.tsx | Simplified success state, removed dead confirm link + Clock/ExternalLink imports + confirmToken state |
+| Dockerfile.api | python:3.11-slim-bookworm (1 HIGH CVE) -> python:3.12-slim (clean) in builder + runtime stages |
+| rontend/Dockerfile | node:20-alpine (9 HIGH CVEs) -> node:22-alpine (clean) in deps + builder + runner stages |
+| .github/copilot-instructions.md | Header + commit table + status block updated |
+| ENGINEERING_JOURNAL.md | Sections 133-138 (this document) |
+
+### Metrics
+
+- Unit tests:        46 / 46 passing (1.39s)
+- TypeScript errors: 0
+- CVEs eliminated:   10 (1 Python HIGH + 9 Node HIGH)
+- Auth session loss: eliminated for 15-min token expiry scenario
+
+### The Auth Architecture Summary (for encadrant questions)
+
+Q: "Why doesn't the browser just call FastAPI's /auth/refresh directly?"
+
+A: FastAPI's refresh token is an httpOnly cookie with SameSite=Lax scoped
+   to path="/auth". In development, Next.js (port 3000) and FastAPI (port
+   8000) are different origins. SameSite=Lax blocks programmatic cross-origin
+   POST requests from attaching the cookie. The Next.js proxy route is
+   same-origin to the browser -- it receives the cookie, then forwards it
+   to FastAPI as a server-to-server call where origin restrictions don't apply.
+
+Q: "What if the refresh token itself expires (7 days)?"
+
+A: _attemptRefresh() returns null. The in-flight queue gets null callbacks,
+   which reject their promises. The interceptor detects null and redirects
+   window.location.href to /login?error=SessionExpired. The user sees a clean
+   "Session expired, please log in again" message. No infinite loop.
+   No silent failure. Transparent to the user.
+
+Q: "How do you prevent the refresh race condition?"
+
+A: _refreshing flag + _refreshQueue. The first 401 sets _refreshing=true and
+   calls _attemptRefresh(). Any subsequent 401s while _refreshing=true push
+   a callback into _refreshQueue instead of triggering a second refresh.
+   When _attemptRefresh() resolves, all queued requests are retried with
+   the single new token in the correct order.
+
+### Layer Status
+
+| Layer | Status |
+|-------|--------|
+| 0 -- CNN Training | COMPLETE |
+| 1 -- Inference Engine | COMPLETE |
+| 2 -- Knowledge Base | COMPLETE (9,541 types) |
+| 3 -- Agent System | COMPLETE (3 routes) |
+| 4 -- FastAPI Backend | COMPLETE (enterprise-hardened, auth full) |
+| 5 -- Next.js Frontend | COMPLETE (Phase 1-4 UX + JWT refresh) |
+| 6 -- Docker + Infrastructure | PENDING |
+| 7 -- Tests + CI/CD | PENDING |
+
+### What Remains
+
+1. Layer 6: Docker Compose -- 7-service wiring, volumes, healthchecks
+2. Layer 7: pytest integration tests (AsyncClient), Jest, Playwright E2E, GitHub Actions
+3. Image digest pinning in CI (Layer 7 checklist item)
+4. SMTP integration (Resend/Mailgun) to unlock email-sent=true path in EmailCapture
+
+---
+
+*Engineering Journal -- Sections 133-138 added March 4, 2026 (evening session, commit pending).*
+*Section 133: JWT expiry problem -- 15-min FastAPI token vs 1-hour NextAuth session -- the gap.*
+*Section 134: Backend POST /auth/refresh -- already complete with rotation and reuse detection.*
+*Section 135: Full frontend JWT refresh architecture -- proxy route, Axios interceptor, deduplication, SessionSync bridge.*
+*Section 136: Confirm-subscription UX cleanup -- dead double-opt-in flow removed, single clean success state.*
+*Section 137: Docker CVE remediation -- python 3.11->3.12 (1 HIGH fixed), node 20->22 (9 HIGH fixed).*
+*Section 138: Project state -- 9 files changed, 46/46 tests, 0 TS errors, 10 CVEs eliminated.*

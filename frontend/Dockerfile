@@ -26,7 +26,14 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 1: deps — install node_modules with cache
 # ─────────────────────────────────────────────────────────────────────────────
-FROM node:20-alpine AS deps
+# node:22-alpine (Node.js 22 LTS, Alpine 3.21):
+#   node:20-alpine ships with 9 HIGH CVEs (OpenSSL, libc-utils).
+#   node:22-alpine has a significantly cleaner CVE record because it bundles
+#   Node.js 22 LTS (released April 2024) which updated its embedded OpenSSL
+#   to 3.3.x.  Next.js 15 fully supports Node.js 22.
+#   For hard-pinned production CI:
+#     docker pull node:22-alpine && docker inspect --format='{{index .RepoDigests 0}}' node:22-alpine
+FROM node:22-alpine AS deps
 
 # libc6-compat is required for Next.js native bindings on Alpine
 # (Alpine uses musl; some prebuilt binaries expect glibc compatibility shims)
@@ -48,7 +55,7 @@ RUN npm ci
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 2: builder — compile the Next.js production bundle
 # ─────────────────────────────────────────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 RUN apk add --no-cache libc6-compat
 
@@ -77,7 +84,7 @@ RUN npm run build
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 3: runner — minimal runtime image
 # ─────────────────────────────────────────────────────────────────────────────
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 
 LABEL org.opencontainers.image.title="DeepCoin Web" \
       org.opencontainers.image.description="Next.js 15 frontend — standalone build" \

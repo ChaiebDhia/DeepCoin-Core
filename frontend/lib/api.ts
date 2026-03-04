@@ -144,6 +144,160 @@ applyKeyInterceptor(classifyApiClient);
 applyAuthInterceptor(apiClient);
 applyAuthInterceptor(classifyApiClient);
 
+// ── Silent token refresh ──────────────────────────────────────────────────────
+
+/**
+ * Module-level session-update bridge.
+ *
+ * WHY: After a successful silent token refresh we need to tell NextAuth to
+ * update the session cookie with the new access_token.  useSession().update()
+ * is a React hook — it lives in a component.  We bridge it here via a
+ * module-level setter so the Axios response interceptor (which runs outside
+ * React) can trigger the session update without any circular dependency.
+ *
+ * Set by <SessionSync> on mount.  Cleared on unmount.
+ */
+let _sessionUpdateFn: ((data: Record<string, unknown>) => void) | null = null;
+
+export function setSessionUpdateFn(
+  fn: ((data: Record<string, unknown>) => void) | null,
+): void {
+  _sessionUpdateFn = fn;
+}
+
+/**
+ * In-flight refresh state.
+ *
+ * WHY _refreshing + _refreshQueue:
+ *   If three requests expire at the same millisecond, we must NOT send three
+ *   parallel refresh calls (that would cause a reuse-detection race where two
+ *   of the three revoke each other's newly-issued tokens).
+ *   Instead: the FIRST expired request triggers the refresh.  Subsequent
+ *   requests that also get 401 are queued.  Once refresh resolves they all
+ *   retry with the single new token — exactly one refresh call total.
+ */
+let _refreshing = false;
+const _refreshQueue: Array<(token: string | null) => void> = [];
+
+/**
+ * _attemptRefresh — calls the Next.js proxy route that forwards to FastAPI.
+ *
+ * WHAT: POST /api/auth/refresh-access-token
+ *   - Browser sends httpOnly refresh-token cookie automatically (same origin)
+ *   - Next.js route forwards cookie to FastAPI /auth/refresh
+ *   - FastAPI rotates the refresh token and returns new access_token
+ *   - Next.js route relays the new set-cookie back to the browser
+ *
+ * WHY not call FastAPI directly from the browser:
+ *   FastAPI's refresh cookie has SameSite=Lax and path="/auth".
+ *   In development (localhost:3000 → localhost:8000) it is cross-origin —
+ *   the browser won't send the cookie on a programmatic cross-origin POST.
+ *   The Next.js proxy route IS same-origin so the cookie is always included.
+ *
+ * @returns new access_token string, or null if refresh failed
+ */
+async function _attemptRefresh(): Promise<string | null> {
+  try {
+    const res = await axios.post<{ access_token: string; expires_in: number }>(
+      "/api/auth/refresh-access-token",
+    );
+    const newToken = res.data.access_token;
+    // 1. Update the module-level cache so subsequent request interceptors
+    //    inject the new token immediately on the retry.
+    setAuthToken(newToken);
+    // 2. Ask NextAuth to update the session cookie stored in the browser
+    //    so useSession().data.user.access_token reflects the new value.
+    _sessionUpdateFn?.({ access_token: newToken });
+    return newToken;
+  } catch {
+    // Refresh failed (expired refresh token, server down, etc.)
+    // Clear the stale token so we don't keep retrying with a known-bad token.
+    setAuthToken(null);
+    return null;
+  }
+}
+
+/**
+ * applyRefreshInterceptor — adds a 401-intercept-and-retry response handler.
+ *
+ * FLOW for a request that returns 401:
+ *   1. Check _retried flag — never retry more than once (prevents loops).
+ *   2. If a refresh is already in-flight, queue this retry callback.
+ *   3. Otherwise trigger _attemptRefresh() and drain the queue when done.
+ *   4. If refresh succeeds: patch the Authorization header, retry request.
+ *   5. If refresh fails: redirect to /login?error=SessionExpired.
+ *
+ * WHY _retried on the config (not a Set of request IDs):
+ *   The config object is unique per request instance.  Adding _retried to it
+ *   is the idiomatic Axios pattern — no global request registry needed.
+ */
+function applyRefreshInterceptor(
+  client: typeof apiClient,
+): void {
+  client.interceptors.response.use(
+    (response) => response,
+    async (error: AxiosError) => {
+      // Type-extend the config to hold our retry flag.
+      const originalReq = error.config as
+        | (typeof error.config & { _retried?: boolean })
+        | undefined;
+
+      // Only intercept 401 errors on requests that had an auth token.
+      // Skip if already retried once (prevents infinite loop).
+      if (
+        error.response?.status !== 401 ||
+        !originalReq ||
+        originalReq._retried ||
+        !_authToken
+      ) {
+        return Promise.reject(error);
+      }
+
+      originalReq._retried = true;
+
+      // If another request is already refreshing, queue this one.
+      if (_refreshing) {
+        return new Promise<unknown>((resolve, reject) => {
+          _refreshQueue.push((token) => {
+            if (!token) return reject(error);
+            if (originalReq.headers) {
+              originalReq.headers["Authorization"] = `Bearer ${token}`;
+            }
+            resolve(client(originalReq));
+          });
+        });
+      }
+
+      // This request triggers the refresh.
+      _refreshing = true;
+      const newToken = await _attemptRefresh();
+      _refreshing = false;
+
+      // Drain the queue — all queued requests get the new token (or null).
+      const queued = [..._refreshQueue];
+      _refreshQueue.length = 0;
+      queued.forEach((cb) => cb(newToken));
+
+      if (!newToken) {
+        // Refresh failed — redirect to login with a hint.
+        if (typeof window !== "undefined") {
+          window.location.href = "/login?error=SessionExpired";
+        }
+        return Promise.reject(error);
+      }
+
+      // Retry the original request with the refreshed token.
+      if (originalReq.headers) {
+        originalReq.headers["Authorization"] = `Bearer ${newToken}`;
+      }
+      return client(originalReq);
+    },
+  );
+}
+
+applyRefreshInterceptor(apiClient);
+applyRefreshInterceptor(classifyApiClient);
+
 // ── Normalised error type ─────────────────────────────────────────────────────
 
 /**

@@ -36,23 +36,33 @@ declare module "next-auth" {
       display_name: string | null;
       /** FastAPI JWT access token — used in Authorization: Bearer header */
       access_token: string;
+      /**
+       * Unix timestamp (ms) when the access_token expires.
+       * Set on first login by auth.config.ts jwt callback.
+       * Used by the Axios refresh interceptor to schedule proactive refresh.
+       */
+      access_expires_at?: number;
     } & DefaultSession["user"];
   }
 
   /** Returned by the User object from Credentials.authorize() */
   interface User {
-    role?:         string;
-    display_name?: string | null;
-    access_token?: string;
+    role?:             string;
+    display_name?:     string | null;
+    access_token?:     string;
+    /** FastAPI access token TTL in seconds — used to compute access_expires_at */
+    expires_in?:       number;
   }
 }
 
 declare module "next-auth/jwt" {
   /** Stored in the encrypted next-auth cookie. */
   interface JWT extends DefaultJWT {
-    id?:           string;
-    role?:         string;
-    display_name?: string | null;
-    access_token?: string;
+    id?:                string;
+    role?:              string;
+    display_name?:      string | null;
+    access_token?:      string;
+    /** Unix timestamp (ms) — when the current access_token expires (-60s buffer applied) */
+    access_expires_at?: number;
   }
 }

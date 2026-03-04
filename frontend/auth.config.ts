@@ -120,6 +120,7 @@ export const authConfig: NextAuthConfig = {
           const data = await res.json() as {
             access_token:  string;
             token_type:    string;
+            expires_in:    number;          // seconds until access token expires
             user: {
               id:           string;
               email:        string;
@@ -137,6 +138,7 @@ export const authConfig: NextAuthConfig = {
             role:         data.user.role,
             display_name: data.user.display_name,
             access_token: data.access_token,
+            expires_in:   data.expires_in,  // propagated → jwt callback → access_expires_at
           };
         } catch {
           // Network error (FastAPI down, timeout, etc.) → treat as auth failure
@@ -162,6 +164,13 @@ export const authConfig: NextAuthConfig = {
         token.role         = (user as { role?: string }).role ?? "analyst";
         token.display_name = (user as { display_name?: string | null }).display_name ?? null;
         token.access_token = (user as { access_token?: string }).access_token ?? "";
+
+        // Record when this access token expires so the browser-side interceptor
+        // knows to trigger a silent refresh via /api/auth/refresh-access-token.
+        // WHY -60 s buffer: start refresh 1 minute before actual expiry so a
+        // slow server response doesn't arrive after the token has already expired.
+        const expiresIn = (user as { expires_in?: number }).expires_in;
+        token.access_expires_at = Date.now() + ((expiresIn ?? 900) - 60) * 1_000;
       }
       return token;
     },
@@ -183,10 +192,12 @@ export const authConfig: NextAuthConfig = {
      */
     async session({ session, token }) {
       if (token && session.user) {
-        session.user.id           = token.id as string;
-        session.user.role         = token.role as string;
-        session.user.display_name = token.display_name as string | null;
-        session.user.access_token = token.access_token as string;
+        session.user.id               = token.id as string;
+        session.user.role             = token.role as string;
+        session.user.display_name     = token.display_name as string | null;
+        session.user.access_token     = token.access_token as string;
+        // Expose expiry timestamp so client code can schedule proactive refreshes.
+        session.user.access_expires_at = token.access_expires_at as number | undefined;
       }
       return session;
     },
