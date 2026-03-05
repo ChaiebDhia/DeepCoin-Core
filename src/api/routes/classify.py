@@ -293,7 +293,10 @@ async def classify(
     # ── 8. Write audit row (PostgreSQL, non-fatal) ────────────────────────────
     # WHY async INSERT here:
     #   The pipeline has finished; the event loop is free.  We write directly
-    #   to the classifications table using the async SQLAlchemy session.
+    #   to the audit_events table using the async SQLAlchemy session.
+    #   This is a SEPARATE table from classifications (step 7); audit rows
+    #   record actor + action + timestamp for compliance; they are never
+    #   returned to end-users.
     # WHY non-fatal:
     #   Audit failures must never surface as a 500 to the user.  The primary
     #   mission (classification + PDF) has already succeeded.

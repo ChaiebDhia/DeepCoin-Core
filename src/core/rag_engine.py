@@ -139,8 +139,18 @@ def chunk_record(record: dict) -> list[dict]:
         identity_parts.append(f"mint: {record['mint']}")
     if record.get("region"):
         identity_parts.append(f"region: {record['region']}")
-    if record.get("date"):
-        dt = record["date"]
+    # WHY dual-key lookup:
+    #   The CN scraper stores the scraped "Date" field as record["date"].
+    #   Some early CN types use "Date range" as the HTML label which the
+    #   scraper normalises to "date_range" via .lower().replace(" ","_").
+    #   Trying both keys ensures date information is never silently omitted
+    #   for types where the CN website uses alternative label wording.
+    dt = record.get("date") or record.get("date_range") or ""
+    # Final fallback: check the "extra" dict captured from leftover dl fields
+    if not dt:
+        extra = record.get("extra") or {}
+        dt = extra.get("date", "") or extra.get("date_range", "")
+    if dt:
         if record.get("period"):
             dt += f" ({record['period']})"
         identity_parts.append(f"date: {dt}")

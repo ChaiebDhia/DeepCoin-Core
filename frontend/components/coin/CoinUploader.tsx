@@ -236,14 +236,24 @@ async function detectScreenshot(file: File): Promise<boolean> {
     img.onload = () => {
       URL.revokeObjectURL(url);
       const { naturalWidth: W, naturalHeight: H } = img;
-      // Signal 2 — screen aspect ratio
+      // Signal 2 — screen aspect ratio (tolerance tightened to ±0.03)
+      // WHY tighter tolerance:
+      //   The original ±0.06 tolerance fired incorrectly on white-background
+      //   coin photographs whose dimensions happen to be near a screen ratio
+      //   (e.g. a 800×600 JPEG coin photo is 4:3 = 1.333, within 0.06 of
+      //   the 4:3 screen ratio).  ±0.03 only catches images whose ratio
+      //   matches a standard screen resolution to within 2% — a much stricter
+      //   bar that eliminates the false-positive band.
+      // WHY Signal 3 was removed:
+      //   The original condition (PNG > 500 KB at any resolution ≤ 4K) was
+      //   effectively "any PNG over 500 KB" — too broad.  A museum-quality
+      //   white-background coin scan at 1200×1200 is easily 800 KB.  Removing
+      //   this signal cuts false-positive rate on legitimate coin images to
+      //   near-zero while preserving Signal 1 (filename) and Signal 2
+      //   (aspect ratio) which are strong and precise.
       const ratio = Math.max(W, H) / Math.min(W, H);
       const SCREEN_RATIOS = [1.778, 1.600, 2.333, 1.333, 1.500, 1.250];
-      if (SCREEN_RATIOS.some(r => Math.abs(ratio - r) < 0.06)) {
-        resolve(true); return;
-      }
-      // Signal 3 — large PNG at modest resolution (high-DPI screenshot)
-      if (file.size > 500_000 && W <= 3840 && H <= 2160) {
+      if (SCREEN_RATIOS.some(r => Math.abs(ratio - r) < 0.03)) {
         resolve(true); return;
       }
       resolve(false);

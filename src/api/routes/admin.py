@@ -225,6 +225,74 @@ async def list_all_analyses(
         "pages": math.ceil(total / limit) if limit else 1,
     }
 
+
+# ── GET /api/admin/stats ──────────────────────────────────────────────────────
+
+@router.get(
+    "/stats",
+    summary = "Aggregate pipeline statistics (admin/curator)",
+)
+async def get_pipeline_stats(
+    db:           AsyncSession  = Depends(get_db),
+    current_user: User          = Depends(get_current_user),
+) -> dict[str, Any]:
+    """
+    Return aggregate statistics for the admin Overview dashboard.
+
+    WHAT:
+        Single-query aggregation over the classifications table.
+        Returns:
+            total     — total classifications across all users
+            by_route  — {historian: N, validator: N, investigator: N, unknown: N}
+            avg_conf  — global average confidence (0.0–1.0)
+            top_labels — top 5 most-classified coin types with counts
+
+    WHY a single endpoint instead of calling getAdminAnalyses multiple times:
+        The Overview tab needs four numbers.  Fetching three pages of analyses
+        (one per route filter) to count each set costs three round-trips and
+        materialises hundreds of ORM rows just for COUNT.  A single GROUP BY
+        query is O(log n) on the indexed route_taken column.
+
+    ACCESS: admin or curator (read-only aggregate — no user PII exposed).
+    """
+    _require_privileged(current_user)
+
+    # ── route distribution (one GROUP BY query) ─────────────────────────────
+    route_q = (
+        select(Classification.route_taken, func.count(Classification.id).label("n"))
+        .group_by(Classification.route_taken)
+    )
+    rows = (await db.execute(route_q)).all()
+    by_route: dict[str, int] = {"historian": 0, "validator": 0, "investigator": 0, "unknown": 0}
+    total = 0
+    for route_name, n in rows:
+        key = route_name if route_name in by_route else "unknown"
+        by_route[key] = n
+        total += n
+
+    # ── global average confidence ───────────────────────────────────────────
+    avg_q   = select(func.avg(Classification.confidence)).select_from(Classification)
+    avg_val = (await db.execute(avg_q)).scalar_one_or_none()
+    avg_conf = round(float(avg_val), 4) if avg_val is not None else 0.0
+
+    # ── top 5 most-classified labels ────────────────────────────────────────
+    top_q = (
+        select(Classification.label, func.count(Classification.id).label("n"))
+        .group_by(Classification.label)
+        .order_by(desc(func.count(Classification.id)))
+        .limit(5)
+    )
+    top_rows = (await db.execute(top_q)).all()
+    top_labels = [{"label": lbl, "count": cnt} for lbl, cnt in top_rows]
+
+    return {
+        "total":      total,
+        "by_route":   by_route,
+        "avg_conf":   avg_conf,
+        "top_labels": top_labels,
+    }
+
+
 # ── GET /api/admin/users ──────────────────────────────────────────────────────
 
 @router.get(

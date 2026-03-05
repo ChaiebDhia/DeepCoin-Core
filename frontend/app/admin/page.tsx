@@ -45,8 +45,9 @@ import {
 import {
   getHealth, getHistory, getAdminFeedback, getAdminAnalyses, pdfDownloadUrl,
   getAdminUsers, updateUserRole, updateUserStatus, deleteAdminUser,
+  getAdminStats,
 } from "@/lib/api";
-import type { HistorySummary, FeedbackItem, AdminAnalysisItem, AdminUserItem } from "@/types/api";
+import type { HistorySummary, FeedbackItem, AdminAnalysisItem, AdminUserItem, AdminStatsResponse } from "@/types/api";
 
 // -- Types -------------------------------------------------------------------
 
@@ -208,10 +209,19 @@ function OverviewTab({
     enabled:  authed,
   });
 
+  const { data: stats } = useQuery<AdminStatsResponse>({
+    queryKey:  ["admin", "stats"],
+    queryFn:   getAdminStats,
+    enabled:   isPrivileged && authed,
+    // WHY 60 s staleTime: route distribution changes slowly;
+    // avoids a redundant refetch every time the tab is re-focused.
+    staleTime: 60_000,
+  });
+
   return (
     <div className="space-y-6">
-      {/* Health + Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      {/* Health + Stats + Route Distribution */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
 
         {/* System Health */}
         <div
@@ -262,6 +272,83 @@ function OverviewTab({
             ))}
           </div>
         </div>
+
+        {/* Route Distribution — live data from GET /api/admin/stats */}
+        {isPrivileged && (
+          <div
+            className="rounded-xl border p-5"
+            style={{ borderColor: "var(--border)", backgroundColor: "var(--surface-1)" }}
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <BarChart3 size={15} style={{ color: "#8b5cf6" }} />
+              <span className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>
+                Route Distribution
+              </span>
+              {stats && (
+                <span className="ml-auto text-[10px] tabular-nums" style={{ color: "var(--text-muted)" }}>
+                  {stats.total.toLocaleString()} total
+                </span>
+              )}
+            </div>
+
+            {stats ? (
+              <div className="space-y-3">
+                {(
+                  [
+                    { key: "historian",    label: "Historian",    color: "#3b82f6" },
+                    { key: "validator",    label: "Validator",    color: "#f59e0b" },
+                    { key: "investigator", label: "Investigator", color: "#8b5cf6" },
+                  ] as { key: keyof AdminStatsResponse["by_route"]; label: string; color: string }[]
+                ).map(({ key, label, color }) => {
+                  const count = stats.by_route[key] ?? 0;
+                  const pct   = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0;
+                  return (
+                    <div key={key}>
+                      <div className="flex justify-between text-[10px] mb-1"
+                           style={{ color: "var(--text-muted)" }}>
+                        <span style={{ color }}>{label}</span>
+                        <span className="tabular-nums">{count.toLocaleString()} ({pct}%)</span>
+                      </div>
+                      <div className="h-1.5 rounded-full overflow-hidden"
+                           style={{ backgroundColor: "var(--surface-2)" }}>
+                        <div
+                          className="h-full rounded-full transition-all duration-700"
+                          style={{ width: `${pct}%`, backgroundColor: color }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Summary row: avg confidence + top label */}
+                <div className="pt-2 border-t grid grid-cols-2 gap-2"
+                     style={{ borderColor: "var(--border)" }}>
+                  <div className="rounded-lg p-2.5" style={{ backgroundColor: "var(--surface-2)" }}>
+                    <p className="text-xs font-black tabular-nums" style={{ color: "#10b981" }}>
+                      {(stats.avg_conf * 100).toFixed(1)}%
+                    </p>
+                    <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>
+                      avg confidence
+                    </p>
+                  </div>
+                  {stats.top_labels[0] && (
+                    <div className="rounded-lg p-2.5" style={{ backgroundColor: "var(--surface-2)" }}>
+                      <p className="text-xs font-black font-mono truncate"
+                         style={{ color: "#d4a853" }}>
+                        {stats.top_labels[0].label}
+                      </p>
+                      <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>
+                        top coin ({stats.top_labels[0].count}×)
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>Loading stats…</p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Recent analyses (my account) */}

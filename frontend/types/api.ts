@@ -261,3 +261,17 @@ export interface KbBrowseResponse {
   total:       number;
   search_used: boolean;
 }
+
+// ── Admin stats types ──────────────────────────────────────────────────────────
+
+export interface AdminStatsTopLabel {
+  label: string;
+  count: number;
+}
+
+export interface AdminStatsResponse {
+  total:      number;
+  by_route:   { historian: number; validator: number; investigator: number; unknown: number };
+  avg_conf:   number;
+  top_labels: AdminStatsTopLabel[];
+}

@@ -917,3 +917,17 @@ export async function deleteChatSession(id: string): Promise<void> {
     throw toApiError(err);
   }
 }
+
+// ── Admin Stats ───────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/admin/stats
+ *
+ * Aggregate pipeline statistics: total count, route distribution, average
+ * confidence. Requires admin or curator role.  Uses a single GROUP BY query
+ * on the backend — no N+1 fetches.
+ */
+export async function getAdminStats(): Promise<import("@/types/api").AdminStatsResponse> {
+  const { data } = await apiClient.get<import("@/types/api").AdminStatsResponse>("/admin/stats");
+  return data;
+}
