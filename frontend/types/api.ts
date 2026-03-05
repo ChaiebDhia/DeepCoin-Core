@@ -269,9 +269,45 @@ export interface AdminStatsTopLabel {
   count: number;
 }
 
+/** One item in the live activity feed (last 5 analyses across all users). */
+export interface AdminStatsActivity {
+  id:          string;
+  label:       string;
+  confidence:  number | null;
+  route_taken: string;
+  timestamp:   string | null;
+  user_email:  string;
+}
+
 export interface AdminStatsResponse {
-  total:      number;
-  by_route:   { historian: number; validator: number; investigator: number; unknown: number };
-  avg_conf:   number;
-  top_labels: AdminStatsTopLabel[];
+  total:          number;
+  by_route:       { historian: number; validator: number; investigator: number; unknown: number };
+  avg_conf:       number;
+  top_labels:     AdminStatsTopLabel[];
+  /** Total registered users (all time). */
+  users_total:    number;
+  /** Users who registered today (UTC). */
+  users_today:    number;
+  /** Analyses submitted today (UTC). */
+  analyses_today: number;
+  /** Last 5 analyses across all users — live activity feed. */
+  recent_activity: AdminStatsActivity[];
+}
+
+// ── User personal stats (GET /auth/me/stats) ──────────────────────────────────
+
+export interface UserStatsRecent {
+  id:          string;
+  label:       string;
+  confidence:  number | null;
+  route_taken: string;
+  timestamp:   string | null;
+}
+
+export interface UserStatsResponse {
+  total_analyses: number;
+  by_route:       { historian: number; validator: number; investigator: number; unknown: number };
+  avg_conf:       number;
+  top_label:      { label: string; count: number } | null;
+  recent:         UserStatsRecent[];
 }

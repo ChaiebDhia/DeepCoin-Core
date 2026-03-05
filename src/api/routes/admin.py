@@ -28,6 +28,7 @@ AUTH MODEL:
 from __future__ import annotations
 
 import math
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -285,11 +286,53 @@ async def get_pipeline_stats(
     top_rows = (await db.execute(top_q)).all()
     top_labels = [{"label": lbl, "count": cnt} for lbl, cnt in top_rows]
 
+    # ── user KPIs ────────────────────────────────────────────────────────────
+    users_total_q = select(func.count()).select_from(User)
+    users_total   = (await db.execute(users_total_q)).scalar_one()
+
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    users_today_q = (
+        select(func.count()).select_from(User)
+        .where(User.created_at >= today_start)
+    )
+    users_today = (await db.execute(users_today_q)).scalar_one()
+
+    analyses_today_q = (
+        select(func.count()).select_from(Classification)
+        .where(Classification.timestamp >= today_start)
+    )
+    analyses_today = (await db.execute(analyses_today_q)).scalar_one()
+
+    # ── live activity feed (last 5 analyses across all users) ────────────────
+    recent_q = (
+        select(Classification)
+        .options(joinedload(Classification.user))
+        .order_by(desc(Classification.timestamp))
+        .limit(5)
+    )
+    recent_rows = (await db.execute(recent_q)).scalars().unique().all()
+    recent_activity = [
+        {
+            "id":         r.id,
+            "label":      r.label,
+            "confidence": round(r.confidence, 4) if r.confidence is not None else None,
+            "route_taken": r.route_taken,
+            "timestamp":  r.timestamp.isoformat() if r.timestamp else None,
+            "user_email": r.user.email if r.user else "guest",
+        }
+        for r in recent_rows
+    ]
+
     return {
-        "total":      total,
-        "by_route":   by_route,
-        "avg_conf":   avg_conf,
-        "top_labels": top_labels,
+        "total":           total,
+        "by_route":        by_route,
+        "avg_conf":        avg_conf,
+        "top_labels":      top_labels,
+        "users_total":     users_total,
+        "users_today":     users_today,
+        "analyses_today":  analyses_today,
+        "recent_activity": recent_activity,
     }
 
 

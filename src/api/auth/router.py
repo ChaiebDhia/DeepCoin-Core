@@ -45,8 +45,9 @@ from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import desc, func
 
-from src.api.db.models import EmailVerification, RefreshToken, User, UserRole, UserStatus
+from src.api.db.models import Classification, EmailVerification, RefreshToken, User, UserRole, UserStatus
 from src.api.db.audit  import client_ip, write_audit
 from src.api.db.session import get_db
 from src.api.auth.utils import (
@@ -576,6 +577,185 @@ async def me(current_user: User = Depends(get_current_user)) -> UserProfile:
     Used by the frontend to populate the account menu and check email_verified status.
     """
     return _profile(current_user)
+
+
+# ── GET /auth/me/stats ────────────────────────────────────────────────────────
+
+@router.get(
+    "/me/stats",
+    summary="Personal statistics for the authenticated user",
+)
+async def get_my_stats(
+    current_user: User          = Depends(get_current_user),
+    db:           AsyncSession  = Depends(get_db),
+) -> dict:
+    """
+    Return the current user's own aggregate statistics.
+
+    WHAT:
+        total_analyses — total classifications submitted by this user
+        by_route       — {historian, validator, investigator, unknown}
+        avg_conf       — average confidence across their analyses (0.0–1.0)
+        top_label      — most-classified coin type with count
+        recent         — last 5 analyses (newest first)
+
+    WHY separate from /api/admin/stats:
+        Admin stats aggregate across ALL users and require a privileged role.
+        This endpoint is scoped to the caller's own data — accessible to every
+        authenticated user regardless of role. A regular analyst can see their
+        personal progress without seeing other users' data.
+
+    ACCESS: any authenticated user (own data only).
+    """
+    user_id = current_user.id
+
+    # ── route distribution ────────────────────────────────────────────────────
+    route_q = (
+        select(Classification.route_taken, func.count(Classification.id).label("n"))
+        .where(Classification.user_id == user_id)
+        .group_by(Classification.route_taken)
+    )
+    rows = (await db.execute(route_q)).all()
+    by_route: dict[str, int] = {"historian": 0, "validator": 0, "investigator": 0, "unknown": 0}
+    total = 0
+    for route_name, n in rows:
+        key = route_name if route_name in by_route else "unknown"
+        by_route[key] = n
+        total += n
+
+    # ── average confidence ────────────────────────────────────────────────────
+    avg_q   = (
+        select(func.avg(Classification.confidence))
+        .where(Classification.user_id == user_id)
+    )
+    avg_val  = (await db.execute(avg_q)).scalar_one_or_none()
+    avg_conf = round(float(avg_val), 4) if avg_val is not None else 0.0
+
+    # ── top label for this user ───────────────────────────────────────────────
+    top_q = (
+        select(Classification.label, func.count(Classification.id).label("n"))
+        .where(Classification.user_id == user_id)
+        .group_by(Classification.label)
+        .order_by(desc(func.count(Classification.id)))
+        .limit(1)
+    )
+    top_row = (await db.execute(top_q)).first()
+    top_label = {"label": top_row[0], "count": top_row[1]} if top_row else None
+
+    # ── last 5 analyses ───────────────────────────────────────────────────────
+    recent_q = (
+        select(Classification)
+        .where(Classification.user_id == user_id)
+        .order_by(desc(Classification.timestamp))
+        .limit(5)
+    )
+    recent_rows = (await db.execute(recent_q)).scalars().all()
+    recent = [
+        {
+            "id":          r.id,
+            "label":       r.label,
+            "confidence":  round(r.confidence, 4) if r.confidence is not None else None,
+            "route_taken": r.route_taken,
+            "timestamp":   r.timestamp.isoformat() if r.timestamp else None,
+        }
+        for r in recent_rows
+    ]
+
+    return {
+        "total_analyses": total,
+        "by_route":        by_route,
+        "avg_conf":        avg_conf,
+        "top_label":       top_label,
+        "recent":          recent,
+    }
+
+
+# ── GET /auth/me/stats ────────────────────────────────────────────────────────
+
+@router.get(
+    "/me/stats",
+    summary="Personal statistics for the authenticated user",
+)
+async def me_stats(
+    current_user: User          = Depends(get_current_user),
+    db:           AsyncSession  = Depends(get_db),
+) -> dict:
+    """
+    WHAT:
+        Returns per-user aggregate statistics for the personal dashboard.
+
+        Fields returned:
+            total_analyses — total classifications submitted by this user
+            by_route       — {historian, validator, investigator, unknown}
+            avg_conf       — average confidence across all submissions
+            top_label      — most-classified coin type (label string + count)
+            recent         — last 5 analyses (id, label, confidence, route, timestamp)
+
+    WHY a separate endpoint from /admin/stats:
+        The admin stats endpoint aggregates ACROSS ALL USERS and requires the
+        admin/curator role. This endpoint is scoped strictly to the current
+        user's own data — any authenticated user can call it with no privilege
+        check. Separating them keeps the access model explicit and testable.
+    """
+    # ── route distribution for this user ───────────────────────────────────
+    route_q = (
+        select(Classification.route_taken, func.count(Classification.id).label("n"))
+        .where(Classification.user_id == current_user.id)
+        .group_by(Classification.route_taken)
+    )
+    rows = (await db.execute(route_q)).all()
+    by_route: dict[str, int] = {"historian": 0, "validator": 0, "investigator": 0, "unknown": 0}
+    total = 0
+    for route_name, n in rows:
+        key = route_name if route_name in by_route else "unknown"
+        by_route[key] = n
+        total += n
+
+    # ── average confidence for this user ───────────────────────────────────
+    avg_q   = (
+        select(func.avg(Classification.confidence))
+        .where(Classification.user_id == current_user.id)
+    )
+    avg_val  = (await db.execute(avg_q)).scalar_one_or_none()
+    avg_conf = round(float(avg_val), 4) if avg_val is not None else 0.0
+
+    # ── top coin label for this user ────────────────────────────────────────
+    top_q = (
+        select(Classification.label, func.count(Classification.id).label("n"))
+        .where(Classification.user_id == current_user.id)
+        .group_by(Classification.label)
+        .order_by(desc(func.count(Classification.id)))
+        .limit(1)
+    )
+    top_row = (await db.execute(top_q)).first()
+    top_label = {"label": top_row[0], "count": top_row[1]} if top_row else None
+
+    # ── last 5 analyses for this user ──────────────────────────────────────
+    recent_q = (
+        select(Classification)
+        .where(Classification.user_id == current_user.id)
+        .order_by(desc(Classification.timestamp))
+        .limit(5)
+    )
+    recent_rows = (await db.execute(recent_q)).scalars().all()
+    recent = [
+        {
+            "id":          r.id,
+            "label":       r.label,
+            "confidence":  round(r.confidence, 4) if r.confidence is not None else None,
+            "route_taken": r.route_taken,
+            "timestamp":   r.timestamp.isoformat() if r.timestamp else None,
+        }
+        for r in recent_rows
+    ]
+
+    return {
+        "total_analyses": total,
+        "by_route":       by_route,
+        "avg_conf":       avg_conf,
+        "top_label":      top_label,
+        "recent":         recent,
+    }
 
 
 # ── POST /auth/forgot-password ────────────────────────────────────────────────

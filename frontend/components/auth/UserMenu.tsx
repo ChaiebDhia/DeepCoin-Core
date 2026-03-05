@@ -26,7 +26,7 @@ import { useState, useRef, useEffect } from "react";
 import { useSession, signOut }         from "next-auth/react";
 import Link                            from "next/link";
 import { motion, AnimatePresence }     from "framer-motion";
-import { LogOut, ChevronDown, ShieldCheck, Coins, History } from "lucide-react";
+import { LogOut, ChevronDown, ShieldCheck, Coins, History, LayoutDashboard } from "lucide-react";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -204,6 +204,15 @@ export function UserMenu() {
               >
                 <History size={15} />
                 My History
+              </Link>
+              <Link
+                href="/dashboard"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-[var(--surface-2)] transition-colors"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                <LayoutDashboard size={15} />
+                My Dashboard
               </Link>
             </div>
 

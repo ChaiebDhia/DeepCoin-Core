@@ -931,3 +931,19 @@ export async function getAdminStats(): Promise<import("@/types/api").AdminStatsR
   const { data } = await apiClient.get<import("@/types/api").AdminStatsResponse>("/admin/stats");
   return data;
 }
+
+/**
+ * GET /auth/me/stats — personal statistics for the currently-authenticated user.
+ *
+ * WHAT: Returns the current user's own aggregate stats (total analyses, route
+ *       breakdown, avg confidence, top label, last 5 analyses).
+ * WHY separate from getAdminStats: The admin endpoint aggregates across ALL users
+ *     and requires a privileged role. This endpoint is scoped to the caller's own
+ *     data and is accessible to every authenticated user.
+ */
+export async function getUserStats(): Promise<import("@/types/api").UserStatsResponse> {
+  // Uses classifyApiClient (direct to FastAPI) — same pattern as classify POST
+  // to avoid Turbopack reverse-proxy timeout on first cold call.
+  const { data } = await classifyApiClient.get<import("@/types/api").UserStatsResponse>("/auth/me/stats");
+  return data;
+}

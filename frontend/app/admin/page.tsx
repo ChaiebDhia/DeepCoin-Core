@@ -39,7 +39,7 @@ import {
   CheckCircle, AlertTriangle, XCircle, BarChart3,
   BookOpen, Shield, Mail, Download, UserCheck, MessageSquareWarning,
   Search, ChevronLeft, ChevronRight, LayoutDashboard, Users, Trash2,
-  FileBarChart2, ThumbsDown, UserCog,
+  FileBarChart2, ThumbsDown, UserCog, TrendingUp, Calendar, Wifi,
 } from "lucide-react";
 
 import {
@@ -47,7 +47,7 @@ import {
   getAdminUsers, updateUserRole, updateUserStatus, deleteAdminUser,
   getAdminStats,
 } from "@/lib/api";
-import type { HistorySummary, FeedbackItem, AdminAnalysisItem, AdminUserItem, AdminStatsResponse } from "@/types/api";
+import type { HistorySummary, FeedbackItem, AdminAnalysisItem, AdminUserItem, AdminStatsResponse, AdminStatsActivity } from "@/types/api";
 
 // -- Types -------------------------------------------------------------------
 
@@ -212,20 +212,69 @@ function OverviewTab({
   });
 
   const { data: stats, isError: statsError, refetch: statsRefetch } = useQuery<AdminStatsResponse>({
-    queryKey:  ["admin", "stats"],
-    queryFn:   getAdminStats,
-    enabled:   isPrivileged && authed,
-    // WHY 60 s staleTime: route distribution changes slowly;
-    // avoids a redundant refetch every time the tab is re-focused.
-    staleTime: 60_000,
-    // WHY retry 1: admin/stats returns 401 if called too early (before
-    // SessionSync sets _authToken). One retry is enough to recover;
-    // beyond that it’s a real auth problem best surfaced to the user.
-    retry:     1,
+    queryKey:        ["admin", "stats"],
+    queryFn:         getAdminStats,
+    enabled:         isPrivileged && authed,
+    // WHY 30 s refetchInterval: live activity feed + today KPIs refresh
+    // regularly so admins see new analyses as they arrive.
+    refetchInterval: 30_000,
+    staleTime:       30_000,
+    retry:           1,
   });
 
   return (
     <div className="space-y-6">
+      {/* KPI row — live user + activity counters, polls every 30 s */}
+      {isPrivileged && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {[
+            {
+              icon: Users,
+              label: "Total Users",
+              value: stats?.users_total?.toLocaleString() ?? "—",
+              sub:   "registered accounts",
+              color: "#8b5cf6",
+            },
+            {
+              icon: Calendar,
+              label: "New Today",
+              value: stats?.users_today?.toLocaleString() ?? "—",
+              sub:   "registered today (UTC)",
+              color: "#10b981",
+            },
+            {
+              icon: TrendingUp,
+              label: "Analyses Today",
+              value: stats?.analyses_today?.toLocaleString() ?? "—",
+              sub:   "coins analysed today (UTC)",
+              color: "#3b82f6",
+            },
+          ].map(({ icon: Icon, label, value, sub, color }) => (
+            <div
+              key={label}
+              className="rounded-xl border p-5 flex items-center gap-4"
+              style={{ borderColor: "var(--border)", backgroundColor: "var(--surface-1)" }}
+            >
+              <div
+                className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+                style={{ backgroundColor: `${color}22` }}
+              >
+                <Icon size={18} style={{ color }} />
+              </div>
+              <div>
+                <p className="text-2xl font-black tabular-nums leading-none" style={{ color }}>
+                  {value}
+                </p>
+                <p className="text-[11px] font-semibold mt-1" style={{ color: "var(--text-primary)" }}>
+                  {label}
+                </p>
+                <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>{sub}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Health + Stats + Route Distribution */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
 
@@ -421,6 +470,77 @@ function OverviewTab({
           </p>
         )}
       </div>
+
+      {/* Live Activity Feed — last 5 analyses across all users, polls every 30 s */}
+      {isPrivileged && (
+        <div
+          className="rounded-xl border"
+          style={{ borderColor: "var(--border)", backgroundColor: "var(--surface-1)" }}
+        >
+          <div
+            className="flex items-center gap-2 px-5 py-3.5 border-b"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <Wifi size={14} style={{ color: "#22c55e" }} />
+            <span className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>
+              Live Activity Feed
+            </span>
+            <span
+              className="ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold animate-pulse"
+              style={{ backgroundColor: "rgba(34,197,94,0.18)", color: "#22c55e" }}
+            >
+              LIVE
+            </span>
+            <span className="ml-auto text-[10px]" style={{ color: "var(--text-muted)" }}>
+              refreshes every 30 s
+            </span>
+          </div>
+          {stats?.recent_activity?.length ? (
+            <div>
+              {stats.recent_activity.map((item) => {
+                const rc = routeColor(item.route_taken);
+                return (
+                  <div
+                    key={item.id}
+                    className="flex items-center justify-between px-5 py-3 border-b last:border-0 text-xs"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold shrink-0"
+                        style={{ backgroundColor: rc.bg, color: rc.text }}
+                      >
+                        {item.route_taken}
+                      </span>
+                      <span className="font-mono truncate" style={{ color: "var(--text-secondary)" }}>
+                        {item.label}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0 ml-2">
+                      <span className="tabular-nums" style={{ color: "var(--text-muted)" }}>
+                        {item.confidence !== null
+                          ? `${Math.round(item.confidence * 100)}%`
+                          : "—"}
+                      </span>
+                      <span style={{ color: "var(--text-muted)" }}>{item.user_email}</span>
+                      <span style={{ color: "var(--text-muted)" }}>
+                        {item.timestamp
+                          ? new Date(item.timestamp).toLocaleTimeString([],
+                              { hour: "2-digit", minute: "2-digit" })
+                          : ""}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="px-5 py-8 text-xs text-center" style={{ color: "var(--text-muted)" }}>
+              {stats ? "No analyses yet." : "Loading…"}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Quick links */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
