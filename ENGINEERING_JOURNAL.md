@@ -36352,3 +36352,594 @@ services:
 *Section 60: Complete file map  27 backend files, 34 frontend files.*
 *Section 61: Security audit checklist  auth, input validation, HTTP headers, infrastructure.*
 *Section 62: Full stack runbook  start commands, test command, Docker roadmap.*
+
+---
+
+## Section 63  Dashboard "Member Since" Fix (auth chain `created_at` propagation)
+
+**Date**: March 2026 | **Commit**: `8eb9b3c`
+
+### 63.1 Problem
+
+The `/dashboard` KPI tile showed `" Member Since"` for every user. The `formatDate()` helper returned `""` when its argument was `undefined`. The root cause was a gap in the NextAuth v5 JWT cookie pipeline: `created_at` existed in the FastAPI `UserProfile` schema but was never carried through the authorize  jwt  session chain into `useSession()`.
+
+### 63.2 Root Cause Analysis
+
+**Auth chain audit:**
+
+| Step | File | Issue |
+|------|------|-------|
+| 1. FastAPI login | `src/api/auth/router.py` | `UserProfile.created_at` present   |
+| 2. authorize() | `frontend/auth.config.ts` | Type annotation and return object  `created_at` **missing** |
+| 3. jwt callback | `frontend/auth.config.ts` | Not written to `token`  **missing** |
+| 4. session callback | `frontend/auth.config.ts` | Not written to `session.user`  **missing** |
+| 5. TypeScript types | `frontend/types/next-auth.d.ts` | `created_at` not in Session.user / User / JWT  **missing** |
+| 6. Dashboard page | `frontend/app/dashboard/page.tsx` | Reads `user.created_at`  already correct |
+
+Every hop (step 25) was dropping `created_at`. The field vanished before it ever reached `useSession()`.
+
+### 63.3 Fix  `frontend/auth.config.ts`
+
+Three independent changes inside the auth callbacks:
+
+**a) `authorize()`  add to type annotation and return object:**
+```typescript
+// Type annotation for the raw FastAPI response
+const data = await res.json() as {
+  user: {
+    id: string; email: string; name: string; role: string;
+    status: string; created_at: string;   //  ADDED
+  };
+  access_token: string; token_type: string;
+};
+
+// Return for jwt callback
+return {
+  id:           data.user.id,
+  email:        data.user.email,
+  name:         data.user.name,
+  role:         data.user.role,
+  status:       data.user.status,
+  created_at:   data.user.created_at,   //  ADDED
+  accessToken:  data.access_token,
+};
+```
+
+**b) `jwt` callback  write to token:**
+```typescript
+if (user) {
+  //  existing fields 
+  token.created_at = (user as { created_at?: string }).created_at ?? undefined;  //  ADDED
+}
+```
+
+**c) `session` callback  write to session.user:**
+```typescript
+session.user.created_at = token.created_at as string | undefined;  //  ADDED
+```
+
+### 63.4 Fix  `frontend/types/next-auth.d.ts`
+
+`created_at?: string` added to all three module-augmentation interfaces:
+
+```typescript
+declare module "next-auth" {
+  interface Session {
+    user: {
+      id: string; email: string; name: string; role: string;
+      status: string; accessToken: string;
+      created_at?: string;   //  ADDED
+    }
+  }
+
+  interface User {
+    id: string; role: string; status: string; accessToken: string;
+    created_at?: string;   //  ADDED
+  }
+}
+
+declare module "next-auth/jwt" {
+  interface JWT extends DefaultJWT {
+    id?: string; role?: string; status?: string; accessToken?: string;
+    created_at?: string;   //  ADDED
+  }
+}
+```
+
+### 63.5 Engineering Insight
+
+**Why does the full chain need updating?** NextAuth v5 carries JWT data in an encrypted HTTP-only cookie. When a request arrives, it:
+1. Decrypts the cookie  raw `JWT` object
+2. Passes only the fields listed in the `session` callback into `session.user`
+3. Returns `session.user` via `useSession()` and `auth()`
+
+If you add a field to step 1 but not step 2, the session object never sees it. If you add it to step 2 but not the TypeScript interface, the compiler rejects `session.user.created_at`. All four locations (authorize, jwt, session, types) must move in lockstep.
+
+**Result**: Dashboard now shows formatted join dates like `"February 3, 2026"` for all users, including those already in the database because `created_at` exists in FastAPI's `users` table.
+
+---
+
+## Section 64  Chat Memory Fix (non-numismatic guard bypass for conversation history)
+
+**Date**: March 2026 | **Commit**: `8eb9b3c`
+
+### 64.1 Problem
+
+When a user tried to build on a previous answer  asking follow-up questions like "tell me more", "elaborate on the obverse", "what about the weight?"  the chat API rejected the request and returned:
+
+```json
+{"detail": "DeepCoin Chat answers questions about coins, numismatics, and archaeology."}
+```
+
+The conversation had no memory of the first exchange; every follow-up was treated as an entirely new, off-topic query.
+
+### 64.2 Root Cause
+
+`src/api/routes/chat.py` contains `_NUMISMATIC_RE`  a compiled regex that checks whether a query contains numismatic keywords:
+
+```python
+_NUMISMATIC_RE = re.compile(
+    r"coin|numismat|ancient|roman|greek|denarius|drachm|obol|mint|emperor|"
+    r"obverse|reverse|legend|aureus|sestertius|byzantin|medieval|archaeolog",
+    re.IGNORECASE,
+)
+```
+
+This guard fires at **two** places:
+
+**Location 1  `_run_chat()` (sync, non-streaming):** line 241
+```python
+if not _NUMISMATIC_RE.search(query):
+    raise HTTPException(status_code=400, detail="DeepCoin Chat answers ")
+```
+
+**Location 2  `_build_ctx()` (async streaming):** line 671
+```python
+if not _NUMISMATIC_RE.search(body.query):
+    raise HTTPException(status_code=400, detail="DeepCoin Chat answers ")
+```
+
+Follow-up questions like `"tell me more"` or `"what about the obverse?"` frequently contain no numismatic keywords, so both guards fire regardless of the rich conversation context already established.
+
+### 64.3 Fix
+
+Add a conversation-history check before triggering the guard. If `conversation_history` is non-empty, the user is clearly continuing an established numismatic conversation  bypass the keyword check entirely:
+
+**Location 1:**
+```python
+# BEFORE:
+if not _NUMISMATIC_RE.search(query):
+# AFTER:
+if not _NUMISMATIC_RE.search(query) and not conversation_history:
+```
+
+**Location 2:**
+```python
+# BEFORE:
+if not _NUMISMATIC_RE.search(body.query):
+# AFTER:
+if not _NUMISMATIC_RE.search(body.query) and not body.conversation_history:
+```
+
+`conversation_history` is a `list[ChatMessage]` sent by the frontend  it holds up to the last 20 messages from the current session. An empty list means a fresh first query; a non-empty list means a continuation.
+
+### 64.4 Engineering Insight
+
+**The two-condition AND gate pattern** is a classic "short-circuit safety" technique:
+
+```
+Block request IF:
+  1. The new query has zero numismatic keywords  (probably off-topic)
+  AND
+  2. There is no established conversation context (new conversation)
+```
+
+If either condition is false, the pipeline continues:
+- If the query contains "denarius"  condition 1 is false  allow (first message about coins)
+- If conversation has 4 prior messages  condition 2 is false  allow (follow-up, regardless of keywords)
+
+This strictly respects the anti-spam intent of the guard while enabling coherent multi-turn numismatic conversations. A user cannot start a fresh conversation saying "tell me more" (empty history, no keywords  blocked), but once they've asked about a coin type, all follow-ups flow freely.
+
+**Backend context propagation**: The backend caps conversation_history at `[-6:]` (last 6 messages) before injecting into the LLM prompt, tuned for ~2,500 token budget on gemma3:4b. The frontend sends up to 20 messages (messagesRef.current.slice(-20)) giving room for the backend to select the most relevant window.
+
+---
+
+## Section 65  Google/Scholar Always Visible (userQuery restoration on session reload)
+
+**Date**: March 2026 | **Commit**: `8eb9b3c`
+
+### 65.1 Problem
+
+The `GoogleSearchCTA` component (Google + Google Scholar search links) appeared correctly during a live conversation, but **disappeared after page reload**  even though the conversation was restored from `sessionStorage`. The links were missing for every restored assistant message.
+
+### 65.2 Root Cause
+
+`GoogleSearchCTA` is rendered conditionally:
+```tsx
+{msg.userQuery && !msg.error && <GoogleSearchCTA query={msg.userQuery} />}
+```
+
+`userQuery` is a **frontend-only field** on the `Message` type  it is never stored in the backend DB, only in the in-memory React state during a live session. When `handleSelectSession` restored messages from a stored session (`dc_chat_sid` cache), it rebuilt the `Message[]` array but forgot to compute `userQuery`:
+
+```tsx
+// BEFORE (broken restore):
+const restored: Message[] = detail.messages.map((m) => ({
+  id:       crypto.randomUUID(),
+  role:     m.role as Role,
+  content:  m.content,
+  sources:  m.sources as ChatSource[] | undefined,
+  provider: m.provider,
+  //  userQuery missing entirely
+}));
+```
+
+Every restored assistant message had `userQuery: undefined`  `GoogleSearchCTA` hidden.
+
+### 65.3 Fix
+
+Reconstruct `userQuery` from the **preceding user message** in the detail array, using an indexed reverse-scan:
+
+```tsx
+const restored: Message[] = detail.messages.map((m, idx, arr) => {
+  const base: Message = {
+    id:       crypto.randomUUID(),
+    role:     m.role as Role,
+    content:  m.content,
+    sources:  m.sources as ChatSource[] | undefined,
+    provider: m.provider,
+  };
+
+  if (m.role === "assistant") {
+    // Find the most recent user message BEFORE this position
+    const prevUser = [...arr].slice(0, idx).reverse().find(r => r.role === "user");
+    return {
+      ...base,
+      // Prefer the full user turn; fall back to first 100 chars of the answer
+      userQuery: prevUser?.content ?? m.content.substring(0, 100),
+    };
+  }
+  return base;
+});
+```
+
+### 65.4 Why This Works
+
+In a well-formed chat conversation, messages alternate: `user  assistant  user  assistant  `. For every assistant message, the immediately preceding user message is at index `idx - 1` (or further back if there were consecutive assistant turns). The reverse-scan `.reverse().find(r => r.role === "user")` is a robust pattern that handles any message ordering without relying on index arithmetic assumptions.
+
+The fallback `m.content.substring(0, 100)` ensures that even a malformed session (assistant message with no preceding user message) still renders the Google links  using the first 100 characters of the answer as the search query.
+
+### 65.5 Engineering Insight
+
+**Frontend-only state reconstruction pattern**: When a React application persists conversations externally (sessionStorage, database, URL), rich in-memory UI state that was computed at generation time needs to be *re-derived* on restore  it cannot be stored if the storage schema is fixed.
+
+The correct approach:
+1. **Identify all frontend-only fields** in the state shape (e.g., `userQuery`, `isStreaming`, `error`)
+2. **Classify each as**: derivable (can be re-computed from stored data) OR ephemeral (make sense only during live generation)
+3. **Re-derive all derivable fields** in the restore path, using the same logic that set them originally
+
+`userQuery` is *derivable* because the stored `messages` array includes all user turn content. `isStreaming` is *ephemeral* because a restored session is never actively streaming  it should always be `false` on restore.
+
+---
+
+## Section 66  Complete Auth Flow (resend verification, forgot password, reset password, verify email)
+
+**Date**: March 2026 | **Commit**: `8eb9b3c`
+
+### 66.1 Problem Statement
+
+The application had incomplete user account management. Specific gaps:
+
+| Gap | User Impact |
+|-----|------------|
+| No resend verification UI | Users stuck on "pending" status had no way to get a new email |
+| No forgot-password UI | Password loss = permanent account lockout |
+| No reset-password UI | Even if email arrived, the reset link led to a Next.js 404 |
+| No verify-email UI | Clicking the registration email link  404 |
+| Login error too minimal | "please verify your email" error had no action button |
+
+### 66.2 New Backend Endpoint  `POST /auth/resend-verification`
+
+**File**: `src/api/auth/router.py`
+
+```python
+@router.post("/resend-verification", response_model=MessageResponse)
+async def resend_verification(
+    body: ForgotPasswordRequest,   # reuses EmailStr schema
+    db:   AsyncSession = Depends(get_db),
+) -> MessageResponse:
+    """
+    POST /auth/resend-verification
+    Sends a fresh 48-hour verification token to an address that is still
+    pending. If the address is unknown or already active, the endpoint
+    returns 200 (privacy  no user enumeration).
+    """
+    result = await db.execute(select(User).where(User.email == body.email))
+    user   = result.scalar_one_or_none()
+
+    if user and user.status == UserStatus.pending:
+        # Invalidate any prior tokens
+        await db.execute(
+            update(EmailVerification)
+            .where(EmailVerification.user_id == user.id, EmailVerification.used == False)
+            .values(used=True)
+        )
+        token  = secrets.token_urlsafe(48)
+        expiry = datetime.utcnow() + timedelta(hours=48)
+        db.add(EmailVerification(user_id=user.id, token=token, expires_at=expiry))
+        await db.commit()
+        await send_verification_email(user.email, user.name or user.email, token)
+        logger.info("resend_verification email=%s", user.email)
+
+    return MessageResponse(message="If that address is registered and unverified, a new email is on its way.")
+```
+
+**Key design decision**: Always return 200 even if the email is unknown or already active. This prevents **user enumeration attacks** where an attacker could probe which email addresses are registered.
+
+### 66.3 New Frontend API Helpers  `frontend/lib/api.ts`
+
+Four new typed functions (all via `classifyApiClient`  direct to FastAPI):
+
+```typescript
+/** POST /auth/forgot-password  initiates password reset flow */
+export async function forgotPassword(email: string): Promise<void> {
+  await classifyApiClient.post("/auth/forgot-password", { email });
+}
+
+/** POST /auth/reset-password  sets a new password from a one-time token */
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  await classifyApiClient.post("/auth/reset-password", { token, new_password: newPassword });
+}
+
+/** POST /auth/resend-verification  sends a fresh verification email */
+export async function resendVerification(email: string): Promise<void> {
+  await classifyApiClient.post("/auth/resend-verification", { email });
+}
+
+/** GET /auth/verify-email?token=xxx  one-time email verification */
+export async function verifyEmail(token: string): Promise<{ message: string }> {
+  const res = await classifyApiClient.get<{ message: string }>(
+    `/auth/verify-email?token=${encodeURIComponent(token)}`
+  );
+  return res.data;
+}
+```
+
+### 66.4 Login Page Improvements  `frontend/components/auth/LoginForm.tsx`
+
+Two additions to the existing login form:
+
+**a) "Forgot password?" link** (right side of the Password label row):
+```tsx
+<div className="flex items-center justify-between mb-1.5">
+  <label htmlFor="password" className="text-sm font-medium">Password</label>
+  <Link href="/forgot-password" className="text-xs" style={{ color: "var(--brand-gold)" }}>
+    Forgot password?
+  </Link>
+</div>
+```
+
+**b) Resend verification button** inside the error banner:
+```tsx
+const isPendingError = error?.includes("verify your email");
+
+{isPendingError && (
+  <button onClick={handleResend} disabled={resendLoading || resendSent}>
+    {resendSent
+      ? <><CheckCircle size={13} /> Sent! Check your inbox</>
+      : resendLoading ? "Sending" : "Resend verification email"
+    }
+  </button>
+)}
+```
+
+`handleResend()` calls `resendVerification(email)`, shows a 3-state button (idle / loading / sent), and provides immediate feedback without page navigation.
+
+### 66.5 Forgot Password Pages
+
+**Files**:
+- `frontend/app/forgot-password/page.tsx`  Server Component (metadata only)
+- `frontend/app/forgot-password/ForgotPasswordForm.tsx`  Client Component
+
+**User flow:**
+1. User navigates to `/forgot-password`
+2. Enters their email address and submits
+3. API calls `POST /auth/forgot-password` (always returns 200  no enumeration)
+4. Form transitions to an animated **success state**: 
+   - Green CheckCircle2 icon
+   - "Check your inbox" message
+   - Explanation that the link expires in 1 hour
+   - "Back to sign in" link
+
+**Success state transition** (Framer Motion AnimatePresence pattern):
+```tsx
+{!sent ? (
+  <motion.div key="form" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+    {/* email input + submit button */}
+  </motion.div>
+) : (
+  <motion.div key="success" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
+    {/* success card */}
+  </motion.div>
+)}
+```
+
+### 66.6 Reset Password Pages
+
+**Files**:
+- `frontend/app/reset-password/page.tsx`  Server Component (metadata only)
+- `frontend/app/reset-password/ResetPasswordForm.tsx`  Client Component
+
+**User flow:**
+1. User clicks the reset link in their email: `/reset-password?token=<tok>`
+2. `useSearchParams()` reads the token
+3. If no token  immediate error state with "Request a new link" button
+4. Password + Confirm Password inputs with show/hide toggle (single Eye/EyeOff button)
+5. Client-side validation: passwords must match
+6. On submit: calls `resetPassword(token, password)`  `POST /auth/reset-password`
+7. **Success**: animated transition to green card + 3-second auto-redirect to `/login`
+8. **Expired/invalid token** (HTTP 400): error card with "Request a new reset link" button
+
+**3-second countdown auto-redirect:**
+```tsx
+useEffect(() => {
+  if (!success) return;
+  const redirect = setTimeout(() => router.push("/login"), 3000);
+  return () => clearTimeout(redirect);
+}, [success, router]);
+```
+
+### 66.7 Email Verification Page
+
+**File**: `frontend/app/verify-email/page.tsx`  **Server Component**
+
+**Why a Server Component (not Client Component)?**
+
+The verification page is opened by clicking a link in an email. The verification action is a one-time, idempotent side effect  activating the user's account. Performing it at SSR render time (versus in a clientside `useEffect`) means:
+
+1. **No client-side JS required**  works even with JavaScript disabled
+2. **No loading flicker**  result (success or error) is in the initial HTML
+3. **Single round-trip**  the email link, the page render, and the account activation happen in one HTTP request to Next.js (which makes a second request to FastAPI server-side)
+
+**Implementation:**
+```typescript
+const FASTAPI_URL = process.env.AUTH_FASTAPI_URL ?? "http://127.0.0.1:8000";
+
+export default async function VerifyEmailPage({ searchParams }: PageProps) {
+  const { token } = await searchParams;
+
+  if (!token) { return <ErrorCard message="No verification token found." />; }
+
+  let ok = false, message = "";
+  try {
+    const res = await fetch(
+      `${FASTAPI_URL}/auth/verify-email?token=${encodeURIComponent(token)}`,
+      { cache: "no-store" }
+    );
+    const body = await res.json();
+    ok      = res.ok;
+    message = res.ok ? (body.message ?? "Email verified!") : (body.detail ?? "Verification failed.");
+  } catch {
+    message = "Could not reach the verification server. Please try again.";
+  }
+
+  return ok ? <SuccessCard message={message} /> : <ErrorCard message={message} />;
+}
+```
+
+**`cache: "no-store"`**: Critical  this must NOT be cached by Next.js or any CDN. Each token is single-use; if the first successful verification response were cached, a second click would show "success" even if FastAPI correctly rejects the re-use.
+
+**Result states:**
+
+| State | Icon | CTA |
+|-------|------|-----|
+| No token in URL | XCircle (red) | "Back to sign in" |
+| FastAPI returned 200 | CheckCircle2 (green) | "Sign in to your account" |
+| FastAPI returned 400/404 (expired/used) | XCircle (red) | "Request new verification link" |
+| Network error | XCircle (red) | "Back to sign in" |
+
+### 66.8 New Routes Summary
+
+| Route | Component Type | Purpose |
+|-------|---------------|---------|
+| `/forgot-password` | Client (Framer Motion) | Request password reset email |
+| `/reset-password?token=xxx` | Client (useSearchParams) | Set new password from token |
+| `/verify-email?token=xxx` | Server Component (fetch at SSR) | Activate account from token |
+
+### 66.9 Backend Endpoint Map (Updated)
+
+The auth router now exposes **9 endpoints**:
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/auth/register` | Create account (pending status) |
+| POST | `/auth/login` | Authenticate, return JWT |
+| GET | `/auth/verify-email?token=` | Activate account (one-time token) |
+| POST | `/auth/resend-verification` | Send fresh verification email |
+| POST | `/auth/forgot-password` | Send password reset email |
+| POST | `/auth/reset-password` | Set new password from token |
+| POST | `/auth/refresh-access-token` | Exchange refresh token for new access token |
+| POST | `/auth/logout` | Invalidate refresh token |
+| GET | `/auth/me` | Return current user profile |
+
+### 66.10 Security Properties
+
+| Property | Implementation |
+|----------|---------------|
+| No user enumeration | Forgot-password and resend-verification always return 200 |
+| One-time tokens | `used: bool` flag on each token; FastAPI marks used on success |
+| Token expiry | Verification: 48h. Password reset: 1h (backend). |
+| Token invalidation on reuse | New token request marks all prior unused tokens as used |
+| Expired token feedback | Frontend shows "Request a new reset link" on HTTP 400 |
+| Password hash on reset | `bcrypt.hash()` applied server-side; plaintext never stored |
+
+---
+
+## Section 67  Status After Commit `8eb9b3c`
+
+### 67.1 Completed This Session
+
+| # | Change | File(s) |
+|---|--------|---------|
+| 1 | `created_at` through full auth chain | `auth.config.ts`, `types/next-auth.d.ts` |
+| 2 | Non-numismatic guard bypass for chat history | `src/api/routes/chat.py` (2) |
+| 3 | `userQuery` restored for Google/Scholar links | `frontend/app/chat/page.tsx` |
+| 4 | `POST /auth/resend-verification` endpoint | `src/api/auth/router.py` |
+| 5 | 4 new auth API helpers | `frontend/lib/api.ts` |
+| 6 | Forgot-password + resend button in login form | `frontend/components/auth/LoginForm.tsx` |
+| 7 | `/forgot-password` complete flow | `forgot-password/page.tsx`, `ForgotPasswordForm.tsx` |
+| 8 | `/reset-password` complete flow | `reset-password/page.tsx`, `ResetPasswordForm.tsx` |
+| 9 | `/verify-email` SSR verification page | `verify-email/page.tsx` |
+
+### 67.2 Verify Build
+
+```powershell
+# Frontend type-check (should show EXIT:0)
+cd C:\Users\Administrator\deepcoin\frontend
+npx tsc --noEmit
+
+# Backend tests (should show 122/122 PASS)
+cd C:\Users\Administrator\deepcoin
+& .\venv\Scripts\Activate.ps1
+pytest tests/ -v --tb=short
+```
+
+### 67.3 Current Commit
+
+**Latest: `8eb9b3c`**  
+"feat: complete auth flow  dashboard created_at, chat memory, google/scholar restore, forgot-pwd/reset-pwd/verify-email pages, resend-verification endpoint"
+
+### 67.4 What's Complete
+
+| Layer | Status |
+|-------|--------|
+| 0  CNN Training |  EfficientNet-B3, 80.03% TTA accuracy |
+| 1  Inference Engine |  CLAHE, auto-crop, TTA, confidence calibration |
+| 2  Knowledge Base |  47,705 chunks across 9,541 types, BM25+vector+RRF |
+| 3  Agent System |  All 5 agents, 3 routes, graceful degradation |
+| 4  FastAPI Backend |  Auth (9 endpoints), rate-limiting, SQLite, audit log |
+| 5  Next.js Frontend |  Full application, 0 TS errors, complete auth UX |
+| 6  Docker |  Skeleton exists, not wired |
+| 7  Tests + CI/CD |  122 tests, GitHub Actions matrix (Py 3.11+3.12) |
+
+### 67.5 Priority: Layer 6  Docker Compose
+
+Next task is Docker Compose with 7 services:
+```yaml
+services:
+  backend:    # FastAPI (python:3.12-slim, gunicorn + uvicorn workers)
+  frontend:   # Next.js  (node:22-alpine, next start)
+  postgres:   # PostgreSQL 17  replaces SQLite
+  redis:      # Redis 7  result cache + session store
+  chromadb:   # ChromaDB  RAG vector DB
+  nginx:      # Nginx 1.27  reverse proxy, SSL termination
+  localstack: # LocalStack 3.x  AWS S3 simulation for PDF storage
+```
+
+---
+
+*Engineering Journal  Sections 6367 added. Commit `8eb9b3c`.*
+*Section 63: Dashboard created_at propagation  authorize  jwt  session.*
+*Section 64: Chat memory  non-numismatic guard bypass for conversation history.*
+*Section 65: Google/Scholar always visible  userQuery reconstruction on restore.*
+*Section 66: Complete auth flow  resend-verification, forgot-password, reset-password, verify-email.*
+*Section 67: Status snapshot and Layer 6 Docker roadmap.*
