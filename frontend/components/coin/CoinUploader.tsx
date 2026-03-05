@@ -315,12 +315,13 @@ export function CoinUploader() {
 
   // Abort any in-flight request when the component unmounts
   useEffect(() => {
-    // Reset store to idle on mount — ensures the AgentPipeline fullscreen modal
-    // (fixed inset-0 z-50) is never shown when the user navigates to /analyse
-    // after abandoning an analysis mid-way on another page. Without this, the
-    // phase stays "processing" in Zustand (module-level singleton), the modal
-    // renders immediately on mount, and the page appears completely frozen.
-    reset();
+    // Only reset if pipeline is stuck mid-processing — NOT when phase=="done"
+    // so that navigating away and back preserves the completed analysis result.
+    // Without this guard, returning from /chat or /history would wipe the result
+    // the user just got and show the empty drag-drop uploader again.
+    if (phase === "processing") {
+      reset();
+    }
     return () => { abortRef.current?.abort(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

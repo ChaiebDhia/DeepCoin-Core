@@ -195,8 +195,13 @@ app = FastAPI(
     # docs_url uses /api/docs so the Next.js proxy rewrite
     # (/api/* → http://127.0.0.1:8000/api/*) forwards it correctly.
     # Using /docs would be blocked because Next.js handles /docs itself.
-    docs_url    = None if _env == "production" else "/api/docs",
-    redoc_url   = None if _env == "production" else "/api/redoc",
+    docs_url      = None if _env == "production" else "/api/docs",
+    redoc_url     = None if _env == "production" else "/api/redoc",
+    # openapi_url must share the /api/ prefix so the Next.js proxy forwards it.
+    # Default is /openapi.json — the Swagger UI would fail to fetch it because
+    # Next.js serves /openapi.json itself (returns 404).  /api/openapi.json is
+    # forwarded to FastAPI by the afterFiles rewrite in next.config.ts.
+    openapi_url   = None if _env == "production" else "/api/openapi.json",
 )
 
 # \u2500\u2500 SlowAPI rate-limit exception handler \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500

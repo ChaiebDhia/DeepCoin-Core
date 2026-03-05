@@ -67,8 +67,8 @@ type TabId = "overview" | "analyses" | "corrections" | "subscribers" | "users" |
 
 // -- Constants ---------------------------------------------------------------
 
-const PAGE_SIZE    = 20;
-const SUB_PER_PAGE = 25;
+const PAGE_SIZE    = 15;
+const SUB_PER_PAGE = 15;
 
 const ROLE_COLORS: Record<string, string> = {
   admin:   "#d4a853",
@@ -1050,7 +1050,7 @@ function UsersTab({ sessionStatus }: { sessionStatus: string }) {
   const [page,    setPage]    = useState(1);
   const [search,  setSearch]  = useState("");
   const [dSearch, setDSearch] = useState("");
-  const PAGE_LIMIT            = 20;
+  const PAGE_LIMIT            = 15;
 
   // Debounce search  500 ms
   useEffect(() => {

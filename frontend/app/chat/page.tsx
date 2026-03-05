@@ -592,7 +592,7 @@ function ChatPageInner() {
     // We use messagesRef (not messages state) to avoid stale closures without
     // adding messages to this callback's dependency array.
     const priorHistory = messagesRef.current
-      .slice(-6)   // last 3 exchanges = 6 messages
+      .slice(-20)  // last 10 exchanges = 20 messages — enough for multi-turn context
       .map(m => ({ role: m.role, content: m.content }));
 
     const userMsg: Message = { id: crypto.randomUUID(), role: "user" as const, content: q };
@@ -746,6 +746,9 @@ function ChatPageInner() {
         ? rawTop5.split(",").map((s) => s.trim()).filter(Boolean)
         : [];
       handleSubmit(q, top5Labels);
+      // Remove ?q= and ?top5= from the URL so a page reload does NOT re-fire
+      // the same query (which would duplicate the first message every refresh).
+      window.history.replaceState({}, "", window.location.pathname);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);

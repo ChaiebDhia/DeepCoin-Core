@@ -73,8 +73,8 @@ class ContactRequest(BaseModel):
 
     name:    str = Field(..., min_length=1, max_length=120)
     email:   str = Field(..., min_length=3, max_length=254)
-    subject: str = Field(..., min_length=1, max_length=200)
-    message: str = Field(..., min_length=10, max_length=4000)
+    subject: str = Field(default="General", min_length=1, max_length=200)
+    message: str = Field(..., min_length=1, max_length=4000)
 
 
 # ── Router ────────────────────────────────────────────────────────────────────

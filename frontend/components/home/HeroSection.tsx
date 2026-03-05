@@ -128,7 +128,7 @@ export function HeroSection() {
           }}
         >
           <span className="w-1.5 h-1.5 rounded-full bg-[var(--brand-gold)] animate-pulse" />
-          PFE 2026 · ESPRIT School of Engineering × YEBNI · Tunisia
+          PFE 2026 · Dhia Chaieb · ESPRIT × YEBNI, Tunisia
         </motion.div>
 
         {/* Headline ── shimmer on "Identify any" */}
