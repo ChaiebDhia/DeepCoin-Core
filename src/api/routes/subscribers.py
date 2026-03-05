@@ -255,6 +255,48 @@ async def list_subscribers() -> list[SubscriberRecord]:
     ]
 
 
+@router.delete(
+    "/{email:path}",
+    status_code=204,
+    summary="Delete a subscriber by email (admin-only)",
+    description=(
+        "Remove a subscriber from the waitlist. "
+        "URL-encode the @ sign (%40) when calling from the browser. "
+        "Requires X-API-Key header."
+    ),
+    dependencies=[Depends(require_api_key)],
+)
+async def delete_subscriber(email: str) -> None:
+    """
+    Remove a single subscriber record from data/subscribers.json.
+
+    WHAT: Finds the record whose email matches (case-insensitive after
+          normalisation) and removes it from the JSON list, then
+          overwrites the file atomically under the threading lock.
+
+    WHY email as path param (not query param):
+        REST convention: the resource is the subscriber identified by
+        their email. DELETE /api/subscribers/{email} maps cleanly to
+        "delete this resource".  The :path modifier lets FastAPI handle
+        the encoded @ character in the URL without a routing collision.
+
+    ENCODING NOTE: callers must percent-encode the @ sign as %40, e.g.
+        DELETE /api/subscribers/user%40example.com
+
+    ACCESS: requires X-API-Key (same as GET /api/subscribers).
+    """
+    normalised = email.strip().lower()
+    with _lock:
+        records = _load_records()
+        before  = len(records)
+        records = [r for r in records if r.get("email", "").lower() != normalised]
+        if len(records) == before:
+            from fastapi import HTTPException  # local import to avoid circular
+            raise HTTPException(status_code=404, detail="Subscriber not found.")
+        _save_records(records)
+    logger.info("Subscriber deleted by admin: %s", normalised)
+
+
 @router.post("", response_model=SubscribeResponse, status_code=200)
 async def subscribe(req: SubscribeRequest) -> SubscribeResponse:
     """

@@ -532,6 +532,29 @@ function ChatPageInner() {
       .catch(() => setSessionsLoaded(true));
   }, [sidebarOpen, isAuthed, sessionsLoaded]);
 
+  // Auto-restore the last chat session on F5 / hard-reload.
+  //
+  // WHY sessionStorage and not module-level _chatCache:
+  //   _chatCache is a JS module constant — it survives React unmount/remount
+  //   (e.g. navigating away and back) but is wiped on a full browser refresh
+  //   because the JS module is re-executed from scratch.  sessionStorage is
+  //   persisted by the browser across F5 refreshes in the same tab, making it
+  //   the right primitive to bridge this gap.
+  //
+  //   Only the session ID (a UUID string) is stored — the full message list is
+  //   re-fetched from the DB so we always get the up-to-date content.
+  useEffect(() => {
+    if (!isAuthed || _chatCache.messages.length > 0) return;
+    const savedId = sessionStorage.getItem("dc_chat_sid");
+    if (!savedId) return;
+    handleSelectSession(savedId).catch(() => {
+      // Session was deleted — remove the stale id so we don't retry
+      sessionStorage.removeItem("dc_chat_sid");
+    });
+  // handleSelectSession is created with useCallback([]) and is stable.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthed]);
+
   // Open sidebar when a saved session is loaded
   const handleSelectSession = useCallback(async (id: string) => {
     setLoadingSession(true);
@@ -539,6 +562,8 @@ function ChatPageInner() {
       const detail = await getChatSession(id);
       currentSessionId.current = id;
       _chatCache.currentSessionId = id;
+      // Persist across F5 — see auto-restore effect above
+      sessionStorage.setItem("dc_chat_sid", id);
       const restored: Message[] = detail.messages.map(m => ({
         id:       crypto.randomUUID(),
         role:     m.role,
@@ -572,6 +597,7 @@ function ChatPageInner() {
   const handleNewChat = useCallback(() => {
     currentSessionId.current = null;
     _chatCache.currentSessionId = null;
+    sessionStorage.removeItem("dc_chat_sid");  // user explicitly started fresh
     _chatCache.messages = [];
     _chatCache.input    = "";
     setMessages([]);
@@ -711,6 +737,7 @@ function ChatPageInner() {
           });
           currentSessionId.current = created.id;
           _chatCache.currentSessionId = created.id;
+          sessionStorage.setItem("dc_chat_sid", created.id);
           // Prepend to sidebar list (if already loaded)
           setSessions(prev => [
             { id: created.id, title: created.title, created_at: created.created_at, updated_at: created.updated_at, msg_count: 2 },
@@ -855,7 +882,12 @@ function ChatPageInner() {
             ? <EmptyState onSelect={handleSubmit} />
             : (<>
                 {messages.map(msg => <MessageBubble key={msg.id} msg={msg} />)}
-                {loading && <TypingIndicator />}
+                {/* Show the three-dot TypingIndicator ONLY before the first
+                    token arrives. Once a streaming Message exists in the array,
+                    MessageBubble already renders the bot avatar + blinking
+                    cursor — showing TypingIndicator on top creates two bot
+                    icons simultaneously. */}
+                {loading && !messages.some(m => m.streaming) && <TypingIndicator />}
               </>)}
         </div>
 

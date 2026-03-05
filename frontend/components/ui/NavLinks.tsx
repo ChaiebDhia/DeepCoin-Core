@@ -33,8 +33,10 @@ const baseCls =
   "px-3 py-1.5 rounded-md text-sm transition-all relative";
 const inactiveCls =
   "text-[var(--text-secondary)] hover:text-white hover:bg-[var(--surface-2)]";
+/** Active: white bold text + subtle surface background so it's visually
+ *  unmistakable even if the 2px gold underline is missed at a glance. */
 const activeCls =
-  "text-white font-semibold";
+  "text-white font-semibold bg-[var(--surface-2)]";
 
 export const NAV_LINKS = [
   { href: "/#features", label: "Features" },

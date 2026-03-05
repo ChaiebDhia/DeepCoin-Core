@@ -30,7 +30,7 @@
 
 import { useState, useEffect }     from "react";
 import { useSession }              from "next-auth/react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import Link                        from "next/link";
 import { redirect }                from "next/navigation";
@@ -46,6 +46,7 @@ import {
   getHealth, getHistory, getAdminFeedback, getAdminAnalyses, pdfDownloadUrl,
   getAdminUsers, updateUserRole, updateUserStatus, deleteAdminUser,
   getAdminStats, getAdminContacts, markContactRead, deleteContactMessage,
+  deleteCorrection, deleteSubscriber,
 } from "@/lib/api";
 import type { HistorySummary, FeedbackItem, AdminAnalysisItem, AdminUserItem, AdminStatsResponse, AdminStatsActivity, ContactMessage, AdminContactsResponse } from "@/types/api";
 
@@ -776,7 +777,8 @@ function AnalysesTab({ sessionStatus }: { sessionStatus: string }) {
 // -- Tab: Corrections --------------------------------------------------------
 
 function CorrectionsTab({ sessionStatus }: { sessionStatus: string }) {
-  const authed = sessionStatus === "authenticated";
+  const authed      = sessionStatus === "authenticated";
+  const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
 
   const { data, isLoading } = useQuery({
@@ -784,6 +786,11 @@ function CorrectionsTab({ sessionStatus }: { sessionStatus: string }) {
     queryFn:  () => getAdminFeedback((page - 1) * PAGE_SIZE, PAGE_SIZE),
     staleTime: 30_000,
     enabled:   authed,
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => deleteCorrection(id),
+    onSuccess:  () => queryClient.invalidateQueries({ queryKey: ["admin", "feedback"] }),
   });
 
   return (
@@ -818,7 +825,7 @@ function CorrectionsTab({ sessionStatus }: { sessionStatus: string }) {
         <table className="w-full text-xs">
           <thead>
             <tr style={{ borderBottom: "1px solid var(--border)" }}>
-              {["Date", "Coin (CNN)", "Conf", "Route", "Suggested CN", "Note", "By"].map(h => (
+              {["Date", "Coin (CNN)", "Conf", "Route", "Suggested CN", "Note", "By", ""].map(h => (
                 <th
                   key={h}
                   className="px-4 py-3 text-left font-semibold"
@@ -895,12 +902,27 @@ function CorrectionsTab({ sessionStatus }: { sessionStatus: string }) {
                     <td className="px-4 py-2.5" style={{ color: "var(--text-muted)" }}>
                       {fb.submitted_by}
                     </td>
+                    <td className="px-4 py-2.5">
+                      <button
+                        onClick={() => {
+                          if (window.confirm("Delete this correction?")) {
+                            deleteMut.mutate(fb.id);
+                          }
+                        }}
+                        disabled={deleteMut.isPending}
+                        title="Delete correction"
+                        className="p-1 rounded-md transition-colors hover:bg-red-500/10 disabled:opacity-40"
+                        style={{ color: "#ef4444" }}
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </td>
                   </tr>
                 );
               })
             ) : (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center">
+                <td colSpan={8} className="px-4 py-10 text-center">
                   <MessageSquareWarning
                     size={20}
                     className="mx-auto mb-2"
@@ -921,7 +943,8 @@ function CorrectionsTab({ sessionStatus }: { sessionStatus: string }) {
 // -- Tab: Subscribers --------------------------------------------------------
 
 function SubscribersTab({ sessionStatus }: { sessionStatus: string }) {
-  const authed = sessionStatus === "authenticated";
+  const authed      = sessionStatus === "authenticated";
+  const queryClient = useQueryClient();
   const [subPage, setSubPage] = useState(1);
 
   const { data: subscribers = [], isLoading } = useQuery<Subscriber[]>({
@@ -929,6 +952,11 @@ function SubscribersTab({ sessionStatus }: { sessionStatus: string }) {
     queryFn:  () => fetch("/api/admin/subscribers").then(r => r.ok ? r.json() : []),
     staleTime: 60_000,
     enabled:   authed,
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (email: string) => deleteSubscriber(email),
+    onSuccess:  () => queryClient.invalidateQueries({ queryKey: ["admin", "subscribers"] }),
   });
 
   const totalPages = Math.max(1, Math.ceil(subscribers.length / SUB_PER_PAGE));
@@ -973,7 +1001,7 @@ function SubscribersTab({ sessionStatus }: { sessionStatus: string }) {
         <table className="w-full text-xs">
           <thead>
             <tr style={{ borderBottom: "1px solid var(--border)" }}>
-              {["Email", "Status", "Subscribed"].map(h => (
+              {["Email", "Status", "Subscribed", ""].map(h => (
                 <th
                   key={h}
                   className="px-5 py-3 text-left font-semibold"
@@ -1013,11 +1041,26 @@ function SubscribersTab({ sessionStatus }: { sessionStatus: string }) {
                       year: "numeric", month: "short", day: "numeric",
                     })}
                   </td>
+                  <td className="px-5 py-3">
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`Remove ${s.email} from the waitlist?`)) {
+                          deleteMut.mutate(s.email);
+                        }
+                      }}
+                      disabled={deleteMut.isPending}
+                      title="Remove subscriber"
+                      className="p-1 rounded-md transition-colors hover:bg-red-500/10 disabled:opacity-40"
+                      style={{ color: "#ef4444" }}
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={3} className="px-5 py-10 text-center">
+                <td colSpan={4} className="px-5 py-10 text-center">
                   <UserCheck
                     size={20}
                     className="mx-auto mb-2"

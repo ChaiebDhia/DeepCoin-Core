@@ -577,3 +577,43 @@ async def delete_user(
 
     await db.delete(target)
     await db.commit()
+
+
+# ── DELETE /api/admin/feedback/{feedback_id} ──────────────────────────────────
+
+@router.delete(
+    "/feedback/{feedback_id}",
+    status_code = 204,
+    summary     = "Delete a user correction record (admin / curator only)",
+)
+async def delete_feedback(
+    feedback_id:  str,
+    db:           AsyncSession  = Depends(get_db),
+    current_user: User          = Depends(get_current_user),
+) -> None:
+    """
+    Hard-delete a single Feedback (user correction) record.
+
+    WHAT: Removes the Feedback row from the database permanently.
+
+    WHY admins need to delete corrections:
+        Some feedback submissions are spam, test entries, or duplicate
+        corrections submitted multiple times by the same user.  Curators
+        need a way to clean up the active-learning queue without affecting
+        the underlying classified image (the Classification row is untouched).
+
+    FOREIGN KEYS: Feedback.classification_id and Feedback.user_id both
+        use ON DELETE SET NULL on the FK target (Classification / User).
+        Deleting the Feedback row itself has no cascade side-effects.
+
+    ACCESS: admin or curator.
+    """
+    _require_privileged(current_user)
+
+    result = await db.execute(select(Feedback).where(Feedback.id == feedback_id))
+    target: Feedback | None = result.scalar_one_or_none()
+    if target is None:
+        raise HTTPException(status_code=404, detail="Feedback record not found.")
+
+    await db.delete(target)
+    await db.commit()

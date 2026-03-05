@@ -667,6 +667,36 @@ export async function deleteAdminUser(userId: string): Promise<void> {
   }
 }
 
+/**
+ * DELETE /api/admin/feedback/{id}
+ *
+ * Remove a single user-correction record from the active-learning queue.
+ * Admin or curator only.
+ */
+export async function deleteCorrection(feedbackId: string): Promise<void> {
+  try {
+    await apiClient.delete(`/admin/feedback/${feedbackId}`);
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+/**
+ * DELETE /api/subscribers/{email}
+ *
+ * Remove a subscriber from the waitlist by email address.
+ * Requires X-API-Key (passed automatically by the Next.js proxy route
+ * that sets the header server-side).
+ * The @ char is percent-encoded automatically by encodeURIComponent.
+ */
+export async function deleteSubscriber(email: string): Promise<void> {
+  try {
+    await apiClient.delete(`/subscribers/${encodeURIComponent(email)}`);
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
 // ── AI Chat ─── (continues below) ────────────────────────────────────────────
 
 /**
