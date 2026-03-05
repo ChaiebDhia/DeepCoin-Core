@@ -238,7 +238,13 @@ def _run_chat(
         r'\bCN\s*\d{2,6}|\b\d{4,6}\b',
         _re.IGNORECASE,
     )
-    if not _NUMISMATIC_RE.search(query):
+    if not _NUMISMATIC_RE.search(query) and not conversation_history:
+        # WHY skip guard when conversation_history is non-empty:
+        #   Follow-up queries like "tell me more", "and the obverse?", "elaborate"
+        #   contain no numismatic keywords yet are clearly valid continuations of
+        #   an established numismatic exchange.  The conversation_history
+        #   parameter being non-empty is proof the user already passed the guard
+        #   on their first turn — we trust the context they built.
         logger.info("chat: non-numismatic query rejected: %r", query[:60])
         return {
             "answer": (
@@ -668,7 +674,10 @@ async def chat_stream(body: ChatRequest) -> StreamingResponse:
             r'\bCN\s*\d{2,6}|\b\d{4,6}\b',
             _re.IGNORECASE,
         )
-        if not _NUMISMATIC_RE.search(body.query):
+        # Skip guard for follow-up messages in an active conversation.
+        # If conversation_history is non-empty the user already passed the guard
+        # on a previous numismatic turn — continue the exchange unconditionally.
+        if not _NUMISMATIC_RE.search(body.query) and not body.conversation_history:
             return {
                 "skip_llm":       True,
                 "fallback_answer": (

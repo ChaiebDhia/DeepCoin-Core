@@ -1003,3 +1003,54 @@ export async function markContactRead(id: string): Promise<void> {
 export async function deleteContactMessage(id: string): Promise<void> {
   await apiClient.delete(`/admin/contact/${id}`);
 }
+
+// ── Auth helpers (direct to FastAPI — no proxy needed) ────────────────────────
+//
+// WHY classifyApiClient for these:
+//   These endpoints are at /auth/* (not /api/*) so the Next.js rewrite proxy
+//   cannot route them.  classifyApiClient uses http://127.0.0.1:8000 directly
+//   and FastAPI's CORSMiddleware lists http://localhost:3000 as an allowed
+//   origin — no CORS issues in development or production (Nginx handles it).
+
+/**
+ * POST /auth/forgot-password
+ * Sends a password reset email.  Always returns 200 regardless of whether
+ * the email exists (server-side prevents user enumeration).
+ */
+export async function forgotPassword(email: string): Promise<void> {
+  await classifyApiClient.post("/auth/forgot-password", { email });
+}
+
+/**
+ * POST /auth/reset-password
+ * Applies a new password using the one-time reset token from the email link.
+ * Throws ApiError on invalid/expired token.
+ */
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  await classifyApiClient.post("/auth/reset-password", {
+    token,
+    new_password: newPassword,
+  });
+}
+
+/**
+ * POST /auth/resend-verification
+ * Sends a fresh email verification link to accounts still in "pending" status.
+ * Always returns 200 regardless of whether the email or account exists.
+ */
+export async function resendVerification(email: string): Promise<void> {
+  await classifyApiClient.post("/auth/resend-verification", { email });
+}
+
+/**
+ * GET /auth/verify-email?token=<tok>
+ * Activates a pending account using the one-time token from the verification email.
+ * Returns the success message from the server.
+ * Throws ApiError (400 / 404) on invalid or expired tokens.
+ */
+export async function verifyEmail(token: string): Promise<{ message: string }> {
+  const { data } = await classifyApiClient.get<{ message: string }>(
+    `/auth/verify-email?token=${encodeURIComponent(token)}`
+  );
+  return data;
+}

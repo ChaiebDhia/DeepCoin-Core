@@ -564,13 +564,26 @@ function ChatPageInner() {
       _chatCache.currentSessionId = id;
       // Persist across F5 — see auto-restore effect above
       sessionStorage.setItem("dc_chat_sid", id);
-      const restored: Message[] = detail.messages.map(m => ({
-        id:       crypto.randomUUID(),
-        role:     m.role,
-        content:  m.content,
-        sources:  m.sources as ChatSource[] | undefined,
-        provider: m.provider,
-      }));
+      // Pair each restored assistant message with its preceding user query so
+      // that the Google / Scholar CTAs remain visible after session reload.
+      // WHY: userQuery is a frontend-only field (never persisted to DB).
+      //   For new messages it is set to `q` in handleSubmit.
+      //   For restored messages we reconstruct it by finding the closest user
+      //   message that appeared BEFORE this assistant turn in the array.
+      const restored: Message[] = detail.messages.map((m, idx, arr) => {
+        const base: Message = {
+          id:       crypto.randomUUID(),
+          role:     m.role as Role,
+          content:  m.content,
+          sources:  m.sources as ChatSource[] | undefined,
+          provider: m.provider,
+        };
+        if (m.role === "assistant") {
+          const prevUser = [...arr].slice(0, idx).reverse().find(r => r.role === "user");
+          return { ...base, userQuery: prevUser?.content ?? m.content.substring(0, 100) };
+        }
+        return base;
+      });
       setMessages(restored);
     } catch {
       // silent — keep current state

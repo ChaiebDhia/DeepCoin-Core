@@ -30,7 +30,8 @@ import { signIn }              from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link                    from "next/link";
 import { motion }              from "framer-motion";
-import { Mail, Lock, Coins, AlertCircle, Loader2 } from "lucide-react";
+import { Mail, Lock, Coins, AlertCircle, Loader2, CheckCircle } from "lucide-react";
+import { resendVerification }  from "@/lib/api";
 
 export function LoginForm() {
   const router       = useRouter();
@@ -41,6 +42,9 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [error,    setError]    = useState<string | null>(null);
   const [loading,  setLoading]  = useState(false);
+  // Resend verification state — shown when a pending account tries to sign in
+  const [resendSent,    setResendSent]    = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
 
   // ── friendly error messages ────────────────────────────────────────────────
 
@@ -49,6 +53,28 @@ export function LoginForm() {
     CallbackRouteError:  "Please verify your email address before signing in. Check your inbox for a verification link.",
     Default:             "Something went wrong. Please try again.",
   };
+
+  // Is the current error a "verify your email" failure?
+  const isPendingError = error?.includes("verify your email");
+
+  /**
+   * Resend verification email for a pending account.
+   *
+   * WHY inline (not a separate page):
+   *   The user's email is already in the form — no need to navigate away.
+   *   We call POST /auth/resend-verification (always returns 200) so there
+   *   is no need to handle 404/403 edge cases on the client.
+   */
+  async function handleResend() {
+    if (!email || resendLoading) return;
+    setResendLoading(true);
+    try {
+      await resendVerification(email);
+      setResendSent(true);
+    } finally {
+      setResendLoading(false);
+    }
+  }
 
   // ── submit handler ─────────────────────────────────────────────────────────
 
@@ -116,11 +142,36 @@ export function LoginForm() {
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
-              className="flex items-start gap-2 text-sm px-3 py-2.5 rounded-lg"
+              className="flex flex-col gap-2 text-sm px-3 py-2.5 rounded-lg"
               style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#fca5a5" }}
             >
-              <AlertCircle size={16} className="mt-0.5 shrink-0" />
-              <span>{error}</span>
+              <div className="flex items-start gap-2">
+                <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                <span>{error}</span>
+              </div>
+
+              {/* Resend verification — only shown for pending-account errors */}
+              {isPendingError && (
+                resendSent
+                  ? (
+                    <div className="flex items-center gap-1.5 text-xs ml-6"
+                         style={{ color: "#6ee7b7" }}>
+                      <CheckCircle size={13} />
+                      <span>Verification email sent &mdash; check your inbox.</span>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleResend}
+                      disabled={resendLoading}
+                      className="ml-6 self-start text-xs underline underline-offset-2 hover:opacity-80 disabled:opacity-50 flex items-center gap-1"
+                      style={{ color: "#fcd34d" }}
+                    >
+                      {resendLoading && <Loader2 size={11} className="animate-spin" />}
+                      Resend verification email
+                    </button>
+                  )
+              )}
             </motion.div>
           )}
 
@@ -153,9 +204,18 @@ export function LoginForm() {
 
           {/* Password field */}
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
-              Password
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+                Password
+              </label>
+              <Link
+                href="/forgot-password"
+                className="text-xs hover:underline"
+                style={{ color: "var(--text-muted)" }}
+              >
+                Forgot password?
+              </Link>
+            </div>
             <div className="relative">
               <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
                    style={{ color: "var(--text-muted)" }} />

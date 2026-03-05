@@ -5,14 +5,15 @@ FastAPI router for all authentication and account management endpoints.
 
 ENDPOINTS
 ---------
-    POST /auth/register         — create account, trigger verification email
-    POST /auth/login            — exchange credentials for access + refresh tokens
-    GET  /auth/verify-email     — confirm email address via one-time token
-    POST /auth/refresh          — exchange valid refresh token for new access token
-    POST /auth/logout           — revoke the current refresh token
-    GET  /auth/me               — return the authenticated user's profile
-    POST /auth/forgot-password  — send password reset email
-    POST /auth/reset-password   — apply a new password via reset token
+    POST /auth/register             — create account, trigger verification email
+    POST /auth/login                — exchange credentials for access + refresh tokens
+    GET  /auth/verify-email         — confirm email address via one-time token
+    POST /auth/resend-verification  — resend a fresh verification email (pending accounts)
+    POST /auth/refresh              — exchange valid refresh token for new access token
+    POST /auth/logout               — revoke the current refresh token
+    GET  /auth/me                   — return the authenticated user's profile
+    POST /auth/forgot-password      — send password reset email
+    POST /auth/reset-password       — apply a new password via reset token
 
 TOKEN DELIVERY STRATEGY
 -----------------------
@@ -434,6 +435,58 @@ async def verify_email(
 
     logger.info("Email verified for user id=%s", user.id)
     return MessageResponse(message="Email verified successfully! You can now log in.")
+
+
+# ── POST /auth/resend-verification ───────────────────────────────────────────
+
+@router.post(
+    "/resend-verification",
+    response_model=MessageResponse,
+    summary="Resend email verification link",
+)
+async def resend_verification(
+    body: ForgotPasswordRequest,   # reuse — only needs email: EmailStr
+    db: AsyncSession = Depends(get_db),
+) -> MessageResponse:
+    """
+    Allow a user whose account is still pending to request a fresh
+    verification email (e.g. the original expired or landed in spam).
+
+    SECURITY:
+        - Always returns the same 200 message regardless of whether the email
+          exists in the database (prevents account enumeration).
+        - Only sends a new token when the account is still in 'pending' status.
+          Active, suspended, or unknown emails silently succeed.
+        - New token invalidates old ones implicitly because verify_email()
+          marks each token as used_at on first success.  We do NOT delete
+          old tokens here to avoid a race condition — they will eventually
+          expire naturally (default 48 h from registration).
+
+    WHY not use the forgot-password flow for this:
+        The forgot-password token is prefixed with "reset:" to distinguish it
+        from email verification tokens.  Reusing it would conflate two separate
+        security operations and confuse audit logs.
+    """
+    _VERIFY_EXPIRE_HOURS = 48
+
+    result = await db.execute(select(User).where(User.email == body.email))
+    user: User | None = result.scalar_one_or_none()
+
+    if user is not None and user.status == UserStatus.pending:
+        raw_token = secrets.token_urlsafe(48)
+        db.add(EmailVerification(
+            user_id    = user.id,
+            token      = raw_token,          # no prefix — standard verification token
+            expires_at = datetime.now(timezone.utc) + timedelta(hours=_VERIFY_EXPIRE_HOURS),
+        ))
+        await send_verification_email(user.email, raw_token)
+        await write_audit(db, action="user.resend_verification", user_id=user.id)
+        logger.info("Resent verification email to user id=%s", user.id)
+
+    # Always return 200 — do NOT reveal whether the email address exists
+    return MessageResponse(
+        message="If your account is pending verification, a new confirmation link has been sent."
+    )
 
 
 # ── POST /auth/refresh ────────────────────────────────────────────────────────

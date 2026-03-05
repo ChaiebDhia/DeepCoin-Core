@@ -42,6 +42,12 @@ declare module "next-auth" {
        * Used by the Axios refresh interceptor to schedule proactive refresh.
        */
       access_expires_at?: number;
+      /**
+       * ISO-8601 UTC string of when the account was created — e.g. "2026-02-01T10:30:00Z".
+       * Set once at first login; never changes across token refreshes.
+       * Used by the dashboard "Member Since" tile.
+       */
+      created_at?: string;
     } & DefaultSession["user"];
   }
 
@@ -52,6 +58,8 @@ declare module "next-auth" {
     access_token?:     string;
     /** FastAPI access token TTL in seconds — used to compute access_expires_at */
     expires_in?:       number;
+    /** ISO-8601 UTC account creation timestamp — stored in JWT, shown as "Member Since" */
+    created_at?:       string;
   }
 }
 
@@ -64,5 +72,7 @@ declare module "next-auth/jwt" {
     access_token?:      string;
     /** Unix timestamp (ms) — when the current access_token expires (-60s buffer applied) */
     access_expires_at?: number;
+    /** ISO-8601 UTC account creation timestamp — stored once at first sign-in */
+    created_at?:        string;
   }
 }

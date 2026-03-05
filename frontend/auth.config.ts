@@ -127,6 +127,7 @@ export const authConfig: NextAuthConfig = {
               role:         string;
               display_name: string | null;
               status:       string;
+              created_at:   string;         // ISO-8601 account creation timestamp
             };
           };
 
@@ -139,6 +140,7 @@ export const authConfig: NextAuthConfig = {
             display_name: data.user.display_name,
             access_token: data.access_token,
             expires_in:   data.expires_in,  // propagated → jwt callback → access_expires_at
+            created_at:   data.user.created_at,
           };
         } catch {
           // Network error (FastAPI down, timeout, etc.) → treat as auth failure
@@ -164,6 +166,10 @@ export const authConfig: NextAuthConfig = {
         token.role         = (user as { role?: string }).role ?? "analyst";
         token.display_name = (user as { display_name?: string | null }).display_name ?? null;
         token.access_token = (user as { access_token?: string }).access_token ?? "";
+        // ISO-8601 UTC timestamp of when the account was created — used by the
+        // dashboard "Member Since" display.  Stored once at first sign-in and
+        // never changes across token refreshes.
+        token.created_at   = (user as { created_at?: string }).created_at ?? undefined;
 
         // Record when this access token expires so the browser-side interceptor
         // knows to trigger a silent refresh via /api/auth/refresh-access-token.
@@ -198,6 +204,8 @@ export const authConfig: NextAuthConfig = {
         session.user.access_token     = token.access_token as string;
         // Expose expiry timestamp so client code can schedule proactive refreshes.
         session.user.access_expires_at = token.access_expires_at as number | undefined;
+        // Account creation date — feeds the dashboard "Member Since" tile.
+        session.user.created_at        = token.created_at as string | undefined;
       }
       return session;
     },
