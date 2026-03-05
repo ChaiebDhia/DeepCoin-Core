@@ -205,15 +205,18 @@ export function UserMenu() {
                 <History size={15} />
                 My History
               </Link>
-              <Link
-                href="/dashboard"
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-[var(--surface-2)] transition-colors"
-                style={{ color: "var(--text-secondary)" }}
-              >
-                <LayoutDashboard size={15} />
-                My Dashboard
-              </Link>
+              {/* My Dashboard — for analysts only; admins/curators use /admin */}
+              {role !== "admin" && role !== "curator" && (
+                <Link
+                  href="/dashboard"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-[var(--surface-2)] transition-colors"
+                  style={{ color: "var(--text-secondary)" }}
+                >
+                  <LayoutDashboard size={15} />
+                  My Dashboard
+                </Link>
+              )}
             </div>
 
             {/* Sign out */}

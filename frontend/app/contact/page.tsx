@@ -26,7 +26,8 @@
 
 import { useState }       from "react";
 import Link               from "next/link";
-import { Mail, Send, ExternalLink, User, MessageSquare, FileText } from "lucide-react";
+import { Mail, Send, ExternalLink, User, MessageSquare, FileText, Loader2 } from "lucide-react";
+import { submitContact }  from "@/lib/api";
 
 const ADMIN_EMAIL = "dhia.chaieb@esprit.tn";
 
@@ -46,25 +47,21 @@ export default function ContactPage() {
   const [subject, setSubject] = useState(SUBJECTS[0]);
   const [message, setMessage] = useState("");
   const [sent,    setSent]    = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-
-    const body = [
-      `From: ${name} <${email}>`,
-      "",
-      message,
-      "",
-      "— Sent via DeepCoin contact form",
-    ].join("\n");
-
-    const mailto =
-      `mailto:${ADMIN_EMAIL}` +
-      `?subject=${encodeURIComponent(`[DeepCoin] ${subject}`)}` +
-      `&body=${encodeURIComponent(body)}`;
-
-    window.location.href = mailto;
-    setSent(true);
+    setLoading(true);
+    setError(null);
+    try {
+      await submitContact({ name: name.trim(), email: email.trim(), subject, message: message.trim() });
+      setSent(true);
+    } catch {
+      setError("Failed to send your message. Please try again or email us directly.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   const inputCls =
@@ -110,20 +107,13 @@ export default function ContactPage() {
             <div className="py-6 text-center space-y-3">
               <Send size={32} className="mx-auto" style={{ color: "#22c55e" }} />
               <p className="font-semibold" style={{ color: "var(--text-primary)" }}>
-                Your email client should have opened.
+                Message received! We&rsquo;ll get back to you soon.
               </p>
               <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-                If nothing happened, email us directly at{" "}
-                <a
-                  href={`mailto:${ADMIN_EMAIL}`}
-                  className="underline"
-                  style={{ color: "var(--brand-gold)" }}
-                >
-                  {ADMIN_EMAIL}
-                </a>
+                Your message has been stored and will be reviewed by our team.
               </p>
               <button
-                onClick={() => setSent(false)}
+                onClick={() => { setSent(false); setName(""); setEmail(""); setMessage(""); }}
                 className="text-xs underline mt-2"
                 style={{ color: "var(--text-muted)" }}
               >
@@ -203,20 +193,28 @@ export default function ContactPage() {
                 />
               </div>
 
+              {/* Error */}
+              {error && (
+                <p className="text-xs rounded-lg px-3 py-2 text-center"
+                   style={{ backgroundColor: "#ef444420", color: "#f87171" }}>
+                  {error}
+                </p>
+              )}
+
               {/* Submit */}
               <button
                 type="submit"
-                disabled={!name || !email || !message}
+                disabled={loading || !name || !email || !message}
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg
                            text-sm font-bold transition-opacity disabled:opacity-40"
                 style={{ backgroundColor: "var(--brand-gold)", color: "#0a1628" }}
               >
-                <Send size={14} />
-                Open in email client
+                {loading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                {loading ? "Sending…" : "Send Message"}
               </button>
 
               <p className="text-[11px] text-center" style={{ color: "var(--text-muted)" }}>
-                This opens your default email application pre-filled with your message.
+                Your message is stored securely and reviewed by the project team.
               </p>
             </form>
           )}

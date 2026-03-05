@@ -947,3 +947,29 @@ export async function getUserStats(): Promise<import("@/types/api").UserStatsRes
   const { data } = await classifyApiClient.get<import("@/types/api").UserStatsResponse>("/auth/me/stats");
   return data;
 }
+
+// ── Contact messages ──────────────────────────────────────────────────────────
+
+/** Submit a contact form message (public — no auth required). */
+export async function submitContact(body: {
+  name: string; email: string; subject: string; message: string;
+}): Promise<{ id: string; status: string }> {
+  const { data } = await apiClient.post("/contact", body);
+  return data;
+}
+
+/** GET /api/admin/contact — admin/curator inbox. */
+export async function getAdminContacts(): Promise<import("@/types/api").AdminContactsResponse> {
+  const { data } = await apiClient.get<import("@/types/api").AdminContactsResponse>("/admin/contact");
+  return data;
+}
+
+/** PATCH /api/admin/contact/{id}/read — mark a message as read. */
+export async function markContactRead(id: string): Promise<void> {
+  await apiClient.patch(`/admin/contact/${id}/read`);
+}
+
+/** DELETE /api/admin/contact/{id} — permanently delete a message. */
+export async function deleteContactMessage(id: string): Promise<void> {
+  await apiClient.delete(`/admin/contact/${id}`);
+}

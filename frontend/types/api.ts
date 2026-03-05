@@ -311,3 +311,21 @@ export interface UserStatsResponse {
   top_label:      { label: string; count: number } | null;
   recent:         UserStatsRecent[];
 }
+
+// ── Contact messages (POST /api/contact, GET /api/admin/contact) ──────────────
+
+export interface ContactMessage {
+  id:         string;
+  name:       string;
+  email:      string;
+  subject:    string;
+  message:    string;
+  created_at: string;
+  read:       boolean;
+}
+
+export interface AdminContactsResponse {
+  items:  ContactMessage[];
+  total:  number;
+  unread: number;
+}
