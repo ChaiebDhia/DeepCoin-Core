@@ -324,7 +324,7 @@ export function HistoryTable({
       </div>
 
       {/* ─ Pagination ─────────────────────────────────────────────────────── */}
-      {totalPages > 1 && (
+      {(
         <div
           className="flex items-center justify-between text-sm"
           style={{ color: "var(--text-muted)" }}

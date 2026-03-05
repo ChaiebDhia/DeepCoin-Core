@@ -42,6 +42,7 @@ export const NAV_LINKS = [
   { href: "/chat",      label: "AI Chat"  },
   { href: "/about",     label: "About"    },
   { href: "/docs",      label: "Docs"     },
+  { href: "/contact",   label: "Contact"  },
 ];
 
 export function NavLinks() {

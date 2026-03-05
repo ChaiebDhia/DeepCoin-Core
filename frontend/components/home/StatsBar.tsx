@@ -80,7 +80,10 @@ function Counter({ stat, active }: { stat: Stat; active: boolean }) {
 
 export function StatsBar() {
   const ref    = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-60px" });
+  // margin: "0px" — fire as soon as any pixel enters the viewport.
+  // A negative margin like "-60px" requires the element to be 60px *inside*
+  // the viewport, which never triggers on short mobile screens.
+  const inView = useInView(ref, { once: true, margin: "0px" });
 
   return (
     <div

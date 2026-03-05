@@ -191,8 +191,11 @@ app = FastAPI(
     lifespan    = lifespan,
     # P4 — disable interactive docs in production so internal API surface is
     # not publicly browsable. Set ENV=production in your .env for deployment.
-    docs_url    = None if _env == "production" else "/docs",
-    redoc_url   = None if _env == "production" else "/redoc",
+    # docs_url uses /api/docs so the Next.js proxy rewrite
+    # (/api/* → http://127.0.0.1:8000/api/*) forwards it correctly.
+    # Using /docs would be blocked because Next.js handles /docs itself.
+    docs_url    = None if _env == "production" else "/api/docs",
+    redoc_url   = None if _env == "production" else "/api/redoc",
 )
 
 # \u2500\u2500 SlowAPI rate-limit exception handler \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500

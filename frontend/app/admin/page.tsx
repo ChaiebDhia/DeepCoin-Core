@@ -133,14 +133,16 @@ function Pagination({
 }: {
   page: number; pages: number; onChange: (p: number) => void;
 }) {
-  if (pages <= 1) return null;
+  // Always render the pagination bar — even on a single page.
+  // Hidden would leave users confused about whether data is loading or truly empty.
+  const total = Math.max(1, pages);
   return (
     <div
       className="flex items-center justify-between px-5 py-3 border-t"
       style={{ borderColor: "var(--border)" }}
     >
       <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-        Page {page} / {pages}
+        Page {page} / {total}
       </span>
       <div className="flex gap-2">
         <button
@@ -152,7 +154,7 @@ function Pagination({
           <ChevronLeft size={12} style={{ color: "var(--text-secondary)" }} />
         </button>
         <button
-          disabled={page >= pages}
+          disabled={page >= total}
           onClick={() => onChange(page + 1)}
           className="p-1.5 rounded-lg disabled:opacity-30 transition-opacity"
           style={{ backgroundColor: "var(--surface-2)", border: "1px solid var(--border)" }}
@@ -209,13 +211,17 @@ function OverviewTab({
     enabled:  authed,
   });
 
-  const { data: stats } = useQuery<AdminStatsResponse>({
+  const { data: stats, isError: statsError, refetch: statsRefetch } = useQuery<AdminStatsResponse>({
     queryKey:  ["admin", "stats"],
     queryFn:   getAdminStats,
     enabled:   isPrivileged && authed,
     // WHY 60 s staleTime: route distribution changes slowly;
     // avoids a redundant refetch every time the tab is re-focused.
     staleTime: 60_000,
+    // WHY retry 1: admin/stats returns 401 if called too early (before
+    // SessionSync sets _authToken). One retry is enough to recover;
+    // beyond that it’s a real auth problem best surfaced to the user.
+    retry:     1,
   });
 
   return (
@@ -344,6 +350,17 @@ function OverviewTab({
                   )}
                 </div>
               </div>
+            ) : statsError ? (
+              <div className="space-y-2">
+                <p className="text-xs" style={{ color: "#f87171" }}>Unable to load stats.</p>
+                <button
+                  onClick={() => statsRefetch()}
+                  className="text-xs underline transition-opacity hover:opacity-70"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  Retry
+                </button>
+              </div>
             ) : (
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>Loading stats…</p>
             )}
@@ -408,7 +425,7 @@ function OverviewTab({
       {/* Quick links */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { icon: Cpu,      label: "FastAPI Docs",        desc: "OpenAPI / Swagger UI",       href: "http://127.0.0.1:8000/docs", color: "#10b981", external: true  },
+          { icon: Cpu,      label: "FastAPI Docs",        desc: "OpenAPI / Swagger UI",       href: "http://127.0.0.1:8000/api/docs", color: "#10b981", external: true  },
           { icon: Github,   label: "GitHub Repo",         desc: "ChaiebDhia/DeepCoin-Core",   href: "https://github.com/ChaiebDhia/DeepCoin-Core", color: "#e2e8f0", external: true },
           { icon: BookOpen, label: "Eng. Journal",        desc: "Full development log",       href: "https://github.com/ChaiebDhia/DeepCoin-Core/blob/main/ENGINEERING_JOURNAL.md", color: "#d4a853", external: true },
           { icon: Users,    label: "History",             desc: "All coin analyses",          href: "/history", color: "#8b5cf6", external: false },
