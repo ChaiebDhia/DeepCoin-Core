@@ -63,6 +63,7 @@ data/metadata/chroma_db_rag/
 data/metadata/cn_types_metadata_full.json
 data/history.json
 data/subscribers.json
+data/contact_messages.json
 models/*.pth
 models/*.pt
 *.log
