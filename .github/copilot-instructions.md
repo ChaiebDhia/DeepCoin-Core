@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: March 5, 2026 — 8 UX/bug fixes: admin stats (stale backend + isError handling), chat stream 404 (backend restart), /api/docs proxy, pagination always-visible, StatsBar mobile margin, /confirm-subscription restored, /contact new page, nav Contact link. Commit b3bd803. Next: Layer 6 (Docker).
+# Last updated: March 2026 — complete auth flow: dashboard created_at, chat memory fix, Google/Scholar restore, forgot-pwd/reset-pwd/verify-email pages, resend-verification endpoint. Commits 8eb9b3c + 3752283. Next: Layer 6 (Docker).
 
 ---
 
@@ -1304,7 +1304,10 @@ pytest (9.0.2)      # unit testing (34 tests across 3 files)
 | `06116a5` | feat: enterprise chat redesign v2, AI Chat CTA in AnalysisPanel, TutorialModal, admin access guide |
 | `584fe2c` | fix: prompt injection guard (ChatMessage Literal roles), chat SSE streaming (POST /api/chat/stream + chatQueryStream + streaming cursor), explore date_range fix, stale comment cleanup. Layer 7 (Tests + CI/CD) is next. |
 | `40118e5` | feat: JWT silent refresh (proxy route + Axios interceptor + SessionSync update() bridge + NextAuth expiry tracking), confirm-subscription UX cleanup (remove broken confirm link), Docker CVE fix (Python 3.12-slim + Node 22-alpine) |
-| `b3bd803` | fix: 8 bugs — admin stats (stale backend + isError card), chat stream 404 (backend restart), /api/docs (docs_url=/api/docs), pagination always-visible (HistoryTable + admin Pagination), StatsBar useInView margin 0px, /confirm-subscription restored (Server Component SSR confirm), /contact page (mailto flow), Contact nav link ← LATEST |
+| `b3bd803` | fix: 8 bugs — admin stats (stale backend + isError card), chat stream 404 (backend restart), /api/docs (docs_url=/api/docs), pagination always-visible (HistoryTable + admin Pagination), StatsBar useInView margin 0px, /confirm-subscription restored (Server Component SSR confirm), /contact page (mailto flow), Contact nav link |
+| `19721b9` | docs: Engineering Journal sections 46-62 |
+| `8eb9b3c` | feat: dashboard created_at auth chain, chat memory (non-numismatic guard bypass for history), google/scholar userQuery restore, POST /auth/resend-verification, forgot-password + reset-password + verify-email pages, LoginForm resend + forgot-pwd link ← LATEST |
+| `3752283` | docs: Engineering Journal sections 63-67 — auth chain, chat memory, google/scholar, complete auth flow |
 
 ---
 
