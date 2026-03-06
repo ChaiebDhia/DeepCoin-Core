@@ -367,3 +367,124 @@ def load_page(skip: int = 0, limit: int = 20) -> list[dict]:
         except Exception as exc:
             logger.error("History store load_page error: %s", exc)
             return []
+
+
+# ── Active Learning API ──────────────────────────────────────────────────────
+
+def get_feedback_candidates() -> list[dict]:
+    """
+    Return all classification records that have user feedback attached
+    and have NOT yet been exported for active-learning retraining.
+
+    WHAT:
+        Loads every row from `classifications`, deserialises the JSON payload,
+        and returns only those where:
+          1. `payload["feedback"]` is present (user clicked "mark as wrong")
+          2. `payload["feedback"]["used_for_training"]` is False or absent
+
+    WHY two conditions:
+        Condition 1 filters the >95% of records that have no correction.
+        Condition 2 prevents re-exporting the same sample in every run.
+        Once a sample is exported and the trainer uses it, it must not appear
+        in the next batch — otherwise the training set would accumulate
+        duplicates and over-fit to the same corrections.
+
+    Returns:
+        List of full record dicts ready for export. Each dict contains:
+          - id, label, confidence, route_taken, timestamp
+          - feedback.correct_type_id  — the curator's correction
+          - feedback.note             — optional curator comment
+          - cnn.gradcam_path          — heatmap path if available
+          - pdf_path                  — path to the report PDF
+
+    PERFORMANCE NOTE:
+        This does a full table scan.  For a PFE deployment (<10,000 records),
+        this is fine.  For production scale, add:
+          CREATE INDEX ix_classifications_has_feedback
+          ON classifications (json_extract(payload, '$.feedback')) WHERE ...
+        SQLite 3.38+ supports partial indexes — available in Python 3.11's
+        bundled SQLite.
+    """
+    candidates = []
+    with _lock:
+        try:
+            conn = _get_conn()
+            rows = conn.execute(
+                "SELECT payload FROM classifications ORDER BY timestamp DESC"
+            ).fetchall()
+            conn.close()
+            for row in rows:
+                record   = json.loads(row["payload"])
+                feedback = record.get("feedback")
+                if feedback and not feedback.get("used_for_training", False):
+                    candidates.append(record)
+        except Exception as exc:
+            logger.error("get_feedback_candidates error: %s", exc)
+    return candidates
+
+
+def mark_used_for_training(record_ids: list[str]) -> int:
+    """
+    Mark a batch of classification records as exported for active-learning.
+
+    WHAT:
+        For each record_id in the list:
+          1. Loads the payload from the database
+          2. Sets `payload["feedback"]["used_for_training"] = True`
+          3. Records the export timestamp in `payload["feedback"]["exported_at"]`
+          4. Writes the modified payload back via SQL UPDATE
+
+    WHY timestamp the export:
+        `exported_at` tells the trainer WHEN this sample entered the
+        active-learning dataset.  If two export batches are run, the trainer
+        can filter by date to understand which batch each sample came from.
+        This is standard practice in Active Learning MLOps pipelines
+        (see Google's WIT — What-If Tool).
+
+    Args:
+        record_ids: List of UUIDs to mark.  Typically the ids returned by
+                    get_feedback_candidates() after the caller has successfully
+                    written the export files to disk.
+
+    Returns:
+        Number of records actually updated (0 if any are already marked or
+        not found — idempotent).
+
+    WHY update IDs one-at-a-time not with IN (?,...):
+        SQLite's parameter binding for IN clauses requires dynamic generation
+        of placeholder strings ((",?)*n)[1:]).  For the small batch sizes
+        expected here (<500 corrections), per-row updates are cleaner and
+        safer.  If batch size ever exceeds 1,000 you'd want the IN version.
+
+    Thread-safe: protected by _lock; all updates in one transaction.
+    """
+    updated = 0
+    exported_at = datetime.now(timezone.utc).isoformat()
+    with _lock:
+        try:
+            conn = _get_conn()
+            for record_id in record_ids:
+                row = conn.execute(
+                    "SELECT payload FROM classifications WHERE id = ?",
+                    (record_id,),
+                ).fetchone()
+                if row is None:
+                    continue
+                payload  = json.loads(row["payload"])
+                feedback = payload.get("feedback", {})
+                if feedback.get("used_for_training", False):
+                    continue   # already marked — idempotent
+                feedback["used_for_training"] = True
+                feedback["exported_at"]       = exported_at
+                payload["feedback"] = feedback
+                conn.execute(
+                    "UPDATE classifications SET payload = ? WHERE id = ?",
+                    (json.dumps(payload, ensure_ascii=False), record_id),
+                )
+                updated += 1
+            conn.commit()
+            conn.close()
+            logger.info("mark_used_for_training: %d records marked", updated)
+        except Exception as exc:
+            logger.error("mark_used_for_training error: %s", exc)
+    return updated

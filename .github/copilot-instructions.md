@@ -1887,7 +1887,7 @@ Feat: /analyse dedicated page (Server Component), /admin dashboard (Client Compo
 Feat: TechStack bento grid redesign — hero tile + 4 pillar cards + dataset credit banner
 ```
 
-**NEXT: Layer 6 — Docker Compose** or **A+++ Gap 3 (Active Learning)** — see Section 17 below.
+**NEXT: Gap 4 — Docker Compose (full 7-service wiring)** — see Section 17 below.
 
 ---
 
@@ -1899,12 +1899,12 @@ This section tracks improvements beyond Layers 0–7. Update the checkbox and ad
 |---|-----|-------|--------|
 | ✅ 1 | MLflow experiment tracking | `scripts/train.py`, `requirements.txt`, `Makefile` | DONE — Section 166 |
 | ✅ 2 | Grad-CAM explainability in PDF | `src/core/gradcam.py`, `src/core/inference.py`, `src/agents/synthesis.py`, `src/agents/gatekeeper.py` | DONE — Section 167 |
-| 🔲 3 | Active Learning loop | `scripts/active_learning.py`, add `used_for_training` col to feedback table | TODO |
+| ✅ 3 | Active Learning loop | `scripts/active_learning.py`, `src/api/routes/active_learning.py`, `src/api/_store.py`, `scripts/train.py` | DONE — Section 169 |
 | 🔲 4 | Docker full wiring | `docker-compose.yml`, PostgreSQL migration, Redis cache, LocalStack PDF | TODO |
 | 🔲 5 | Observability dashboard | `prometheus.yml`, Grafana service, `docker-compose.yml` | TODO |
 | 🔲 6 | ArcFace loss → 85%+ accuracy | `src/core/arcface_head.py`, `scripts/train.py` | TODO |
 
-**How to continue**: pick any 🔲 item, say "implement Gap N" and the session will have full context from Section 165–167 of the Engineering Journal.
+**How to continue**: pick any 🔲 item, say "implement Gap N" and the session will have full context from Sections 165–173 of the Engineering Journal.
 
 ---
 

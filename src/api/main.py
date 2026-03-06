@@ -71,6 +71,7 @@ from src.api.routes.chat         import router as chat_router
 from src.api.routes.chat_sessions import router as chat_sessions_router
 from src.api.routes.kb            import router as kb_router
 from src.api.routes.contact       import router as contact_router
+from src.api.routes.active_learning import router as active_learning_router
 
 from src import __version__
 
@@ -264,6 +265,7 @@ app.include_router(chat_router)                                                 
 app.include_router(chat_sessions_router)                                        # /api/chat/sessions (history)
 app.include_router(kb_router)                                                   # /api/kb/types      (KB browser)
 app.include_router(contact_router)                                               # /api/contact + /api/admin/contact
+app.include_router(active_learning_router)                                       # /api/admin/active-learning/* (admin only)
 
 
 # ── PDF report serving ────────────────────────────────────────────────────────

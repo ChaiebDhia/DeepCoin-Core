@@ -56,6 +56,59 @@ except ImportError:
 
 from src.core.dataset import DeepCoinDataset, get_train_transforms, get_val_transforms
 from src.core.model_factory import get_deepcoin_model
+from pathlib import Path
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ACTIVE LEARNING HELPER
+# ─────────────────────────────────────────────────────────────────────────────
+class _InMemoryDataset(torch.utils.data.Dataset):
+    """
+    Lightweight PyTorch Dataset for active-learning correction samples.
+
+    WHAT:
+        Wraps a pre-built list of (image_path_str, label_idx) tuples.
+        Used only when --active-learning-dir is supplied to train.py.
+
+    WHY NOT reuse DeepCoinDataset:
+        DeepCoinDataset scans a directory tree at __init__ time.
+        Active-learning samples live in a flat structure
+        (data/active_learning/{label}/*.jpg), and the class_to_idx map
+        must match the one built from the original data/processed tree.
+        Rather than re-scanning and risking a different idx mapping,
+        we pre-resolve (path, idx) during argparse and wrap them here.
+
+    CLAHE:
+        cv2.imread + CLAHE applied inside __getitem__ — same pipeline
+        as DeepCoinDataset to avoid train/inference domain mismatch.
+    """
+    def __init__(self, samples: list[tuple[str, int]], transform=None):
+        self.samples   = samples      # list of (path_str, label_idx)
+        self.transform = transform
+
+    def __len__(self) -> int:
+        return len(self.samples)
+
+    def __getitem__(self, idx: int):
+        import cv2
+        import numpy as np
+        path_str, label = self.samples[idx]
+        img = cv2.imread(path_str)
+        if img is None:
+            # Return a blank 299×299 image on corrupt file — never crash the loader
+            img = np.zeros((299, 299, 3), dtype=np.uint8)
+        # CLAHE — identical to DeepCoinDataset._load_image() and prep_engine.py
+        lab    = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        clahe  = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        l_eq   = clahe.apply(l)
+        lab_eq = cv2.merge((l_eq, a, b))
+        img    = cv2.cvtColor(lab_eq, cv2.COLOR_LAB2BGR)
+        img    = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        if self.transform:
+            augmented = self.transform(image=img)
+            img = augmented["image"]
+        return img, label
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -496,6 +549,11 @@ def main():
                         help='Batch size (default: 16, safe for 4GB VRAM)')
     parser.add_argument('--lr', type=float, default=1e-4,
                         help='Learning rate (default: 0.0001)')
+    parser.add_argument('--active-learning-dir', type=str, default=None,
+                        help='Path to data/active_learning/ from a previous '
+                             'active_learning.py export run. When set, the '
+                             'corrected samples are injected into the training '
+                             'split with 3x sample weight.')
     args = parser.parse_args()
 
     print("=" * 65)
@@ -545,6 +603,62 @@ def main():
 
     # ── BLOCK 2: WEIGHTED SAMPLER ────────────────────────────────────────────
     sampler = get_weighted_sampler(train_ds)
+
+    # ── BLOCK 2B: ACTIVE LEARNING INJECTION ─────────────────────────────────
+    # When --active-learning-dir is set, load the exported curator corrections
+    # and inject them into the training set with 3x sample weight.
+    #
+    # WHY 3x weight:
+    #   These samples are hard cases — the model got them wrong in production.
+    #   Giving them extra weight ensures the fine-tune focuses on the specific
+    #   confusion pairs identified by curators, not just random class balance.
+    #   3x is a rule of thumb: high enough to matter, low enough not to
+    #   destabilise the 5,374 original training samples.
+    #
+    # HOW IT WORKS:
+    #   We read MANIFEST.csv from the active_learning_dir, resolve each
+    #   image path, and build an in-memory list of (image_path, label_idx)
+    #   tuples.  These are combined with train_ds via ConcatDataset.
+    #   The WeightedRandomSampler is rebuilt from scratch to incorporate the
+    #   new samples at 3x weight.
+    al_extra_ds  = None
+    al_n_samples = 0
+    if args.active_learning_dir:
+        import csv as _csv
+        from torch.utils.data import ConcatDataset
+        al_dir      = Path(args.active_learning_dir)
+        manifest    = al_dir / 'MANIFEST.csv'
+        al_samples  = []
+        if manifest.exists():
+            print(f"\n🔁 Active Learning: loading corrections from {manifest}")
+            class_to_idx = full_dataset.class_to_idx
+            with open(manifest, newline='', encoding='utf-8') as f:
+                for row in _csv.DictReader(f):
+                    img_path = Path(row['image_path'])
+                    label    = row['correct_label'].strip()
+                    if img_path.exists() and label in class_to_idx:
+                        al_samples.append((str(img_path), class_to_idx[label]))
+            if al_samples:
+                from src.core.dataset import get_train_transforms as _gt
+                al_ds = _InMemoryDataset(al_samples, transform=_gt())
+                al_n_samples = len(al_samples)
+                train_ds     = ConcatDataset([train_ds, al_ds])
+                print(f"   Injected {al_n_samples} active-learning samples (3x weight)")
+                # Rebuild sampler: standard weights for originals, 3x for new
+                _orig_len = len(train_ds) - al_n_samples
+                orig_weights = [1.0] * _orig_len
+                al_weights   = [3.0] * al_n_samples
+                from torch.utils.data import WeightedRandomSampler as _WRS
+                all_weights = orig_weights + al_weights
+                sampler = _WRS(
+                    weights     = torch.DoubleTensor(all_weights),
+                    num_samples = len(train_ds),
+                    replacement = True,
+                )
+            else:
+                print("   No valid active-learning samples found (images may have been deleted).")
+        else:
+            print(f"   WARNING: MANIFEST.csv not found at {manifest}")
 
     # ── BLOCK 3: DATALOADERS ─────────────────────────────────────────────────
     train_loader, val_loader, test_loader = get_dataloaders(
