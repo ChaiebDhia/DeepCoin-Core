@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: March 6, 2026 — A+++ roadmap implemented: MLflow tracking (train.py), Grad-CAM explainability (src/core/gradcam.py + inference.py + synthesis PDF). Engineering Journal sections 160-167 added. Next: Layer 6 (Docker) OR ArcFace accuracy improvement.
+# Last updated: March 6, 2026 — A+++ roadmap Gaps 1-3 complete: MLflow tracking (train.py), Grad-CAM explainability (src/core/gradcam.py + inference.py + synthesis PDF), Active Learning loop (scripts/active_learning.py + API routes + train.py injection). Engineering Journal sections 160-173 added. Next: Gap 4 — Docker Compose full wiring (7 services).
 
 ---
 
@@ -1311,7 +1311,8 @@ pytest (9.0.2)      # unit testing (34 tests across 3 files)
 | `8eb9b3c` | feat: dashboard created_at auth chain, chat memory (non-numismatic guard bypass for history), google/scholar userQuery restore, POST /auth/resend-verification, forgot-password + reset-password + verify-email pages, LoginForm resend + forgot-pwd link |
 | `3752283` | docs: Engineering Journal sections 63-67 — auth chain, chat memory, google/scholar, complete auth flow |
 | `6c6a7cf` | docs: update persistent context — commits 19721b9, 8eb9b3c, 3752283 added |
-| `ce6c2f9` | feat: MLflow tracking (train.py) + Grad-CAM explainability (gradcam.py, inference.py, synthesis.py, gatekeeper.py) + Engineering Journal sections 160-167 ← LATEST |
+| `ce6c2f9` | feat: MLflow tracking (train.py) + Grad-CAM explainability (gradcam.py, inference.py, synthesis.py, gatekeeper.py) + Engineering Journal sections 160-167 |
+| `2996a52` | feat: Active Learning loop (Gap 3) — scripts/active_learning.py, routes/active_learning.py, _store.py candidates+mark functions, train.py _InMemoryDataset + --active-learning-dir + 3x sampler injection + Engineering Journal sections 168-173 ← LATEST |
 
 ---
 
