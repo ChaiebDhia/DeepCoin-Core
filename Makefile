@@ -71,6 +71,12 @@ train:
 	@echo "Expected time: ~103 min on RTX 3050 Ti"
 	$(PYTHON) scripts/train.py
 
+# ── MLflow experiment dashboard ───────────────────────────────────────────────
+mlflow:
+	@echo "Opening MLflow UI at http://localhost:5000 ..."
+	@echo "Run 'make train' first to generate run data."
+	mlflow ui --backend-store-uri ./mlruns --port 5000
+
 # ── Single-image inference demo ───────────────────────────────────────────────
 predict:
 	$(PYTHON) scripts/predict.py \

@@ -412,6 +412,12 @@ class Synthesis:
             _confidence_table(f, top5)
         f.ln(7)
 
+        # ── Grad-CAM heatmap (visual explanation) ─────────────────────────────
+        gradcam_path = cnn.get("gradcam_path")
+        if gradcam_path and os.path.exists(gradcam_path):
+            _draw_gradcam_section(f, gradcam_path)
+            f.ln(7)
+
         # ── historical record ─────────────────────────────────────────────────
         if h:
             _section_title(f, "Historical Record")
@@ -1043,6 +1049,92 @@ def _trim_to_sections(text: str) -> str:
         re.IGNORECASE | re.MULTILINE,
     )
     return text[m.start():].strip() if m else text
+
+
+def _draw_gradcam_section(f, gradcam_path: str) -> None:
+    """
+    Embed the Grad-CAM heatmap in the PDF report.
+
+    WHAT
+    ----
+    Draws a two-column layout below the CNN Classification section:
+      - Left  (80 mm): the Grad-CAM overlay image (coin + colour heatmap)
+      - Right (90 mm): plain text caption explaining what the colours mean
+
+    WHY in the PDF
+    --------------
+    Museum professionals and PFE jury members read the PDF report.
+    They do not read code.  Embedding the heatmap ensures the explainability
+    artifact is delivered to its intended audience.
+
+    The caption explicitly interprets the colourmap:
+      - Red/yellow regions  = features the model relied on most
+      - Blue regions        = features the model largely ignored
+    This prevents misinterpretation (e.g., thinking blue = wrong answer).
+
+    Technical notes
+    ---------------
+    - fpdf2 image() accepts any format OpenCV can write: PNG is lossless
+      and handles transparency. We write PNG in generate_gradcam().
+    - The two-column layout uses direct set_xy() positioning (not tables)
+      because fpdf2 table cells cannot contain images.
+    - If the image is missing or corrupt, the section is silently skipped
+      so the rest of the PDF is not affected.
+    """
+    from fpdf.enums import XPos, YPos
+
+    _section_title(f, "Visual Explanation (Grad-CAM)")
+
+    page_break_guard = f.h - f.b_margin - 90  # need ~90 mm: image height + caption
+    if f.get_y() > page_break_guard:
+        f.add_page()
+
+    y_start  = f.get_y()
+    x_left   = f.l_margin
+    img_size = 80   # mm — square layout matches 299×299 px source
+
+    # Left column: heatmap image
+    try:
+        f.image(gradcam_path, x=x_left, y=y_start, w=img_size, h=img_size)
+    except Exception:
+        return   # if fpdf2 can't load the image, skip the whole section
+
+    # Right column: caption
+    x_caption = x_left + img_size + 6
+    f.set_xy(x_caption, y_start)
+    f.set_font("Helvetica", "B", 9)
+    f.set_text_color(*_C_BRAND_MID)
+    f.cell(0, 6, "GRAD-CAM HEAT MAP", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    f.set_xy(x_caption, y_start + 8)
+    f.set_font("Helvetica", "", 8)
+    f.set_text_color(80, 90, 110)
+
+    caption_lines = [
+        "Each pixel is coloured by how much",
+        "it contributed to the classification.",
+        "",
+        "RED / YELLOW — high importance.",
+        "The model focused here.",
+        "",
+        "BLUE — low importance.",
+        "These regions had little influence",
+        "on the prediction.",
+        "",
+        "A well-calibrated CNN highlights",
+        "the portrait, legend, or reverse",
+        "symbol — not the background.",
+        "",
+        "If background heats up, the model",
+        "may have learned spurious correlations",
+        "from the training images.",
+    ]
+    for line in caption_lines:
+        f.set_xy(x_caption, f.get_y())
+        f.cell(0, 4, _s(line), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+    # Advance cursor past the image
+    f.set_y(y_start + img_size + 4)
+    f.set_text_color(*_C_TEXT)
 
 
 def _draw_footer_band(f) -> None:

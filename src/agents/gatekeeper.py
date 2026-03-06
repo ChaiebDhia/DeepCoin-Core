@@ -214,16 +214,21 @@ class Gatekeeper:
             to the caller is the correct behaviour.
             """
             t0 = time.perf_counter()
-            result = inference.predict(state["image_path"], tta=state.get("use_tta", False))
+            result = inference.predict(
+                state["image_path"],
+                tta     = state.get("use_tta", False),
+                gradcam = True,   # always generate heatmap — synthesis embeds it in PDF
+            )
             cnn = {
-                "class_id":     result["class_id"],
-                "label":        result["label"],
-                "confidence":   result["confidence"],
-                "top5":         result["top5"],
-                "tta_used":     result["tta_used"],
+                "class_id":      result["class_id"],
+                "label":         result["label"],
+                "confidence":    result["confidence"],
+                "top5":          result["top5"],
+                "tta_used":      result["tta_used"],
                 "vote_fraction": result.get("vote_fraction"),
-                "tta_passes":   result.get("tta_passes", 1),
-                "temperature":  result.get("temperature", 1.0),
+                "tta_passes":    result.get("tta_passes", 1),
+                "temperature":   result.get("temperature", 1.0),
+                "gradcam_path":  result.get("gradcam_path"),   # PNG path or None
             }
             conf      = cnn["confidence"]
             vote_frac = cnn["vote_fraction"]

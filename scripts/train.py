@@ -42,6 +42,18 @@ from collections import Counter
 from tqdm import tqdm
 import numpy as np
 
+# ── MLflow experiment tracking ───────────────────────────────────────────────
+# WHY mlflow: records every hyperparameter, every metric at every epoch, and
+# the best model weights — all queryable from `mlflow ui` at localhost:5000.
+# Without tracking, the only record of "what gave 80.03%" is code comments.
+try:
+    import mlflow
+    import mlflow.pytorch
+    _MLFLOW_AVAILABLE = True
+except ImportError:
+    _MLFLOW_AVAILABLE = False
+    print("⚠️  mlflow not installed — tracking disabled. Run: pip install mlflow")
+
 from src.core.dataset import DeepCoinDataset, get_train_transforms, get_val_transforms
 from src.core.model_factory import get_deepcoin_model
 
@@ -631,6 +643,44 @@ def main():
         else:
             print(f"\n⚠️  --resume set but no checkpoint found at {checkpoint_path}. Starting fresh.")
 
+    # ── MLFLOW: start run and log all hyperparameters ────────────────────────
+    # Every parameter is logged NOW, before training starts.
+    # WHY upfront: if training crashes at epoch 60, the full config is still
+    # recorded. You never have to guess what settings were used.
+    _mlflow_run_id = None
+    if _MLFLOW_AVAILABLE:
+        mlflow.set_experiment("deepcoin-efficientnet-b3")
+        # run_name encodes key hyperparameters so the UI table is scannable
+        _run_name = f"v3-lr{args.lr}-bs{args.batch_size}-ep{args.epochs}"
+        with mlflow.start_run(run_name=_run_name) as _run:
+            _mlflow_run_id = _run.info.run_id
+            mlflow.set_tags({
+                "architecture":  "efficientnet-b3",
+                "dataset":       "corpus-nummorum-v1",
+                "num_classes":   str(num_classes),
+                "engineer":      "Dhia Chaieb",
+                "pfe_layer":     "0-cnn-training",
+            })
+            mlflow.log_params({
+                "learning_rate":       args.lr,
+                "batch_size":          args.batch_size,
+                "max_epochs":          args.epochs,
+                "dropout":             0.4,
+                "label_smoothing":     0.15,
+                "mixup_alpha":         0.4,
+                "weight_decay":        0.01,
+                "optimizer":           "adamw",
+                "scheduler":           "cosine_annealing",
+                "amp":                 (device.type == 'cuda'),
+                "early_stop_patience": 10,
+                "num_classes":         num_classes,
+                "seed":                42,
+                "preprocessing":       "clahe_lab_2.0_8x8_299x299",
+                "augmentation":        "rotate15_brightness_gaussnoise_elastic_hflip_mixup",
+                "fast_mode":           args.fast,
+            })
+        print(f"\n📈 MLflow run started: {_mlflow_run_id}")
+
     # ── BLOCK 7: TRAINING LOOP WITH EARLY STOPPING ──────────────────────────
     print(f"\n🚀 Starting training for {args.epochs} epochs...\n")
     print(f"{'Epoch':>6} {'Train Loss':>11} {'Train Acc':>10} {'Val Loss':>10} {'Val Acc':>9} {'LR':>10} {'Time':>7}")
@@ -665,6 +715,19 @@ def main():
         # Print epoch summary
         marker = " ✅" if val_acc > best_val_acc else ""
         print(f"{epoch:>6} {train_loss:>11.4f} {train_acc:>9.2f}% {val_loss:>10.4f} {val_acc:>8.2f}% {current_lr:>10.2e} {elapsed:>5.0f}s{marker}")
+
+        # ── MLFLOW: log per-epoch metrics ─────────────────────────────────────
+        # step=epoch ensures the x-axis of every mlflow chart is the epoch number.
+        # Logging lr lets you correlate LR drops with accuracy jumps in the UI.
+        if _MLFLOW_AVAILABLE and _mlflow_run_id:
+            with mlflow.start_run(run_id=_mlflow_run_id):
+                mlflow.log_metrics({
+                    "train_loss":  train_loss,
+                    "train_acc":   train_acc,
+                    "val_loss":    val_loss,
+                    "val_acc":     val_acc,
+                    "lr":          current_lr,
+                }, step=epoch)
 
         # ── SAVE LAST CHECKPOINT (for resume) ────────────────────────────────
         # checkpoint_last.pth is overwritten every epoch — always has latest state
@@ -728,6 +791,29 @@ def main():
     print(f"   Test Loss:     {test_loss:.4f}")
     print(f"\n   This is the number you present to YEBNI and ESPRIT. 🎓")
     print("=" * 65)
+
+    # ── MLFLOW: log final test metrics + register model ──────────────────────
+    if _MLFLOW_AVAILABLE and _mlflow_run_id:
+        with mlflow.start_run(run_id=_mlflow_run_id):
+            mlflow.log_metrics({
+                "test_accuracy":     test_acc,
+                "test_loss":         test_loss,
+                "best_val_accuracy": best_val_acc,
+            })
+            # Log the best model weights as a MLflow artifact
+            # WHY log_model (not just log_artifact):
+            #   mlflow.pytorch.log_model stores the model in MLflow's portable
+            #   format — includes Python env, class info, and loading code.
+            #   You can later load it with:
+            #     mlflow.pytorch.load_model("runs:/<run_id>/model")
+            #   without knowing anything about the original file layout.
+            mlflow.pytorch.log_model(
+                model,
+                artifact_path="model",
+            )
+            mlflow.log_artifact('models/best_model.pth', artifact_path="weights")
+            print(f"\n📈 MLflow run complete: {_mlflow_run_id}")
+            print(f"   View results: mlflow ui --backend-store-uri ./mlruns")
 
 
 if __name__ == "__main__":

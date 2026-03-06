@@ -564,27 +564,39 @@ class CoinInference:
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
-    def predict(self, image_path: str | Path, tta: bool = False) -> dict:
+    def predict(
+        self,
+        image_path : str | Path,
+        tta        : bool = False,
+        gradcam    : bool = False,
+    ) -> dict:
         """
-        Classify a single coin image.
+        Classify a single coin image, optionally adding a Grad-CAM heatmap.
 
         RULE 3 — ALWAYS val transforms (never train transforms).
         The 79.08% / 80.03% accuracy was measured with val transforms.
         Using train transforms in production would SILENTLY degrade accuracy.
 
         Args:
-            image_path: Path to the coin image (jpg/png)
-            tta:        If True, run 8-pass Test-Time Augmentation.  Each pass
-                        applies a different lightweight augmentation (flip,
-                        rotation ±10°/±15°, brightness ±0.12, contrast +0.15).
-                        The 8 softmax vectors are averaged before computing
-                        top-1.  The fraction of passes that independently agree
-                        on the top-1 class (vote_fraction) is used as a
-                        supplementary confidence signal.  ~8× inference time.
+            image_path : Path to the coin image (jpg/png).
+            tta        : If True, run 8-pass Test-Time Augmentation.  Each pass
+                         applies a different lightweight augmentation (flip,
+                         rotation ±10°/±15°, brightness ±0.12, contrast +0.15).
+                         The 8 softmax vectors are averaged before computing
+                         top-1.  The fraction of passes that independently agree
+                         on the top-1 class (vote_fraction) is used as a
+                         supplementary confidence signal.  ~8× inference time.
+            gradcam    : If True, generate a Grad-CAM heatmap overlay PNG after
+                         the prediction.  The heatmap is saved alongside the
+                         image (same directory, ``_gradcam.png`` suffix) and its
+                         path is included in the returned dict as ``gradcam_path``.
+                         Does NOT affect prediction values — purely visual.
+                         Silently skipped if pytorch-grad-cam is not installed.
 
         Returns:
             dict following the output contract (see module docstring), with
-            additional fields: vote_fraction, tta_passes, temperature.
+            additional fields: vote_fraction, tta_passes, temperature,
+            gradcam_path (str | None).
         """
         t_start = time.time()
 
@@ -626,10 +638,46 @@ class CoinInference:
             probs  = self._forward(tensor)
 
         elapsed_ms = int((time.time() - t_start) * 1000)
-        return self._build_result(
+        result = self._build_result(
             probs,
             elapsed_ms,
             tta_used      = tta,
             vote_fraction = vote_fraction,
             n_tta_passes  = len(_TTA_TRANSFORMS) if tta else 1,
         )
+
+        # ── Optional Grad-CAM heatmap ─────────────────────────────────────────
+        # WHY after _build_result():
+        #   Grad-CAM needs the predicted class_id from the result dict.
+        #   Running it here (not inside _build_result) keeps the probability
+        #   computation path clean — Grad-CAM is a purely visual enhancement.
+        #
+        # WHY single-pass tensor for Grad-CAM even when TTA was used:
+        #   TTA averages 8 tensors.  GradCAM hooks work on a single forward pass.
+        #   Using the un-augmented val-transform tensor gives the cleanest,
+        #   most spatially faithful heatmap — TTA transforms (flips, crops)
+        #   would produce averaged/rotated heat activations that are harder
+        #   to interpret visually.
+        if gradcam:
+            try:
+                from src.core.gradcam import generate_gradcam
+                import cv2 as _cv2
+                gradcam_tensor   = self._preprocess(img_rgb)          # [1,3,299,299]
+                original_bgr     = _cv2.cvtColor(img_rgb, _cv2.COLOR_RGB2BGR)
+                gcam_save_path   = str(Path(image_path).with_suffix("")) + "_gradcam.png"
+                gcam_path        = generate_gradcam(
+                    model        = self.model,
+                    image_tensor = gradcam_tensor,
+                    original_bgr = original_bgr,
+                    class_idx    = result["class_id"],
+                    save_path    = gcam_save_path,
+                    device       = self.device,
+                )
+                result["gradcam_path"] = str(gcam_path) if gcam_path else None
+            except Exception as _gcam_err:
+                logger.warning("predict: Grad-CAM failed (non-fatal): %s", _gcam_err)
+                result["gradcam_path"] = None
+        else:
+            result["gradcam_path"] = None
+
+        return result

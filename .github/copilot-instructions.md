@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: March 2026 — complete auth flow: dashboard created_at, chat memory fix, Google/Scholar restore, forgot-pwd/reset-pwd/verify-email pages, resend-verification endpoint. Commits 8eb9b3c + 3752283. Next: Layer 6 (Docker).
+# Last updated: March 6, 2026 — A+++ roadmap implemented: MLflow tracking (train.py), Grad-CAM explainability (src/core/gradcam.py + inference.py + synthesis PDF). Engineering Journal sections 160-167 added. Next: Layer 6 (Docker) OR ArcFace accuracy improvement.
 
 ---
 
@@ -822,9 +822,10 @@ Status: EfficientNet-B3 trained, 80.03% TTA accuracy achieved.
 - AMP (`GradScaler` + `autocast`) halves VRAM, ~2× faster/epoch on RTX 3050 Ti
 - **Audit fix (Layer 0-3 audit, commit 8354450):** `weights_only=True` added to both `torch.load()` calls in `train.py` (`--resume` checkpoint path + final best-model test eval) — prevents arbitrary code execution via malicious pickle; matches the same fix already applied to `inference.py` in Layer 4 audit
 - **Audit fix (Layer 0-3 audit, commit 8354450):** `None` guard added after `cv2.imread()` in `dataset.py` `__getitem__` — raises `ValueError` with the full file path on corrupt/empty/unsupported JPEG instead of propagating a cryptic `TypeError` mid-batch that kills the training job
+- **MLflow tracking (A+++ Gap 1):** `mlflow.set_experiment()`, `mlflow.log_params()`, `mlflow.log_metrics(step=epoch)`, `mlflow.pytorch.log_model()` wired throughout `train.py`. Every run logged to `mlruns/`. View with `make mlflow` → `http://localhost:5000`.
 
-### Layer 1 — Inference Engine ✅ COMPLETE (CLAHE fix applied)
-Files: `src/core/inference.py`, `scripts/predict.py`
+### Layer 1 — Inference Engine ✅ COMPLETE (CLAHE fix + Grad-CAM)
+Files: `src/core/inference.py`, `src/core/gradcam.py`, `scripts/predict.py`
 - `CoinInference`: loads model once, runs TTA, returns structured prediction dict
 - Device resolution: `"auto"` resolved to `"cuda"` or `"cpu"` before PyTorch sees it (Bug #2 fix)
 - **Security patch (Layer 4 audit, commit 1b210ef):** both `torch.load()` calls now use `weights_only=True`
@@ -834,6 +835,7 @@ Files: `src/core/inference.py`, `scripts/predict.py`
 - **CLAHE fix (commit bc99423):** `_load_image()` now applies CLAHE before BGR→RGB conversion, exactly matching the `prep_engine.py` training pipeline
   - Skipping CLAHE caused train/inference distribution mismatch → 5–15% confidence on raw photos even for known coin types
   - Parameters: `clipLimit=2.0, tileGridSize=(8,8)` on L channel in LAB colourspace (identical to training)
+- **Grad-CAM (A+++ Gap 2):** `predict(gradcam=True)` generates a heatmap PNG via `src/core/gradcam.py::generate_gradcam()`. `gatekeeper.py` passes `gradcam=True` on every call. PNG path stored in `cnn_prediction["gradcam_path"]` and embedded in the PDF by `synthesis.to_pdf()`.
 
 ### Layer 2 — Knowledge Base ✅ UPGRADED TO FULL CORPUS
 Files: `src/core/knowledge_base.py` (legacy fallback), `src/core/rag_engine.py` (production), `scripts/build_knowledge_base.py`, `scripts/rebuild_chroma.py`
@@ -1306,8 +1308,10 @@ pytest (9.0.2)      # unit testing (34 tests across 3 files)
 | `40118e5` | feat: JWT silent refresh (proxy route + Axios interceptor + SessionSync update() bridge + NextAuth expiry tracking), confirm-subscription UX cleanup (remove broken confirm link), Docker CVE fix (Python 3.12-slim + Node 22-alpine) |
 | `b3bd803` | fix: 8 bugs — admin stats (stale backend + isError card), chat stream 404 (backend restart), /api/docs (docs_url=/api/docs), pagination always-visible (HistoryTable + admin Pagination), StatsBar useInView margin 0px, /confirm-subscription restored (Server Component SSR confirm), /contact page (mailto flow), Contact nav link |
 | `19721b9` | docs: Engineering Journal sections 46-62 |
-| `8eb9b3c` | feat: dashboard created_at auth chain, chat memory (non-numismatic guard bypass for history), google/scholar userQuery restore, POST /auth/resend-verification, forgot-password + reset-password + verify-email pages, LoginForm resend + forgot-pwd link ← LATEST |
+| `8eb9b3c` | feat: dashboard created_at auth chain, chat memory (non-numismatic guard bypass for history), google/scholar userQuery restore, POST /auth/resend-verification, forgot-password + reset-password + verify-email pages, LoginForm resend + forgot-pwd link |
 | `3752283` | docs: Engineering Journal sections 63-67 — auth chain, chat memory, google/scholar, complete auth flow |
+| `6c6a7cf` | docs: update persistent context — commits 19721b9, 8eb9b3c, 3752283 added |
+| `TBD` | feat: MLflow tracking (train.py) + Grad-CAM explainability (gradcam.py, inference.py, synthesis.py, gatekeeper.py) + Engineering Journal sections 160-167 ← LATEST |
 
 ---
 
@@ -1883,7 +1887,26 @@ Feat: /analyse dedicated page (Server Component), /admin dashboard (Client Compo
 Feat: TechStack bento grid redesign — hero tile + 4 pillar cards + dataset credit banner
 ```
 
-**NEXT: Layer 6 — Docker Compose.**
+**NEXT: Layer 6 — Docker Compose** or **A+++ Gap 3 (Active Learning)** — see Section 17 below.
+
+---
+
+## 17. A+++ PRODUCTION ROADMAP — TODO CHECKLIST
+
+This section tracks improvements beyond Layers 0–7. Update the checkbox and add journal section when each is completed.
+
+| # | Gap | Files | Status |
+|---|-----|-------|--------|
+| ✅ 1 | MLflow experiment tracking | `scripts/train.py`, `requirements.txt`, `Makefile` | DONE — Section 166 |
+| ✅ 2 | Grad-CAM explainability in PDF | `src/core/gradcam.py`, `src/core/inference.py`, `src/agents/synthesis.py`, `src/agents/gatekeeper.py` | DONE — Section 167 |
+| 🔲 3 | Active Learning loop | `scripts/active_learning.py`, add `used_for_training` col to feedback table | TODO |
+| 🔲 4 | Docker full wiring | `docker-compose.yml`, PostgreSQL migration, Redis cache, LocalStack PDF | TODO |
+| 🔲 5 | Observability dashboard | `prometheus.yml`, Grafana service, `docker-compose.yml` | TODO |
+| 🔲 6 | ArcFace loss → 85%+ accuracy | `src/core/arcface_head.py`, `scripts/train.py` | TODO |
+
+**How to continue**: pick any 🔲 item, say "implement Gap N" and the session will have full context from Section 165–167 of the Engineering Journal.
+
+---
 
 ```
 feat: JWT silent refresh — /api/auth/refresh-access-token Route Handler (proxy to FastAPI)

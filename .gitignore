@@ -107,3 +107,7 @@ instance/
 
 # LocalStack
 .localstack/
+
+# MLflow  experiment tracking artefacts (can be GBs)
+mlruns/
+mlartifacts/
