@@ -1311,7 +1311,7 @@ pytest (9.0.2)      # unit testing (34 tests across 3 files)
 | `8eb9b3c` | feat: dashboard created_at auth chain, chat memory (non-numismatic guard bypass for history), google/scholar userQuery restore, POST /auth/resend-verification, forgot-password + reset-password + verify-email pages, LoginForm resend + forgot-pwd link |
 | `3752283` | docs: Engineering Journal sections 63-67 — auth chain, chat memory, google/scholar, complete auth flow |
 | `6c6a7cf` | docs: update persistent context — commits 19721b9, 8eb9b3c, 3752283 added |
-| `TBD` | feat: MLflow tracking (train.py) + Grad-CAM explainability (gradcam.py, inference.py, synthesis.py, gatekeeper.py) + Engineering Journal sections 160-167 ← LATEST |
+| `ce6c2f9` | feat: MLflow tracking (train.py) + Grad-CAM explainability (gradcam.py, inference.py, synthesis.py, gatekeeper.py) + Engineering Journal sections 160-167 ← LATEST |
 
 ---
 
