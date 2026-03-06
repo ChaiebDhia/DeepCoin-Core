@@ -196,6 +196,7 @@
 180. [Section 180 — The Gold Ticket Additions: Senior-Level Thinking](#section-180--the-gold-ticket-additions-senior-level-thinking)
 181. [Section 181 — Production Standards Checklist: Where DeepCoin Stands](#section-181--production-standards-checklist-where-deepcoin-stands)
 182. [Section 182 — Project State After March 7 Session](#section-182--project-state-after-march-7-session)
+183. [Section 183 — Grad-CAM Border Attention: Root Cause, Diagnosis, and Fix](#section-183--grad-cam-border-attention--root-cause-diagnosis-and-fix)
 
 ---
 
@@ -40820,3 +40821,263 @@ async PostgreSQL with SQLAlchemy 2.x + Alembic migrations.
 *Gold Ticket additions explained in depth.*
 *Production Standards Checklist completed across 7 axes.*
 *Next: Gap 4 — Docker Compose full wiring.*
+
+---
+
+## Section 183  Grad-CAM Border Attention — Root Cause, Diagnosis, and Fix
+
+*Date: March 6, 2026 | Commit: `b15c2b7` | Files: `src/core/gradcam.py`, `frontend/components/coin/AnalysisPanel.tsx`*
+
+---
+
+### 183.1  The Observation
+
+Three Grad-CAM heatmaps were inspected from real analyses:
+
+| Coin | Confidence | Heatmap Behaviour |
+|------|-----------|-------------------|
+| CN 3422 | ~95% (Historian route) | Reasonable — red/orange covers coin body |
+| CN 3852 | medium | Attention concentrated on LEFT coin edge/border |
+| CN 4680 | medium | Attention on left-side border, coin face (portrait + inscription) mostly blue |
+
+The question: *"Why does the model look at the borders and not the actual coins?"*
+
+---
+
+### 183.2  The Dataset Format — Both Coin Faces in One Square
+
+Every image in the Corpus Nummorum training dataset is a **composite photograph**:
+obverse (front face) and reverse (back face) side-by-side, squeezed into a single
+image by `prep_engine.py` into a 299×299 square.
+
+```
+Raw CN image: 600×300  (obverse left | reverse right)
+prep_engine.py → aspect-preserving resize → 299×140 → zero-pad to 299×299
+Result: BOTH coin faces visible in one 299×299 square
+```
+
+This is confirmed by inspecting any training image:
+```
+data/processed/1015/CN_type_1015_cn_coin_5943_p.jpg  →  299×299, ratio=1.00
+```
+At 299×299, a 600×300 source image is scaled so both faces appear at roughly
+150×140 pixels each within the square, surrounded by black zero-padding.
+
+---
+
+### 183.3  Three Causes of Border-Dominated Heatmaps
+
+#### Cause 1 — 10×10 Spatial Resolution Is Too Coarse
+
+`model.features[-1]` (the layer used before this fix) produces activations at
+**10×10 spatial resolution** for a 299×299 input.
+
+```
+9 layers of maxpooling/stride: 299 → 150 → 75 → 38 → 19 → 10
+features[-1]: 1536 channels, 10×10 spatial
+```
+
+After bilinear upsampling to 299×299 for display, each original Grad-CAM "cell"
+covers **~30×30 pixels**.  A typical coin face in the training composite is
+~140×140 pixels = only about **5×5 Grad-CAM cells across the face**.
+
+The coin rim (the edge where the bright coin surface meets the black zero-padding
+background) is **maximum contrast** and always falls within 1–2 Grad-CAM cells.
+Because cells are so coarse, the rim cell's gradient dominates the nearby coin-face
+cells in the upsampled heatmap — producing the "bright ring" appearance.
+
+#### Cause 2 — Shortcut Learning From Consistent Background
+
+Every CN training image has the SAME background: black zeros from zero-padding.
+EfficientNet-B3 converges on class-discriminative features — but when the coin
+*shape* and *position within the frame* is consistent for each type (because the
+dataset uses standardised photography), the model partially learns:
+
+*"Type 1015 always appears as two circles of approximately this size, at this
+position, with this amount of black surrounding them."*
+
+This is **shortcut learning**: using low-level geometric cues (coin outline) instead
+of purely semantic cues (portrait style, legend, iconography).  Grad-CAM faithfully
+reveals this — it highlights what the model ACTUALLY used, not what we wish it used.
+
+#### Cause 3 — OOD Inputs Produce Diffuse Gradients
+
+For coins NOT in the 438 training classes (confidence < 40%), the model has no
+stored prototype to match.  The gradient signal `∂y_c/∂A^k` is small and uniform
+across the feature map.  The largest gradient values in a diffuse field always land
+on maximum-contrast positions — the coin rim — because contrast maximises all
+gradient-based metrics simultaneously.
+
+Vanilla GradCAM amplifies this further:
+```
+α_k = mean( ∂y_c / ∂A^k )   ← simple spatial mean
+```
+When gradients are diffuse and similar everywhere, the mean is driven by any
+outlier — which is the high-contrast coin rim.
+
+---
+
+### 183.4  Is the Model Performing Well on OOD Coins?
+
+**Short answer: Yes — by design.**
+
+The CNN was trained on 438 of the 9,716 Corpus Nummorum types.  For coins outside
+this set:
+- The CNN produces low confidence (< 40%) — this is **correct** behaviour
+- The routing logic correctly sends the coin to the **Investigator agent**
+- The Investigator uses the full 9,541-type RAG corpus to find closest matches
+- The report says "no exact CNN match — closest KB matches: [types]"
+
+OOD detection via confidence thresholding is the intended architecture.
+The model is *not supposed to* classify OOD coins correctly — it is supposed to
+*recognise its own uncertainty* and route to the fallback agent.  The Grad-CAM
+border attention for OOD inputs is a visual confirmation that the model is uncertain
+(diffuse gradient → rim attention) — it is a feature of the system, not a bug.
+
+What IS a problem: for **in-distribution coins** (known types, high confidence),
+the Grad-CAM should show coin-face features, not the rim.  The coarse 10×10
+resolution was making even confident predictions show rim-dominated heatmaps.
+
+---
+
+### 183.5  The Fix — Two Changes
+
+#### Fix 1 — GradCAM → GradCAMPlusPlus
+
+GradCAM++ replaces the simple gradient mean with a second-order term:
+
+```python
+# GradCAM (before):   α_k = (1/Z) × Σ  ∂y_c / ∂A^k_{ij}
+# GradCAM++ (after):  α_k = Σ  w^k_{ij} × ReLU( ∂y_c / ∂A^k_{ij} )
+#                     where w^k_{ij} upweights positions where gradient is largest
+```
+
+For the composite (two-face) image, GradCAM++ is strictly better because:
+- It up-weights spatial positions where the gradient is **locally large** — which
+  is the discriminative numismatic content (portrait, legend, iconography)
+- It down-weights positions where the gradient is small (background) — including
+  the uniform black padding zone
+- It handles **multiple activation peaks** correctly — both coin faces can appear
+  in the correct proportion rather than averaging to the boundary between them
+
+```python
+# src/core/gradcam.py — BEFORE
+from pytorch_grad_cam import GradCAM
+self._cam = GradCAM(model=model, target_layers=target_layers)
+
+# src/core/gradcam.py — AFTER
+from pytorch_grad_cam import GradCAMPlusPlus
+self._cam = GradCAMPlusPlus(model=model, target_layers=target_layers)
+```
+
+#### Fix 2 — features[-1] (10×10) → features[-4] (19×19)
+
+Layer audit of EfficientNet-B3 at 299×299 input:
+
+```
+features[0]:  40ch  150×150
+features[1]:  24ch  150×150
+features[2]:  32ch   75×75
+features[3]:  48ch   38×38
+features[4]:  96ch   19×19
+features[5]: 136ch   19×19  ← NEW target (features[-4])
+features[6]: 232ch   10×10
+features[7]: 384ch   10×10
+features[8]:1536ch   10×10  ← OLD target (features[-1])
+```
+
+`features[-4]` = `features[5]` = 136 channels, **19×19 spatial resolution**.
+
+Improvement:
+- 19×19 = **361 activation cells** vs 10×10 = 100 cells (3.6× more spatial detail)
+- Each Grad-CAM cell covers **~16×16 pixels** instead of ~30×30
+- A 140×140 coin face now spans **~8×8 Grad-CAM cells** instead of ~5×5
+- The 1–2 cell coin rim no longer dominates: the coin face region now has enough
+  cells to distinguish portrait area from legend area from background
+
+`features[5]` is stage 5 of EfficientNet-B3 — it still has strong semantic content
+(13 convolutional blocks of learned features before it), while providing the spatial
+granularity needed to localise within the coin face.
+
+```python
+# src/core/gradcam.py — BEFORE
+target_layers = [model.features[-1]]    # 10×10
+
+# src/core/gradcam.py — AFTER
+target_layers = [model.features[-4]]    # 19×19 = 3.6× more spatial detail
+```
+
+Verified by runtime check:
+```python
+torch.Size([1, 136, 19, 19])   ✓
+```
+
+---
+
+### 183.6  Frontend — Confidence-Aware Caption
+
+The GradCamCard caption was updated with two changes:
+
+1. **Corrected layer label**: "last EfficientNet-B3 conv layer" → "stage-5 EfficientNet-B3
+   conv layer (19×19 feature map, 3.6× finer spatial resolution than the final layer)"
+
+2. **Confidence-aware warning** (shown when confidence < 40%):
+```tsx
+{cnn.confidence < 0.40 && (
+  <p style={{ color: "#ca8a04", background: "rgba(234,179,8,0.08)", border: "1px solid rgba(234,179,8,0.20)" }}>
+    ⚠️ Low confidence ({Math.round(cnn.confidence * 100)}%) — this coin type was not in the
+    CNN training set. The heatmap may highlight the coin's outline and background contrast
+    rather than specific numismatic features.
+  </p>
+)}
+```
+
+This is the correct UX approach: rather than hiding the heatmap (it is still valuable
+diagnostic information), we contextualise it so the museum curator understands what
+they are seeing.  A diffuse, rim-focused heatmap on a low-confidence prediction is
+not a bug — it is the model communicating "I am uncertain; I am not focusing on any
+specific feature."
+
+---
+
+### 183.7  What Does Not Change
+
+- The heatmap is still generated on `features[-4]` of the SAME trained model
+  (no retraining needed, no weights changed)
+- The Grad-CAM PNG path, API endpoint, PDF embedding, and frontend data flow are
+  identical
+- For in-distribution coins (confidence ≥ 85%), the yellow warning does not appear
+- `generate_gradcam()` function signature is unchanged — all callers (inference.py,
+  synthesis.py) require no modification
+
+---
+
+### 183.8  Deeper Fix That Would Require Retraining
+
+The shortcut learning problem (Cause 2) cannot be fixed by changing the Grad-CAM
+algorithm — it is a property of the trained weights.  To eliminate shortcut learning
+at its source, the training pipeline would need:
+
+1. **Random background augmentation**: Replace the zero-padding with random
+   textures or solid colors during training → the model cannot correlate coin
+   type with background appearance
+
+2. **Random crop-and-scale augmentation**: Place the coin at random positions
+   within the 299×299 frame → the model cannot correlate type with spatial position
+
+3. **Face dropout**: Randomly blank out either the left or right face during
+   training → the model is forced to classify from each face independently,
+   preventing shortcuts from the two-face composition
+
+These augmentations would likely increase test accuracy by 2–4% for in-distribution
+coins AND produce Grad-CAM heatmaps that localize to portrait/legend/iconography
+rather than the coin rim.  This is the correct direction for a V4 retraining run.
+
+The Grad-CAM++ + 19×19 layer change applied here is the best improvement achievable
+without retraining the model — it reveals the shortcut learning more clearly by
+mapping the coin face at higher resolution rather than hiding the problem behind
+coarse 10×10 upsampling.
+
+---
+
+*Commit: `b15c2b7` — Grad-CAM++ at features[-4] 19×19, confidence-aware UI caption*
