@@ -19,6 +19,9 @@ import type { NextConfig } from "next";
  *   Permissions-Policy:     Deny camera/mic/geo access (unused browser APIs)
  *   Content-Security-Policy:
  *     blob: in img-src is required — CoinUploader uses createObjectURL for preview
+ *     http://127.0.0.1:8000 in img-src is required — Grad-CAM PNGs are served
+ *       directly from FastAPI (/api/gradcam/{filename}) via gradcamDisplayUrl()
+ *       which bypasses the Next.js proxy (same pattern as PDF download links)
  *     unsafe-inline in style-src is required — Tailwind generates inline styles
  *     unsafe-eval in script-src is removed in production (Next.js only needs it in dev)
  */
@@ -45,7 +48,12 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       // blob: required for URL.createObjectURL() coin image preview
       // data: required for base64 inline images
-      "img-src 'self' blob: data:",
+      // http://127.0.0.1:8000 required for Grad-CAM PNGs served directly from
+      // FastAPI (/api/gradcam/{filename}).  gradcamDisplayUrl() bypasses the
+      // Next.js proxy (same pattern as PDF downloads) so the browser fetches
+      // the PNG straight from FastAPI — which is a cross-origin URL that the
+      // CSP img-src directive must explicitly allow.
+      "img-src 'self' blob: data: http://127.0.0.1:8000 http://localhost:8000",
       "font-src 'self'",
       // connect-src self: Next.js HMR (dev) + /api/* proxied calls
       "connect-src 'self' http://127.0.0.1:8000 http://localhost:8000",
