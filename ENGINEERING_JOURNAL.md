@@ -7,7 +7,7 @@
 **Period**: PFE (Final Year Engineering Internship), Feb–July 2026  
 **GitHub**: https://github.com/ChaiebDhia/DeepCoin-Core  
 **Author**: Dhia Chaïeb  
-**Status as of**: March 5, 2026 — Sections 150–165 added. Layers 0–7 complete + Docker wired + A+++ roadmap active (MLflow + Grad-CAM + active learning). HEAD: `6c6a7cf`. Full auth flow (forgot-pwd, reset-pwd, verify-email). 45+ bugs documented. 122/122 tests passing. 0 TypeScript errors.  
+**Status as of**: March 6, 2026 — Sections 168–173 added. Layers 0–7 complete + Docker wired + A+++ Gaps 1–3 complete (MLflow + Grad-CAM + Active Learning). HEAD: `4376df3`. Full auth flow. 45+ bugs documented. 122/122 tests passing. 0 TypeScript errors. 38,956 lines.  
 
 ---
 
@@ -37687,10 +37687,10 @@ This is why explainability is not a cosmetic feature  it is an engineering tool 
 
 ---
 
-*Engineering Journal  Sections 165167 added. Gap 1 (MLflow) and Gap 2 (Grad-CAM) active.*
-*Section 165: A+++ roadmap  6 gaps, prioritisation, implementation plan.*
-*Section 166: MLflow tracking  full annotated implementation.*
-*Section 167: Grad-CAM  mathematical derivation, full code, PDF integration.*
+*Engineering Journal — Sections 165–167 added. Gap 1 (MLflow) and Gap 2 (Grad-CAM) complete.*
+*Section 165: A+++ roadmap — 6 gaps, prioritisation, implementation plan.*
+*Section 166: MLflow tracking — full annotated implementation.*
+*Section 167: Grad-CAM — mathematical derivation, full code, PDF integration.*
 
 ---
 
@@ -38884,7 +38884,7 @@ Browser → NGINX (TLS termination, max_body_size 5MB, rate limiting)
 
 ## Section 173  Project State After March 6 Session
 
-*Date: March 6, 2026 | Git HEAD: (see below after push)*
+*Date: March 6, 2026 | Git HEAD: `4376df3`*
 
 ---
 
