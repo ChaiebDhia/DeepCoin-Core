@@ -48,6 +48,12 @@ export interface CnnResult {
   tta_passes:         number;
   /** Temperature scalar T used in softmax(z/T). 1.0 = no calibration applied. */
   temperature:        number;
+  /**
+   * URL to the Grad-CAM heatmap overlay PNG for this prediction.
+   * Served via GET /api/gradcam/{filename}.
+   * null when unavailable (pytorch-grad-cam not installed, or generation failed).
+   */
+  gradcam_url:        string | null;
 }
 
 // ── Main classify response ────────────────────────────────────────────────────

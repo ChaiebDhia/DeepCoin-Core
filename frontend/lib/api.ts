@@ -503,6 +503,25 @@ export function pdfDownloadUrl(pdfUrl: string): string {
   // Bypass Next.js proxy — call FastAPI directly for binary file responses
   return `${_DIRECT_API_BASE}${cleanUrl}`;
 }
+
+/**
+ * gradcamDisplayUrl — build a full URL for a Grad-CAM PNG.
+ *
+ * The gradcam_url from the API is like "/api/gradcam/filename.png".
+ * We must bypass the Next.js proxy (same reason as pdfDownloadUrl) because
+ * <img> tags need a direct URL that returns image/png bytes — not a streamed
+ * proxy response that can be cut off by the 30s Turbopack timeout.
+ */
+export function gradcamDisplayUrl(gradcamUrl: string): string {
+  if (gradcamUrl.startsWith("http")) return gradcamUrl;
+  // Strip any accidentally embedded filesystem path fragments
+  const prefix = "/api/gradcam/";
+  if (gradcamUrl.startsWith(prefix)) {
+    const filename = gradcamUrl.slice(prefix.length).split("/").pop()!;
+    return `${_DIRECT_API_BASE}${prefix}${filename}`;
+  }
+  return `${_DIRECT_API_BASE}${gradcamUrl}`;
+}
 // ── Public explore ────────────────────────────────────────────────────────────
 
 /**

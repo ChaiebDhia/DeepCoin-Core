@@ -183,7 +183,6 @@ def export_candidates() -> ALExportResponse:
 
 @router.get(
     "/report",
-    response_class=None,
     summary="Get the latest active-learning export report",
     dependencies=[Depends(require_api_key)],
 )

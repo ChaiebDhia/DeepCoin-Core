@@ -74,6 +74,14 @@ class CnnResult(BaseModel):
     temperature:       float              = Field(
         1.0, description="Calibration temperature T used in softmax(z/T)"
     )
+    gradcam_url:       Optional[str]      = Field(
+        None,
+        description=(
+            "URL to the Grad-CAM heatmap overlay PNG for this prediction. "
+            "Served via GET /api/gradcam/{filename}. None when unavailable "
+            "(pytorch-grad-cam not installed, or generation failed)."
+        ),
+    )
 
 
 # ── Main response model ────────────────────────────────────────────────────────

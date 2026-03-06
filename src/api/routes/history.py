@@ -113,6 +113,7 @@ def _row_to_response(row: Classification) -> ClassifyResponse:
         vote_fraction     = cnn_raw.get("vote_fraction"),
         tta_passes        = cnn_raw.get("tta_passes", 1),
         temperature       = float(cnn_raw.get("temperature", 1.0)),
+        gradcam_url       = cnn_raw.get("gradcam_url"),
     )
 
     pdf_url = None

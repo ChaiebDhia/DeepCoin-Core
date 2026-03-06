@@ -216,6 +216,27 @@ async def classify(
     val_res   = state.get("validator_result",    {})
     inv_res   = state.get("investigator_result", {})
 
+    # Grad-CAM URL — move PNG from uploads/ to reports/ for 30-day retention,
+    # then serve via GET /api/gradcam/{filename}.
+    # WHY move to reports/ rather than leave in uploads/:
+    #   data/uploads/ is cleaned every 24 h at startup.  reports/ has a 30-day
+    #   TTL (same as PDFs), so both the PDF and the Grad-CAM overlay are
+    #   available together when the user revisits a history record.
+    #   .replace() is atomic on the same volume (no copy-then-delete).
+    gradcam_url: str | None = None
+    gcam_raw_path = cnn_raw.get("gradcam_path")
+    if gcam_raw_path:
+        gcam_src = Path(gcam_raw_path)
+        if gcam_src.exists():
+            _REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+            gcam_dest = _REPORTS_DIR / gcam_src.name
+            try:
+                gcam_src.replace(gcam_dest)
+                gradcam_url = f"/api/gradcam/{gcam_dest.name}"
+                logger.debug("Moved gradcam %s → reports/", gcam_src.name)
+            except Exception as _gcam_mv_err:
+                logger.warning("Could not move gradcam file: %s", _gcam_mv_err)
+
     # Build CnnResult sub-model
     cnn = CnnResult(
         class_id          = cnn_raw.get("class_id", 0),
@@ -229,6 +250,7 @@ async def classify(
         vote_fraction     = cnn_raw.get("vote_fraction"),
         tta_passes        = cnn_raw.get("tta_passes", 1),
         temperature       = float(cnn_raw.get("temperature", 1.0)),
+        gradcam_url       = gradcam_url,
     )
 
     # PDF URL — served via GET /api/reports/{filename}

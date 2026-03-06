@@ -303,6 +303,40 @@ async def serve_report(filename: str):
     )
 
 
+# ── Grad-CAM heatmap serving ──────────────────────────────────────────────────
+
+@app.get(
+    "/api/gradcam/{filename}",
+    tags=["Files"],
+    summary="Serve a Grad-CAM heatmap overlay PNG",
+    response_class=FileResponse,
+)
+async def serve_gradcam(filename: str):
+    """
+    Serve a Grad-CAM heatmap overlay PNG by filename.
+
+    The URL is returned in the ``cnn.gradcam_url`` field of POST /api/classify
+    and is also stored in the history payload so the history detail page can
+    render it.  Files are retained for 30 days alongside PDFs in reports/.
+
+    Security: the filename is stripped of any directory components to prevent
+    path traversal (the same pattern as serve_report above).
+    """
+    safe = Path(filename).name          # strip any directory components
+    if not safe.endswith(".png"):
+        raise HTTPException(status_code=400, detail="Only PNG files can be served here.")
+
+    gradcam_path = _REPORTS_DIR / safe
+    if not gradcam_path.exists():
+        raise HTTPException(status_code=404, detail=f"Grad-CAM file '{safe}' not found.")
+
+    return FileResponse(
+        path       = gradcam_path,
+        media_type = "image/png",
+        headers    = {"Cache-Control": "max-age=2592000"},   # 30 days, matches TTL
+    )
+
+
 # ── health endpoint ────────────────────────────────────────────────────────────
 
 @app.get(

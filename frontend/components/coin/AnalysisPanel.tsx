@@ -20,14 +20,14 @@ import Link                                         from "next/link";
 import { useState, useEffect, FormEvent }            from "react";
 import { AnimatePresence, motion }                   from "framer-motion";
 import CountUp                                       from "react-countup";
-import { Download, Clock, Cpu, BookOpen, Shield, Search, ExternalLink, ThumbsDown, CheckCircle, X, Sparkles } from "lucide-react";
+import { Download, Clock, Cpu, BookOpen, Shield, Search, ExternalLink, ThumbsDown, CheckCircle, X, Sparkles, Eye } from "lucide-react";
 
 import type { ClassifyResponse, Top5Item }           from "@/types/api";
 import {
   formatConfidence, formatDate, confidenceBg,
   confidenceText, routeStyle, truncate,
 }                                                    from "@/lib/utils";
-import { pdfDownloadUrl, submitFeedback }             from "@/lib/api";
+import { pdfDownloadUrl, submitFeedback, gradcamDisplayUrl } from "@/lib/api";
 import { Badge, routeBadgeVariant, confBadgeVariant } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent }  from "@/components/ui/card";
 import { Button }                                    from "@/components/ui/button";
@@ -341,6 +341,81 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
             All ↗ links open <span className="font-medium">corpus&#8209;nummorum.eu</span> in a new tab. The site may take a few seconds to respond.
           </p>
         </div>
+
+        {/* ── Grad-CAM Visual Explanation ────────────────────────────────────
+         *  WHY here (after top-5, before the CN CTA):
+         *    The heatmap answers the question "why did the CNN rank this type
+         *    first?" — it belongs right after the confidence numbers and before
+         *    we invite the user to open the scholarly record.
+         *  WHY conditional: pytorch-grad-cam is optional; if not installed or
+         *    the generation failed the field is null and we silently skip it.
+         *  HOW: gradcamDisplayUrl() bypasses the Next.js proxy (same reason as
+         *    pdfDownloadUrl) to get the PNG directly from FastAPI.
+         * ─────────────────────────────────────────────────────────────────── */}
+        {cnn.gradcam_url && (
+          <div
+            className="rounded-xl overflow-hidden"
+            style={{ border: "1px solid rgba(99,102,241,0.25)", background: "rgba(99,102,241,0.04)" }}
+          >
+            {/* Header strip */}
+            <div
+              className="flex items-center gap-2 px-4 py-2 border-b"
+              style={{ borderColor: "rgba(99,102,241,0.20)", background: "rgba(99,102,241,0.08)" }}
+            >
+              <Eye size={13} className="text-indigo-400" />
+              <span className="text-[11px] font-semibold tracking-wide uppercase text-indigo-300">
+                Grad-CAM — CNN Visual Explanation
+              </span>
+            </div>
+
+            {/* Body: image + legend */}
+            <div className="flex gap-4 p-4 items-start">
+              {/* Heatmap image */}
+              <div className="shrink-0 rounded-lg overflow-hidden" style={{ background: "rgba(0,0,0,0.3)" }}>
+                <img
+                  src={gradcamDisplayUrl(cnn.gradcam_url)}
+                  alt="Grad-CAM activation heatmap"
+                  width={160}
+                  height={160}
+                  className="block w-40 h-40 object-cover"
+                  onError={(e) => {
+                    // Hide the whole card if the PNG is gone (cleaned up after 30 days)
+                    const card = (e.currentTarget as HTMLImageElement).closest<HTMLDivElement>(".rounded-xl");
+                    if (card) card.style.display = "none";
+                  }}
+                />
+              </div>
+
+              {/* Legend + explanation */}
+              <div className="flex flex-col gap-2 min-w-0">
+                <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                  Regions highlighted in{" "}
+                  <span className="font-semibold" style={{ color: "#f87171" }}>red/yellow</span>{" "}
+                  are the pixels the CNN weighted most when selecting{" "}
+                  <span className="font-mono text-blue-300">CN {cnn.label}</span> as the top match.
+                  Areas shown in{" "}
+                  <span className="font-semibold text-blue-400">dark blue</span>{" "}
+                  contributed little to the decision.
+                </p>
+                {/* Colour scale bar */}
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-[10px] text-[var(--text-muted)]">Low</span>
+                  <div
+                    className="flex-1 h-2 rounded-full"
+                    style={{
+                      background: "linear-gradient(to right, #3b82f6, #22c55e, #eab308, #ef4444)",
+                    }}
+                  />
+                  <span className="text-[10px] text-[var(--text-muted)]">High</span>
+                </div>
+                <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+                  Generated by Grad-CAM on the last EfficientNet-B3 conv layer.
+                  Overlay is computed on the original (pre-TTA) image.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Corpus Nummorum CTA ────────────────────────────────────────────
          *  A full-width invitation to open the official scholarly record.
