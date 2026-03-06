@@ -89,7 +89,7 @@ logger = logging.getLogger(__name__)
 # degrades gracefully: generate_gradcam() logs a warning and returns None.
 # Installation: pip install grad-cam>=1.4.8
 try:
-    from pytorch_grad_cam                    import GradCAM
+    from pytorch_grad_cam                    import GradCAMPlusPlus
     from pytorch_grad_cam.utils.image        import show_cam_on_image
     from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
     _GRADCAM_AVAILABLE = True
@@ -116,12 +116,39 @@ class GradCAMExtractor:
 
     Target layer selection
     ----------------------
-    ``model.features[-1]`` is the last EfficientNet-B3 feature block:
-        - Highest semantic content (18 convolutional layers of abstraction)
+    ``model.features[-4]`` is EfficientNet-B3 stage-5 (features[5]):
+        - High semantic content (after 13 convolutional blocks of abstraction)
         - Still has spatial dimensions (not yet flattened by adaptive avg pool)
-        - Standard choice for classification Grad-CAM in the literature
-    Using an earlier block gives finer grain but lower semantic quality;
-    using the adaptive pool output gives no spatial information at all.
+        - Spatial resolution: 19×19 (361 cells) vs features[-1] which is 10×10
+          (100 cells).  Each 19×19 cell covers ~16×16 pixels of the coin image
+          instead of ~30×30 — enables the heatmap to distinguish between the
+          coin face features (portrait, legend, reverse iconography) and the
+          coin rim/background border.
+
+    WHY features[-4] and NOT features[-1] (the standard choice):
+        The standard guidance is to use the LAST conv feature map for maximum
+        semantic content.  For clean, single-object images this is optimal.
+        For Corpus Nummorum (every training image = two coin faces side-by-side
+        in one 299×299 square), the last 10×10 feature map is too coarse:
+          - Each of the 100 cells covers a ~30×30 pixel area
+          - The coin rim (maximum contrast transition: bright coin → black
+            background) dominates neighbouring cells because its gradient is
+            always large and consistent
+          - For OOD or low-confidence inputs, gradients are diffuse and the
+            biggest gradient signal is at the high-contrast rim, not the
+            numismatic content (portrait, legend)
+        At 19×19, the rim occupies 1–2 cells; the coin FACE occupies 12–15
+        cells — the heatmap can now show WHERE ON THE FACE the model looked.
+
+    WHY GradCAMPlusPlus (not vanilla GradCAM):
+        GradCAM computes α_k = mean(∂y_c/∂A^k) — the mean gradient across
+        all spatial positions.  When the coin has TWO sub-objects (obverse +
+        reverse), this mean gradient washes out between both, often yielding
+        a bright ring at the boundary between them rather than on either face.
+        GradCAM++ replaces the simple mean with a second-order gradient term
+        that up-weights spatial positions where the gradient is largest — it
+        correctly localises to the more discriminative face (usually obverse)
+        even in the presence of the second coin face and background.
     """
 
     def __init__(self, model: "nn.Module", device: str = "cpu") -> None:
@@ -142,9 +169,11 @@ class GradCAMExtractor:
         self._model  = model.eval()
 
         # target_layers must be a list — pytorch-grad-cam supports multi-layer
-        # averaging, but we use only the final block (standard practice).
-        target_layers   = [model.features[-1]]
-        self._cam       = GradCAM(model=model, target_layers=target_layers)
+        # averaging, but we use a single layer (features[-4], stage-5, 19×19).
+        # See class docstring for why features[-4] outperforms features[-1]
+        # on composite numismatic images.
+        target_layers   = [model.features[-4]]
+        self._cam       = GradCAMPlusPlus(model=model, target_layers=target_layers)
 
     def explain(
         self,
