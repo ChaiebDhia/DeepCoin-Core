@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: March 2026 — Grad-CAM upgraded to GradCAM++ at features[-4] 19×19 (b15c2b7). Amber warning in AnalysisPanel fixed: was "not in training set" (WRONG) → "photograph style differs from training data" (correct). Root cause: BNF 1966 catalog scans inside the training set score 15-28% while standard _p composite photographs score 80-96% — intra-dataset distribution shift. Journal sections 183-184 added (28b4d0a). Next: Gap 4 — Docker Compose full wiring (7 services).
+# Last updated: March 2026 — Grad-CAM upgraded to GradCAM++ at features[-4] 19×19 (b15c2b7). Amber warning in AnalysisPanel fixed: was "not in training set" (WRONG) → "photograph style differs from training data" (correct). Root cause: BNF 1966 catalog scans inside the training set score 15-28% while standard _p composite photographs score 80-96% — intra-dataset distribution shift. Journal sections 183-184 added (28b4d0a). 3-panel Grad-CAM++ comparison figure added (scripts/compare_heatmaps.py, 98a8a6c). V4 retraining deferred — 80.03% is PFE-grade; law of diminishing returns. MLflow + Active Learning testing guides written (Sections 186-188). Next: Gap 4 — Docker Compose full wiring (7 services).
 
 ---
 
