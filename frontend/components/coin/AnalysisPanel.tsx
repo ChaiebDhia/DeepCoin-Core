@@ -413,15 +413,25 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
                   finer spatial resolution than the final layer). Overlay is computed on the
                   original (pre-TTA) image.
                 </p>
-                {/* Confidence-aware note for OOD / low-confidence coins */}
+                {/* Confidence-aware note for low-confidence predictions.
+                 *  WHY this message was rewritten: diagnostic tests on actual training
+                 *  images revealed that "BNF 1966.453" catalog scans (historical museum
+                 *  photographs) inside the training set itself only score 15-28%, while
+                 *  the standard CN composite photographs score 80-96%.  The coin type IS
+                 *  known to the model — the issue is the photograph source, not the coin.
+                 *  Saying "not in training set" was factually wrong and misled users.
+                 */}
                 {cnn.confidence < 0.40 && (
                   <p
                     className="text-[10px] mt-1 px-2 py-1 rounded"
                     style={{ background: "rgba(234,179,8,0.08)", color: "#ca8a04", border: "1px solid rgba(234,179,8,0.20)" }}
                   >
-                    ⚠️ Low confidence ({Math.round(cnn.confidence * 100)}%) — this coin type was not in the
-                    CNN training set. The heatmap may highlight the coin’s outline and
-                    background contrast rather than specific numismatic features.
+                    ⚠️ Low confidence ({Math.round(cnn.confidence * 100)}%) — the photograph style may
+                    differ from the model&apos;s training data. The CNN was trained primarily on
+                    standardised composite coin scans; single-face photographs, historical
+                    catalog images, or non-standard lighting can reduce confidence even for
+                    known coin types. The heatmap highlights the most discriminative region
+                    found but may not align with specific numismatic features.
                   </p>
                 )}
               </div>

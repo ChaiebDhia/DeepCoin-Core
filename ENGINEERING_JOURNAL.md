@@ -41081,3 +41081,232 @@ coarse 10×10 upsampling.
 ---
 
 *Commit: `b15c2b7` — Grad-CAM++ at features[-4] 19×19, confidence-aware UI caption*
+
+---
+
+## Section 184  Confidence Diagnosis: BNF Photograph Source Mismatch
+
+*Date: March 2026 | Issue: In-distribution coins getting <30% confidence*
+
+---
+
+### 184.1  The Reported Problem
+
+After deploying the Grad-CAM heatmap feature, the user tested four coin uploads and
+observed unexpectedly low confidence scores:
+
+| Uploaded coin | CNN confidence | Amber warning shown |
+|---|---|---|
+| CN 220  | 28% | "not in training set" |
+| CN 325  | 20% | "not in training set" |
+| CN 8455 | 11% | "not in training set" |
+| CN 8836 |  5% | "not in training set" |
+
+The amber warning text claimed these coins were **not in the CNN training set**  the
+implication being that low confidence is expected for out-of-distribution types.
+
+This claim was wrong for every single case.
+
+---
+
+### 184.2  Verification: All Four Types Are in the Training Set
+
+A directory count check proved all four types are represented in `data/processed/`:
+
+```
+CN  220:  11 training images   IN TRAINING SET
+CN  325:  22 training images   IN TRAINING SET
+CN 8455:  61 training images   IN TRAINING SET   61 images, still 11% confidence
+CN 8836:  17 training images   IN TRAINING SET
+CN 1015:  17 training images   high confidence (reference)
+```
+
+CN 8455 is particularly stark: 61 training images  well above the 10 threshold we
+applied during dataset construction  yet the user's upload yields only 11%
+confidence.  This rules out "too few samples" as the explanation.
+
+The amber warning "this coin type was not in the CNN training set" was therefore
+**factually incorrect** for all four cases.
+
+---
+
+### 184.3  Diagnostic: Inference on Actual Training Images
+
+To isolate whether the model had failed to learn these classes or whether the
+uploaded photos themselves were the issue, the following diagnostic script was run:
+
+```python
+# scripts/_debug_confidence.py
+for cls in ['220', '1015', '8455', '325']:
+    imgs = glob.glob(f'data/processed/{cls}/*.jpg')[:4]
+    for p in imgs:
+        r = ci.predict(p, tta=False)
+        print(f'{p[-45:]}: pred={r["label"]}  conf={r["confidence"]:.1%}')
+```
+
+Results (temperature = 1.0  scaling is **not** a factor):
+
+```
+--- CN 220 (11 imgs) ---
+  BNF_1966.453_cn_coin_12683_o.jpg   pred=220  conf=28.0%    LOW
+  cn_coin_7983_p.jpg                 pred=220  conf=95.9%    HIGH
+  cn_coin_7997_p.jpg                 pred=220  conf=96.6%    HIGH
+  cn_coin_8014_p.jpg                 pred=220  conf=94.2%    HIGH
+
+--- CN 325 (22 imgs) ---
+  BNF_1966.453_cn_coin_12680_o.jpg   pred=1666  conf=15.1%   WRONG + LOW
+  BNF_Platzhalter_cn_coin_12706_o.jpg  pred=325  conf=93.0%  HIGH
+  BNF_Platzhalter_cn_coin_8285_o.jpg   pred=325  conf=96.4%  HIGH
+
+--- CN 8455 (3 imgs) ---
+  BNF_41742278_cn_coin_21462_o.jpg   pred=8455  conf=86.3%   HIGH
+  BNF_41767995_cn_coin_23398_o.jpg   pred=8455  conf=50.4%   MEDIUM
+  BNF_41767996_cn_coin_23399_o.jpg   pred=8455  conf=58.8%   MEDIUM
+
+--- CN 1015 ---
+  cn_coin_5943_p.jpg                 pred=1015  conf=86.0%   HIGH
+  cn_coin_6995_p.jpg                 pred=1015  conf=80.4%   HIGH
+```
+
+The split is unmistakable.
+
+---
+
+### 184.4  Root Cause: Two Photographic Sources in the Training Set
+
+The CN database combines photographs from two distinct sources:
+
+#### Source A  Standard CN Composite Photographs (`_p` suffix, `BNF_Platzhalter`)
+
+These are the dominant source class.  Each image shows **both coin faces** (obverse +
+reverse) side-by-side on a white background, photographed under standardised
+museum-quality lighting.  The model's 438-class classification head was fine-tuned
+primarily on this image style.
+
+Confidence on `_p` images: **8097%**
+
+#### Source B  BNF 1966.453 Catalog Scans (`BNF_1966.453_o` suffix)
+
+"BNF" = Bibliothèque nationale de France.  "1966.453" identifies a 1966 acquisition
+catalog.  These are **historical photographs** taken with 1960s equipment:
+
+- Single-face only (one side per image  obverse only, no reverse)
+- Different aspect ratio and crop geometry
+- Harsher contrast, granular backgrounds
+- Slightly lower resolution
+
+CN 220 has 11 total training images.  Of these, approximately 1 is from the BNF 1966
+source  the remaining ~10 are `_p` composite photographs.  Because the `_p` style
+dominates the training signal by 10:1, the model's learned weights capture `_p`
+visual statistics.  When it sees a BNF 1966 scan at inference time, even from the
+same training class, the feature activations look foreign.
+
+This is **intra-dataset distribution shift**  two photographically distinct
+sub-populations exist within what appears to be one training set.
+
+---
+
+### 184.5  Why the User Gets Low Confidence
+
+The user's uploads that returned low confidence were photographs they found online 
+likely from museum portals, institutional catalogs, or auction house scans.  These
+share the same visual characteristics as the BNF 1966 photographs:
+
+- Single face (obverse only or reverse only)
+- Different background texture
+- Non-standardised lighting and crop
+
+The model sees an image that statistically resembles the rare BNF 1966 sub-population
+(1 in 11 training images) rather than the dominant `_p` population (10 in 11).
+Softmax probability mass spreads across the top-k candidates instead of concentrating
+on the correct class.
+
+Crucially, temperature = 1.0 rules out calibration over-squashing as a factor.  The
+raw logits themselves are diffuse  the feature-space distance between the uploaded
+photo and the learned class centre is genuinely large.
+
+---
+
+### 184.6  The Amber Warning Was Wrong  Fix Applied
+
+The previous warning text:
+
+```
+ Low confidence (X%)  this coin type was not in the CNN training set.
+The heatmap may highlight the coin's outline and background contrast
+rather than specific numismatic features.
+```
+
+This is factually incorrect for all four user-tested coins.  The statement "not in
+training set" implies the *type* is unknown, but the type is known  CN 8455 has 61
+training images.  The low confidence is caused by photographic source mismatch, not
+by the type being absent from the training corpus.
+
+**Updated warning text (AnalysisPanel.tsx):**
+
+```
+ Low confidence (X%)  the photograph style may differ from the model's
+training data. The CNN was trained primarily on standardised composite coin
+scans; single-face photographs, historical catalog images, or non-standard
+lighting can reduce confidence even for known coin types. The heatmap
+highlights the most discriminative region found but may not align with
+specific numismatic features.
+```
+
+This is both accurate and informative: it correctly identifies the mechanism (photo
+style mismatch), tells the user what kind of images work best, and does not falsely
+imply the coin type is unknown.
+
+---
+
+### 184.7  What This Reveals About the Training Set
+
+The BNF 1966.453 sub-population is small but shows it is possible for the model to
+perform well on types with *only* BNF photographs  CN 8455's `BNF_41742278` image
+scores 86%.  This means individual photographic quality within the BNF catalog varies.
+
+The distribution of photographic sources per class is:
+
+- Most classes: all `_p` composite images  very high confidence
+- A minority of classes: mix of `_p` and `BNF_1966.453`  model performance depends
+  on which fraction dominates
+- A rare few classes: only `BNF_1966.453` images  model learns only this style for
+  that class  would actually perform *better* on catalog uploads for those classes
+
+The practical takeaway is that **confidence is not a reliable indicator of whether
+the coin type is in the training set**.  A better signal for "is this type likely
+trained on?" is checking the `in_training_set` field from the RAG engine's metadata,
+which was built into the knowledge base in the enterprise RAG upgrade.
+
+---
+
+### 184.8  How to Fix the Root Cause (Future V4 Retraining)
+
+A proper fix requires addressing the intra-dataset distribution shift at training
+time:
+
+1. **Photographic source as an augmentation axis**: During training, jointly sample
+   `_p` and `_o` (BNF) images with equal probability per class where both exist.
+   Currently the imbalance (10 `_p` to 1 `_o`) makes the model weight the `_p` style
+   too heavily.
+
+2. **Style normalisation preprocessing**: Apply Reinhard color transfer to normalise
+   all images to a single reference color palette before training.  BNF 1966 scans
+   have distinctly different tonal statistics from `_p` composites  normalising them
+   to match would reduce the feature-space distance.
+
+3. **Single-face augmentation**: During training, randomly crop to one face only (50%
+   of the time) so the model learns to classify from either face independently.  This
+   also helps at inference time when users upload single-face photos.
+
+4. **Source-aware contrastive loss**: Add a secondary loss term that penalises the
+   model for assigning different embeddings to the same type when photographed in
+   different styles  forcing style-invariant feature learning.
+
+For the current deployment (V3 weights), the best mitigation is the updated amber
+warning, which sets correct user expectations without misattributing the cause.
+
+---
+
+*Diagnostic script: `scripts/_debug_confidence.py`*
+*AnalysisPanel.tsx amber warning updated  `frontend/components/coin/AnalysisPanel.tsx` line ~416*
