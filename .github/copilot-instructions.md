@@ -3,7 +3,7 @@
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: March 6, 2026 — A+++ roadmap Gaps 1-3 complete: MLflow tracking (train.py), Grad-CAM explainability (src/core/gradcam.py + inference.py + synthesis PDF + **web UI** AnalysisPanel + history detail), Active Learning loop (scripts/active_learning.py + API routes + train.py injection). Engineering Journal sections 160-173 added. Swagger /report response_class=None fix applied (a96e32e). Next: Gap 4 — Docker Compose full wiring (7 services).
+# Last updated: March 2026 — Grad-CAM upgraded to GradCAM++ at features[-4] 19×19 (b15c2b7). Amber warning in AnalysisPanel fixed: was "not in training set" (WRONG) → "photograph style differs from training data" (correct). Root cause: BNF 1966 catalog scans inside the training set score 15-28% while standard _p composite photographs score 80-96% — intra-dataset distribution shift. Journal sections 183-184 added (28b4d0a). Next: Gap 4 — Docker Compose full wiring (7 services).
 
 ---
 
@@ -835,7 +835,7 @@ Files: `src/core/inference.py`, `src/core/gradcam.py`, `scripts/predict.py`
 - **CLAHE fix (commit bc99423):** `_load_image()` now applies CLAHE before BGR→RGB conversion, exactly matching the `prep_engine.py` training pipeline
   - Skipping CLAHE caused train/inference distribution mismatch → 5–15% confidence on raw photos even for known coin types
   - Parameters: `clipLimit=2.0, tileGridSize=(8,8)` on L channel in LAB colourspace (identical to training)
-- **Grad-CAM (A+++ Gap 2):** `predict(gradcam=True)` generates a heatmap PNG via `src/core/gradcam.py::generate_gradcam()`. `gatekeeper.py` passes `gradcam=True` on every call. PNG path stored in `cnn_prediction["gradcam_path"]` and embedded in the PDF by `synthesis.to_pdf()`. **Web UI (a96e32e):** classify.py moves PNG to `reports/` (30-day TTL), exposes `/api/gradcam/{filename}`. `CnnResult` schema has `gradcam_url`. `AnalysisPanel` renders `GradCamCard` after top-5 table — indigo-bordered card with heatmap `<img>`, red-yellow-blue colour-scale bar, explanation copy. `gradcamDisplayUrl()` in `lib/api.ts` bypasses Next.js proxy. History detail page gets it for free via the JSONB payload `cnn.gradcam_url` field.
+- **Grad-CAM (A+++ Gap 2):** `predict(gradcam=True)` generates a heatmap PNG via `src/core/gradcam.py::generate_gradcam()`. `gatekeeper.py` passes `gradcam=True` on every call. PNG path stored in `cnn_prediction["gradcam_path"]` and embedded in the PDF by `synthesis.to_pdf()`. **Web UI (a96e32e):** classify.py moves PNG to `reports/` (30-day TTL), exposes `/api/gradcam/{filename}`. `CnnResult` schema has `gradcam_url`. `AnalysisPanel` renders `GradCamCard` after top-5 table — indigo-bordered card with heatmap `<img>`, red-yellow-blue colour-scale bar, explanation copy. `gradcamDisplayUrl()` in `lib/api.ts` bypasses Next.js proxy. History detail page gets it for free via the JSONB payload `cnn.gradcam_url` field. **Upgraded (b15c2b7):** Algorithm `GradCAM` → `GradCAMPlusPlus`; target layer `features[-1]` 10×10 → `features[-4]` 19×19 (136ch); 3.6× finer spatial resolution. **Amber warning fixed (28b4d0a):** Was "not in training set" (WRONG — CN 8455 has 61 training images yet scores 11%). Real cause: BNF 1966.453 catalog scans score 15-28% while standard `_p` composite photos score 80-96% — intra-dataset distribution shift. Warning now correctly says "photograph style may differ from training data".
 
 ### Layer 2 — Knowledge Base ✅ UPGRADED TO FULL CORPUS
 Files: `src/core/knowledge_base.py` (legacy fallback), `src/core/rag_engine.py` (production), `scripts/build_knowledge_base.py`, `scripts/rebuild_chroma.py`
@@ -1313,7 +1313,11 @@ pytest (9.0.2)      # unit testing (34 tests across 3 files)
 | `6c6a7cf` | docs: update persistent context — commits 19721b9, 8eb9b3c, 3752283 added |
 | `ce6c2f9` | feat: MLflow tracking (train.py) + Grad-CAM explainability (gradcam.py, inference.py, synthesis.py, gatekeeper.py) + Engineering Journal sections 160-167 |
 | `2996a52` | feat: Active Learning loop (Gap 3) — scripts/active_learning.py, routes/active_learning.py, _store.py candidates+mark functions, train.py _InMemoryDataset + --active-learning-dir + 3x sampler injection + Engineering Journal sections 168-173 |
-| `a96e32e` | feat: Grad-CAM on web UI + fix Swagger response_class=None — gradcam_url in CnnResult schema, classify.py moves PNG to reports/ (30d TTL), /api/gradcam/{filename} serving endpoint, history.py rehydration, frontend GradCamCard in AnalysisPanel (Eye icon, heatmap + colour-scale legend), gradcamDisplayUrl() helper, types/api.ts updated ← LATEST |
+| `a96e32e` | feat: Grad-CAM on web UI + fix Swagger response_class=None — gradcam_url in CnnResult schema, classify.py moves PNG to reports/ (30d TTL), /api/gradcam/{filename} serving endpoint, history.py rehydration, frontend GradCamCard in AnalysisPanel (Eye icon, heatmap + colour-scale legend), gradcamDisplayUrl() helper, types/api.ts updated |
+| `42b42e3` | docs: Engineering Journal sections 178-182 |
+| `b15c2b7` | fix: GradCAM++ at features[-4] 19×19 replaces GradCAM at features[-1] 10×10; confidence-aware amber UI caption; 3.6× finer spatial resolution |
+| `208abdc` | docs: Engineering Journal Section 183 — Grad-CAM++ 19×19 fix, border attention root cause analysis (shortcut learning + coarse resolution + OOD diffuse gradients) |
+| `28b4d0a` | fix: amber warning text (photo source mismatch not missing type) + Journal Section 184 — BNF 1966.453 catalog scans vs standard _p composite photos, intra-dataset distribution shift diagnosis ← LATEST |
 
 ---
 
