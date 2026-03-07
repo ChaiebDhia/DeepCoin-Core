@@ -1,0 +1,76 @@
+# Dockerfile.mlflow
+# ====================
+# Lightweight MLflow Tracking Server — Gap 4 (Docker full wiring).
+#
+# WHY a dedicated Dockerfile instead of the official ghcr.io/mlflow/mlflow image:
+#   The official image ships with Python 3.8 and an older base.  We stay on
+#   python:3.12-slim to keep the CVE baseline consistent across all services.
+#   The image is tiny: python:3.12-slim (55 MB) + mlflow + boto3 ≈ 250 MB total.
+#
+# WHY boto3:
+#   MLflow's artifact store supports S3-compatible backends (LocalStack in our
+#   stack).  boto3 is the AWS SDK that mlflow uses under the hood when
+#   DEFAULT_ARTIFACT_ROOT is set to an s3:// URI.  Installing it here means
+#   we can switch the artifact store from local disk to LocalStack S3 by
+#   changing a single environment variable in docker-compose.yml — no image
+#   rebuild required.
+#
+# STORAGE LAYOUT (inside the container):
+#   /mlflow/mlflow.db      — SQLite backend store (experiment metadata, runs, metrics)
+#   /mlflow/artifacts/     — default artifact root (model weights, plots, confusion matrices)
+#   /mlflow                — named volume "mlflow_data" in docker-compose.yml
+#                            → survives container restarts, upgrades, and image rebuilds
+#
+# --serve-artifacts flag:
+#   Enables the Artifacts Proxy API so clients do NOT need direct access to
+#   the artifact store.  Everything goes through the MLflow server on port 5000.
+#   This is essential in Docker: the FastAPI container (where training runs)
+#   reaches the artifact store via the MLflow HTTP API, not via a shared filesystem.
+#
+# SECURITY:
+#   - Non-root user "mlflow" (uid 1001)
+#   - No .env baked in — credentials injected at runtime via docker-compose.yml
+#   - The /mlflow volume is owned by uid 1001 via the chown in the RUN step
+
+FROM python:3.12-slim
+
+LABEL org.opencontainers.image.title="DeepCoin MLflow" \
+      org.opencontainers.image.description="MLflow Tracking Server for DeepCoin experiment logging" \
+      org.opencontainers.image.authors="Dhia Chaieb <dhia.chaieb@esprit.tn>"
+
+# Install MLflow + the S3 artifact store driver (boto3).
+# --no-cache-dir keeps the image layer lean (no pip wheel cache saved to disk).
+RUN pip install --no-cache-dir \
+        "mlflow>=2.21.0,<3.0" \
+        "boto3>=1.35"
+
+# Create a non-root service account.
+# WHY uid 1001: mirrors the appuser in Dockerfile.api and nextjs in frontend/Dockerfile —
+# consistent uid numbering across all service containers simplifies volume ownership audits.
+RUN groupadd --gid 1001 mlflowgroup \
+ && useradd  --uid 1001 --gid mlflowgroup --no-create-home --shell /bin/false mlflow \
+ && mkdir -p /mlflow/artifacts \
+ && chown -R mlflow:mlflowgroup /mlflow
+
+USER mlflow
+
+EXPOSE 5000
+
+# Container health check.
+# MLflow exposes GET /api/2.0/mlflow/experiments/list  →  HTTP 200 when ready.
+# Python's urllib is used instead of curl so we don't need an extra apt install.
+HEALTHCHECK --interval=15s --timeout=10s --retries=5 --start-period=30s \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/2.0/mlflow/experiments/list')"
+
+# Start the MLflow tracking server.
+#   --host 0.0.0.0          listen on all interfaces (required inside Docker)
+#   --port 5000             default MLflow port
+#   --backend-store-uri     SQLite in /mlflow (volume-persisted)
+#   --default-artifact-root  local directory inside the volume
+#   --serve-artifacts       enable the Artifacts Proxy API (see WHY above)
+CMD ["mlflow", "server", \
+     "--host", "0.0.0.0", \
+     "--port", "5000", \
+     "--backend-store-uri", "sqlite:////mlflow/mlflow.db", \
+     "--default-artifact-root", "/mlflow/artifacts", \
+     "--serve-artifacts"]

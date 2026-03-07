@@ -1,30 +1,86 @@
-# DeepCoin — Docker Compose service stack
-# =========================================
-# Services:
-#   postgres  — PostgreSQL 17 (primary datastore)
-#   redis     — Redis 7      (rate-limit counters + result cache)
-#   api       — FastAPI      (AI pipeline + REST endpoints)
-#   web       — Next.js 15   (frontend — production build)
-#   nginx     — Nginx 1.27   (reverse proxy, TLS termination)
+﻿# DeepCoin  Docker Compose full-stack service manifest
+# =======================================================
 #
-# For LOCAL DEVELOPMENT (without building containers):
-#   docker compose up postgres redis   ← start only the infrastructure services
-#   then: uvicorn src.api.main:app --port 8000   (FastAPI in venv)
-#   then: cd frontend && pnpm dev                (Next.js hot-reload)
+# Gap 4 (March 2026)  7 always-running services + 1 profile-triggered helper:
 #
-# For FULL STACK:
-#   docker compose up --build
+#   1. postgres    PostgreSQL 17 (primary relational store)
+#   2. redis       Redis 7       (rate-limit counters + result cache)
+#   3. api         FastAPI       (AI pipeline + REST endpoints, port 8000)
+#   4. web         Next.js 15    (frontend SSR, port 3000)
+#   5. nginx       Nginx 1.27   (reverse proxy, TLS termination, ports 80/443)
+#   6. mlflow      MLflow 2.x   (experiment tracking server, port 5000)
+#   7. localstack  LocalStack 3 (AWS S3 simulation for PDF archiving, port 4566)
+#   ---------------------------------------------------------------------------
+#   [profile: migration]
+#   migrator       one-shot Alembic runner (docker compose run --rm migrator)
 #
-# Secrets: copy .env.example → .env and fill in real values
+#  QUICK START 
+#
+#   # 1. Copy secrets file
+#   cp .env.example .env   # then fill in your values
+#
+#   # 2. Run first-time DB migration
+#   docker compose run --rm migrator
+#
+#   # 3. Start all services
+#   docker compose up --build -d
+#
+#   # 4. Check health
+#   docker compose ps
+#
+#   # Services are accessible at:
+#     http://localhost        DeepCoin web app  (via Nginx)
+#     http://localhost:8000   FastAPI docs      (dev only; gated by ENV var)
+#     http://localhost:5000   MLflow UI
+#     http://localhost:4566   LocalStack S3 edge endpoint
+#
+#  SECRETS 
+#   Sensitive values are read from the .env file (gitignored, never committed).
+#   docker-compose.yml only hard-codes non-sensitive defaults.
+#   See .env.example for the full list of required variables.
+#
+#  VOLUME STRATEGY 
+#   Named volumes   owned by Docker, survive container recreation, portably
+#                    backed up with `docker run --volumes-from ...`
+#   Bind mounts     host directory mapped directly (pre-built artefacts only)
+#
+#   postgres_data    PostgreSQL WAL + tables
+#   redis_data       Redis AOF persistence
+#   reports_data     generated PDF reports (also served via /api/reports/)
+#   uploads_tmp      temporary upload files (cleaned by FastAPI lifespan hook)
+#   mlflow_data      MLflow SQLite backend + artifacts (experiments, metrics, plots)
+#   localstack_data  LocalStack S3 bucket data (deepcoin-reports bucket)
+#
+#   Bind mounts (pre-built, populated on the host before docker compose up):
+#   ./models         /app/models:ro       CNN weights (best_model.pth, 350 MB)
+#   ./data/metadata  /app/data/metadata   ChromaDB index (47,705 vectors, 180 MB)
+#                     NOTE: NOT :ro  ChromaDB PersistentClient needs write access
+#                     for WAL files, compaction, and Parquet page flushes.
 
+#  Shared environment anchor 
+# Variables injected into every service that connects to the data layer.
+# YAML anchor (&) and alias (*) avoid repeating the same block.
 x-common-env: &common-env
   DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-deepcoin}:${POSTGRES_PASSWORD:-deepcoin}@postgres:5432/${POSTGRES_DB:-deepcoin}
-  REDIS_URL: redis://redis:6379/0
-  ENV: production
+  REDIS_URL:    redis://redis:6379/0
+  ENV:          production
 
 services:
 
-  # ── PostgreSQL 17 ─────────────────────────────────────────────────────────
+  #  1. PostgreSQL 17 
+  #
+  # WHY PostgreSQL (not SQLite for production):
+  #   The FastAPI routes use SQLAlchemy async (asyncpg driver) which requires
+  #   PostgreSQL.  SQLite is retained as a legacy reference in _store.py for
+  #   unit tests only.  PostgreSQL provides:
+  #     - JSONB columns with GIN indexes (fast payload queries)
+  #     - TIMESTAMPTZ (timezone-aware timestamps)
+  #     - gen_random_uuid() server-side UUID generation
+  #     - Connection pooling via asyncpg
+  #
+  # WHY :17-alpine (not :17):
+  #   Alpine base reduces the image from ~380 MB to ~70 MB.
+  #   pg_isready is included and used by the health check.
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
@@ -35,7 +91,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"       # expose for local alembic migrations
+      - "5432:5432"       # expose for local alembic migrations and DBeaver
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-deepcoin} -d ${POSTGRES_DB:-deepcoin}"]
       interval: 5s
@@ -43,7 +99,17 @@ services:
       retries: 10
       start_period: 10s
 
-  # ── Redis 7 ───────────────────────────────────────────────────────────────
+  #  2. Redis 7 
+  #
+  # WHY Redis (not in-memory within FastAPI):
+  #   slowapi's rate limiter stores per-IP request counts in Redis so that
+  #   multiple container replicas share the same counters.  In a single-container
+  #   dev setup, MemoryStorage works, but moving to Redis costs nothing and
+  #   is required for horizontal scaling.
+  #
+  #   maxmemory-policy allkeys-lru: when Redis hits 128 MB, evict the least
+  #   recently used keys first.  Rate-limit counters are short-lived (60s TTL),
+  #   so LRU eviction is safe.
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -58,29 +124,66 @@ services:
       timeout: 3s
       retries: 5
 
-  # ── FastAPI (AI pipeline + REST API) ──────────────────────────────────────
+  #  3. FastAPI  AI pipeline + REST API 
+  #
+  # Build notes:
+  #   Dockerfile.api  multi-stage (builder + runtime), python:3.12-slim.
+  #   Models and ChromaDB index are bind-mounted :ro / rw  NOT baked into
+  #   the image.  This keeps the image at ~800 MB instead of ~1.8 GB and
+  #   allows model updates without a full image rebuild.
+  #
+  # Volume notes:
+  #   ./models:ro      350 MB EfficientNet-B3 weights loaded once at startup.
+  #                     Read-only so a compromised container cannot overwrite them.
+  #   ./data/metadata  180 MB ChromaDB RAG index (47,705 vectors) + JSON metadata.
+  #                     NOT :ro  ChromaDB PersistentClient needs write access.
+  #   reports_data     generated PDF reports, served by GET /api/reports/{name}.
+  #   uploads_tmp      ephemeral upload staging; cleaned by the lifespan hook.
   api:
     build:
       context: .
-      dockerfile: Dockerfile.api          # to be created in Layer 6
+      dockerfile: Dockerfile.api
     restart: unless-stopped
     environment:
       <<: *common-env
-      DEEPCOIN_API_KEY:  ${DEEPCOIN_API_KEY:-}
-      GITHUB_TOKEN:      ${GITHUB_TOKEN:-}
-      GOOGLE_API_KEY:    ${GOOGLE_API_KEY:-}
-      JWT_SECRET:        ${JWT_SECRET:-change_me_in_production}
-      LOG_FORMAT:        json
-      LOG_LEVEL:         INFO
+      #  LLM providers (priority order: GitHub  Google  Ollama  fallback) 
+      GITHUB_TOKEN:    ${GITHUB_TOKEN:-}
+      GOOGLE_API_KEY:  ${GOOGLE_API_KEY:-}
+      OLLAMA_HOST:     ${OLLAMA_HOST:-}
+      #  Security 
+      DEEPCOIN_API_KEY: ${DEEPCOIN_API_KEY:-}
+      JWT_SECRET:       ${JWT_SECRET:-change_me_in_production_32chars_minimum}
+      SECRET_KEY:       ${SECRET_KEY:-change_me_in_production_32chars_minimum}
+      #  CORS 
+      # In Docker, the frontend is served via Nginx at http://localhost (port 80).
+      # Allow both the Nginx URL and the direct Next.js container port for health checks.
+      ALLOWED_ORIGINS:  ${ALLOWED_ORIGINS:-http://localhost,http://localhost:3000}
+      #  Logging 
+      LOG_FORMAT: json
+      LOG_LEVEL:  INFO
+      #  MLflow tracking 
+      # Points to the mlflow service via Docker DNS.
+      # train.py calls mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI"))
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      #  LocalStack S3 (PDF archiving) 
+      # When set, FastAPI can archive PDFs to a LocalStack S3 bucket so reports
+      # survive container recreation.  S3 path: s3://deepcoin-reports/{id}.pdf
+      LOCALSTACK_ENDPOINT_URL: http://localstack:4566
+      AWS_ACCESS_KEY_ID:       test
+      AWS_SECRET_ACCESS_KEY:   test
+      AWS_DEFAULT_REGION:      us-east-1
+      S3_BUCKET:               deepcoin-reports
     volumes:
-      - ./models:/app/models:ro           # CNN weights (read-only)
-      - ./data/metadata:/app/data/metadata:ro
+      - ./models:/app/models:ro
+      - ./data/metadata:/app/data/metadata
       - reports_data:/app/reports
       - uploads_tmp:/tmp/deepcoin_uploads
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      mlflow:
         condition: service_healthy
     ports:
       - "8000:8000"
@@ -89,13 +192,30 @@ services:
       interval: 15s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 45s   # EfficientNet-B3 weights take ~30s to load on first start
 
-  # ── Next.js (production build) ────────────────────────────────────────────
+  #  4. Next.js 15 frontend 
+  #
+  # Build notes:
+  #   frontend/Dockerfile  3-stage build (deps  builder  runner), node:22-alpine.
+  #   output: "standalone" in next.config.ts produces a self-contained server.js.
+  #   Final image: ~150 MB (vs ~600 MB for a full node_modules install).
+  #
+  # NEXT_PUBLIC_CLASSIFY_URL:
+  #   Direct browser  Nginx  FastAPI path for classification calls.
+  #   Using http://nginx/api instead of http://api:8000 because the browser
+  #   runs outside Docker and cannot resolve the internal DNS name "api".
+  #   Nginx proxies the request on the correctly-timed 600s proxy_read_timeout.
+  #
+  # AUTH_FASTAPI_URL:
+  #   Used by NextAuth's Credentials provider for login/register POST requests.
+  #   This call originates from inside the web container (server-side), so it
+  #   uses the Docker internal DNS name "api" directly  NOT via nginx  to avoid
+  #   routing loops and to bypass the 600s proxy_read_timeout requirement.
   web:
     build:
       context: ./frontend
-      dockerfile: Dockerfile              # to be created in Layer 6
+      dockerfile: Dockerfile
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL:      http://nginx/api
@@ -103,32 +223,135 @@ services:
       NEXTAUTH_URL:             ${NEXTAUTH_URL:-http://localhost}
       NEXTAUTH_SECRET:          ${NEXTAUTH_SECRET:-change_me_in_production}
       AUTH_SECRET:              ${NEXTAUTH_SECRET:-change_me_in_production}
-      # AUTH_FASTAPI_URL — where NextAuth's Credentials provider sends login requests.
-      # In Docker network, NextAuth runs inside the web container and talks to FastAPI
-      # via the internal Docker DNS name 'api' (not via nginx, to avoid loops).
+      # Server-side  FastAPI via Docker DNS (avoids Nginx routing loop)
       AUTH_FASTAPI_URL:         http://api:8000
       NODE_ENV:                 production
     depends_on:
       api:
         condition: service_healthy
     expose:
-      - "3000"
+      - "3000"            # internal only  Nginx proxies /  web:3000
 
-  # ── Nginx (reverse proxy) ─────────────────────────────────────────────────
+  #  5. Nginx 1.27  reverse proxy 
+  #
+  # Routing table (see nginx/nginx.conf for full config):
+  #   /api/auth/*     web:3000     (NextAuth.js routes  must NOT go to FastAPI)
+  #   /api/classify   api:8000     (strict rate limit: 5 req/min via classify_limit)
+  #   /api/*          api:8000     (general API: 10 req/s burst 20 via api_limit)
+  #   /api/reports/   api:8000     (PDF downloads, 1h Nginx cache)
+  #   /_next/static/  web:3000     (1-year browser cache, fingerprinted files)
+  #   /               web:3000     (all other routes)
+  #
+  # The HTTPS server block in nginx.conf is commented out.
+  # Uncomment it and mount TLS certificates to enable HTTPS.
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro  # to be created in Layer 6
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
       - "80:80"
       - "443:443"
     depends_on:
-      - api
-      - web
+      api:
+        condition: service_healthy
+      web:
+        condition: service_started
 
-  # ── Alembic migration runner (one-shot) ───────────────────────────────────
-  # Run with: docker compose run --rm migrator
+  #  6. MLflow 2.x  experiment tracking 
+  #
+  # WHY MLflow as a separate service (not just file-based mlruns/):
+  #   During training (scripts/train.py) MLflow logs to mlruns/ locally.
+  #   In Docker, the training job runs outside the container stack (or inside a
+  #   one-shot container).  A persistent MLflow server at http://mlflow:5000
+  #   lets BOTH the training job AND the FastAPI inference layer log metrics to
+  #   the same central store  unlocking A/B comparison across training runs.
+  #
+  # UI access:  http://localhost:5000  (exposed directly  no Nginx proxy in Gap 4)
+  #    Nginx proxy at /mlflow/ is deferred: MLflow's UI generates root-relative
+  #     links (/static/...) that break when served from a sub-path without
+  #     --static-prefix configuration.  Direct port access is cleaner.
+  #
+  # Storage layout (inside mlflow_data volume):
+  #   /mlflow/mlflow.db       SQLite backend store (metadata: runs, params, metrics)
+  #   /mlflow/artifacts/      default artifact root (plots, confusion matrices, tags)
+  #
+  # See Dockerfile.mlflow for the full build specification.
+  mlflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.mlflow
+    restart: unless-stopped
+    volumes:
+      - mlflow_data:/mlflow
+    ports:
+      - "5000:5000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/2.0/mlflow/experiments/list')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  #  7. LocalStack 3  AWS S3 simulation 
+  #
+  # WHY LocalStack (not real AWS S3):
+  #   The DeepCoin reports/ directory is a named Docker volume.  It survives
+  #   container restarts but is lost on a full stack teardown (docker compose down -v).
+  #   For production-grade durability, PDFs should be archived to object storage
+  #   (S3 / MinIO / LocalStack).
+  #
+  #   LocalStack gives us a fully functional S3 API at http://localstack:4566
+  #   using the same boto3 client code that would target real AWS in production.
+  #   Swapping to real S3 requires ONLY changing three env vars:
+  #     LOCALSTACK_ENDPOINT_URL    (remove)
+  #     AWS_ACCESS_KEY_ID          real key
+  #     AWS_SECRET_ACCESS_KEY      real secret
+  #
+  # SERVICES=s3:
+  #   We only enable the S3 service to keep the LocalStack image lean.
+  #   LocalStack uses ~150 MB of RAM when running S3 only (vs ~500 MB full stack).
+  #
+  # Bucket provisioning:
+  #   The S3 bucket (deepcoin-reports) must be created once after first start:
+  #     docker compose run --rm localstack-init
+  #   OR:
+  #     aws --endpoint-url http://localhost:4566 s3 mb s3://deepcoin-reports
+  #
+  # Code integration: deferred to Gap 5 (Observability).
+  #   The LOCALSTACK_ENDPOINT_URL env var is injected into the api service now,
+  #   so adding boto3 S3 upload calls to routes/classify.py won't require
+  #   any docker-compose.yml changes.
+  localstack:
+    image: localstack/localstack:3.8
+    restart: unless-stopped
+    environment:
+      SERVICES:             s3
+      DEFAULT_REGION:       us-east-1
+      LOCALSTACK_VOLUME_DIR: /var/lib/localstack
+      DEBUG:                "0"
+    volumes:
+      - localstack_data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "4566:4566"          # LocalStack edge port (all services)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  #  Alembic migration runner (profile-triggered helper) 
+  #
+  # NOT a permanently-running service.  Execute once before first stack start:
+  #   docker compose run --rm migrator
+  #
+  # WHY a separate container (not an entrypoint in the api service):
+  #   Alembic upgrade head acquires an exclusive lock on the migrations table.
+  #   Running it as an entrypoint means every api container restart (e.g. on crash)
+  #   would re-run migrations  harmless but noisy and serialised.
+  #   A profile-triggered one-shot container makes the intention explicit.
   migrator:
     build:
       context: .
@@ -136,14 +359,18 @@ services:
     command: ["alembic", "upgrade", "head"]
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-deepcoin}:${POSTGRES_PASSWORD:-deepcoin}@postgres:5432/${POSTGRES_DB:-deepcoin}
+      SECRET_KEY:   ${SECRET_KEY:-change_me}
     depends_on:
       postgres:
         condition: service_healthy
     profiles:
-      - migration          # only runs when explicitly invoked
+      - migration
 
+#  Named volumes 
 volumes:
-  postgres_data:           # persistent PostgreSQL data
-  redis_data:              # Redis AOF persistence
-  reports_data:            # generated PDF reports
-  uploads_tmp:             # temporary upload files (ephemeral; cleaned by lifespan hook)
+  postgres_data:            # PostgreSQL WAL + B-tree data files
+  redis_data:               # Redis AOF persistence (appendonly yes)
+  reports_data:             # Generated PDF reports  served via /api/reports/
+  uploads_tmp:              # Ephemeral upload staging; cleaned by FastAPI lifespan
+  mlflow_data:              # MLflow SQLite backend + artifact directory
+  localstack_data:          # LocalStack S3 object data (deepcoin-reports bucket)

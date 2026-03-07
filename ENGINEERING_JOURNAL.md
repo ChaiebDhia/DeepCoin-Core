@@ -42011,3 +42011,208 @@ see running) because it shows you understand the economics of production ML.
 *Active learning files: `scripts/active_learning.py`, `src/api/routes/active_learning.py`*
 *Store functions: `get_feedback_candidates()`, `mark_used_for_training()`*
 *train.py flag: `--active-learning-dir data/active_learning/`*
+
+---
+
+## Section 189  Gap 4: Docker Compose Full Stack Wiring (7 Services)
+
+**Date**: March 2026
+**Status**: COMPLETE
+**Commit**: (see git log)
+
+---
+
+### WHAT was built
+
+Gap 4 delivers the complete Docker Compose infrastructure to run the entire DeepCoin
+system as a self-contained, reproducible stack. Every component that previously required
+manual startup (FastAPI in venv, Next.js dev server, PostgreSQL, Redis) now starts with
+a single command:
+
+    docker compose run --rm migrator   # first time only
+    docker compose up --build -d
+
+The stack exposes one public endpoint: **http://localhost** (served by Nginx).
+
+---
+
+### WHY Docker Compose at this stage
+
+After Layers 0-5 each produced a working component (CNN, RAG, agents, FastAPI, Next.js),
+the natural engineering question becomes: "Can all seven components run together reliably?"
+
+Docker Compose answers that question with a reproducible, version-controlled answer.
+For a PFE demonstration to the encadrant at ESPRIT + YEBNI, Docker Compose is the
+professional way to prove that the system is NOT a collection of scripts but an
+integrated, production-aligned application.
+
+---
+
+### Architecture: The 7 Services
+
+| # | Service | Image / Dockerfile | Purpose | Port |
+|---|---------|-------------------|---------|------|
+| 1 | `postgres` | `postgres:17-alpine` | Relational store (users, classifications, feedback) | 5432 |
+| 2 | `redis` | `redis:7-alpine` | Rate-limit counters + result cache | 6379 |
+| 3 | `api` | `Dockerfile.api` | FastAPI: AI pipeline, REST endpoints | 8000 |
+| 4 | `web` | `frontend/Dockerfile` | Next.js 15: SSR frontend | 3000 (internal) |
+| 5 | `nginx` | `nginx:1.27-alpine` | Reverse proxy, TLS termination | 80, 443 |
+| 6 | `mlflow` | `Dockerfile.mlflow` | MLflow experiment tracking UI | 5000 |
+| 7 | `localstack` | `localstack/localstack:3.8` | AWS S3 simulation for PDF archiving | 4566 |
+
+Plus `migrator` (profile-triggered one-shot Alembic runner).
+
+---
+
+### Key Engineering Decisions
+
+**Decision 1: MLflow as a dedicated service (not just mlruns/ directory)**
+
+During local development, `scripts/train.py` writes to `mlruns/`  a local directory
+tracked by MLflow's file-based backend. In Docker, the training script runs outside the
+container stack (on the host, in the venv), but the FastAPI inference layer runs inside.
+
+By running a MLflow HTTP server at `http://mlflow:5000`, both the training job AND the
+FastAPI container can log to the same central experiment store:
+  - Training job: sets `MLFLOW_TRACKING_URI=http://localhost:5000` on the host
+  - FastAPI container: `MLFLOW_TRACKING_URI=http://mlflow:5000` (Docker DNS)
+
+The `mlflow_data` named volume persists the SQLite backend and all artifacts across
+container restarts and upgrades.
+
+**Decision 2: LocalStack for S3 (not MinIO)**
+
+LocalStack 3.8 provides a fully AWS-compatible S3 API at a single edge port (4566).
+The same boto3 client code works with LocalStack in dev and real AWS S3 in production.
+The swap requires only three env var changes -- no code changes.
+
+We enable SERVICES=s3 only (not the full LocalStack stack with Lambda, SQS, etc.)
+This keeps LocalStack's RAM footprint at ~150 MB.
+
+**Decision 3: ChromaDB NOT as a separate service**
+
+The `rag_engine.py` uses `chromadb.PersistentClient(path=...)` -- the embedded mode.
+ChromaDB also offers an HTTP server mode (`chromadb.HttpClient`), but switching would
+require changing two files (rag_engine.py, knowledge_base.py) and adds latency overhead.
+
+For Gap 4, ChromaDB runs embedded inside the `api` container with the index directory
+bind-mounted from the host:
+
+    ./data/metadata:/app/data/metadata   (writable -- no :ro)
+
+The `:ro` flag was deliberately removed. ChromaDB's PersistentClient needs write access
+for WAL files, compaction, and Parquet page flushes. A read-only mount causes a crash
+on the first search call.
+
+**Decision 4: PostgreSQL present, SQLite deprecated**
+
+The routes (`classify.py`, `history.py`) already use SQLAlchemy async + asyncpg,
+reading `DATABASE_URL` from the environment. The `_store.py` SQLite module is retained
+only for unit tests and legacy data migration utilities -- it is NOT called by any
+route handler.
+
+For Gap 4, the compose correctly sets:
+
+    DATABASE_URL: postgresql+asyncpg://deepcoin:deepcoin@postgres:5432/deepcoin
+
+The `migrator` service (Alembic one-shot) must be run once to create the PostgreSQL schema.
+
+**Decision 5: Nginx routes /api/auth/* to web:3000, NOT api:8000**
+
+This is a critical routing rule. NextAuth.js is a Next.js library -- its endpoints
+(/api/auth/signin, /api/auth/session, /api/auth/csrf) are handled by the Next.js
+route handler in `app/api/auth/[...nextauth]/route.ts`. They must NEVER reach FastAPI.
+
+The nginx.conf location block order enforces this:
+  1. `/api/auth/`  nextjs_upstream (web:3000)     matched first (more specific)
+  2. `/api/classify`  fastapi_upstream (api:8000)  matched second (with rate limit)
+  3. `/api/`  fastapi_upstream (api:8000)          matched last (general)
+
+**Decision 6: Single uvicorn worker**
+
+The EfficientNet-B3 model is loaded once in the FastAPI lifespan and shared across
+requests via the `CoinInference` singleton. Multiple uvicorn workers would each load
+the model independently:
+  - 4 workers  350 MB model = 1.4 GB RAM just for model copies
+  - 4 workers  4.3 GB VRAM = impossible on the development GPU
+
+Scale by adding containers (horizontal), not workers (vertical).
+
+---
+
+### New files created in Gap 4
+
+| File | Lines | Description |
+|------|-------|-------------|
+| `Dockerfile.mlflow` | ~70 | MLflow server (python:3.12-slim + mlflow + boto3) |
+| `docker-compose.yml` | ~376 | Full 7-service stack (replaces 150-line skeleton) |
+
+### Files updated
+
+| File | Change |
+|------|--------|
+| `.env.example` | Added PostgreSQL, auth secrets, MLflow, LocalStack sections |
+| `frontend/Dockerfile` | Existed but was not tracked -- confirmed complete |
+
+---
+
+### Start-up sequence
+
+Docker Compose respects `depends_on` with health checks, so services start in this order:
+
+    1. postgres  (healthcheck: pg_isready)
+    2. redis     (healthcheck: redis-cli ping)
+    3. mlflow    (healthcheck: urllib GET /api/2.0/mlflow/experiments/list)
+    4. localstack (healthcheck: curl /_localstack/health)
+    5. api       (depends_on: postgres healthy + redis healthy + mlflow healthy)
+    6. web       (depends_on: api healthy)
+    7. nginx     (depends_on: api healthy + web started)
+
+The api container has `start_period: 45s` because EfficientNet-B3 (350 MB) takes
+~30 seconds to load into memory on the first healthcheck cycle.
+
+---
+
+### Testing the stack
+
+    # Check all 7 services are running + healthy
+    docker compose ps
+
+    # Tail logs from all services
+    docker compose logs -f
+
+    # Test the full pipeline (coin classification)
+    curl -X POST http://localhost/api/classify \
+      -H "Content-Type: multipart/form-data" \
+      -F "file=@data/processed/1015/CN_type_1015_cn_coin_5943_p.jpg" \
+      -F "use_tta=false"
+
+    # Open MLflow UI
+    Start-Process "http://localhost:5000"
+
+    # Check LocalStack S3
+    aws --endpoint-url http://localhost:4566 s3 ls
+
+---
+
+### What Gap 4 does NOT include (deferred)
+
+| Deferred item | Why deferred | Target gap |
+|---------------|-------------|-----------|
+| Nginx proxy for MLflow (`/mlflow/`) | MLflow UI uses root-relative links that break at a sub-path without `--static-prefix` MLflow config. Direct port access is cleaner for the PFE demo. | Gap 5 |
+| boto3 S3 PDF upload code in `routes/classify.py` | The LocalStack service is wired and the env vars are injected. The boto3 call is a 10-line addition. | Gap 5 |
+| ChromaDB HTTP server mode | Would require changing `rag_engine.py` + `knowledge_base.py`. Embedded mode works correctly inside Docker. | Optional (not in roadmap) |
+| LocalStack bucket provisioning script | Manual: `aws --endpoint-url http://localhost:4566 s3 mb s3://deepcoin-reports` | Gap 5 init script |
+| GPU device passthrough in compose | `devices: - /dev/nvidia0:/dev/nvidia0` requires Docker >= 19.03 + NVIDIA Container Toolkit. | Gap 6 production hardening |
+
+---
+
+### PFE presentation points for the encadrant
+
+1. **7 services in one command** -- `docker compose up --build -d` starts the entire system.
+2. **No shared state between restarts** -- named volumes persist PostgreSQL, Redis, MLflow, and LocalStack data.
+3. **Security by default** -- non-root users in all containers (uid 1001 across api, web, mlflow). Model weights are mounted `:ro` so a compromised container cannot overwrite them.
+4. **Production-aligned** -- The only changes needed for real production are:
+   - Swap LocalStack with real AWS S3 credentials (3 env vars)
+   - Uncomment the HTTPS server block in nginx.conf + mount TLS certificates
+   - Set ENV=production to gate the Swagger docs
