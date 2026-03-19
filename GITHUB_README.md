@@ -73,6 +73,7 @@ Key delivery outcomes:
 | **EasyTrip Microservices** | Distributed Systems | Spring Cloud, Angular, MySQL, Docker, Service Discovery | Multi-service architecture, API gateway, 6+ microservices |
 | **SkillBridge** | Full-Stack AI Product | React, Node.js, MongoDB, Gemini API, Socket.io | Real-time collaboration, AI-powered features, 3-tier architecture |
 | **Network Automation** | DevOps & Observability | Python, APIs, Monitoring Dashboards, Automation Scripts | Production telecom infrastructure, operational automation |
+| **DevOps SpringBoot Pipeline** | CI/CD & Infrastructure | Jenkins (18 stages), Docker, SonarQube, Grafana, Prometheus, Nexus | 100% test coverage, <2 min runtime, 99.98% success rate, zero-downtime deployments |
 
 ---
 
@@ -145,6 +146,7 @@ Key delivery outcomes:
 ## Featured Repositories
 
 - **[DeepCoin-Core](https://github.com/ChaiebDhia/DeepCoin-Core)** — Agentic AI + RAG + Deep Learning for archaeological coin analysis (production-ready)
+- **[DevOps SpringBoot Pipeline](https://github.com/ChaiebDhia/DevOps_SpringBoot)** — 18-stage Jenkins CI/CD with 100% test coverage, SonarQube gates, Grafana/Prometheus monitoring, zero-downtime deployments
 - **[EasyTrip Microservices](https://github.com/ChaiebDhia/Microservices)** — Spring Cloud distributed system with service discovery and API gateway
 - **[SkillBridge](https://github.com/InnovativeSquad-PI-4TWIN4/PiWebInovativeSquad)** — MERN platform with real-time collaboration and Gemini AI integration
 
