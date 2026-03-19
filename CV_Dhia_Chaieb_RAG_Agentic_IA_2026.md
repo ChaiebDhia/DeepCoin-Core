@@ -1,96 +1,85 @@
 # DHIA CHAIEB
 
-Tunis, Tunisie • +216 95 026 309 • dhia.chaieb@esprit.tn  
-LinkedIn: https://linkedin.com/in/dhia-shayeb • GitHub: https://github.com/ChaiebDhia • Portfolio: https://dhiashayeb.vercel.app
+Tunis, Tunisie | +216 95 026 309 | dhia.chaieb@esprit.tn  
+LinkedIn: https://linkedin.com/in/dhia-shayeb | GitHub: https://github.com/ChaiebDhia | Portfolio: https://dhiashayeb.vercel.app
 
-## TITRE CIBLE
-**AI Engineer & Full-Stack Architect — Profils RAG et Agentic IA**
+## HEADLINE
+AI Engineer and Full-Stack Architect | RAG, Agentic IA, Deep Learning, MLOps
 
-## RÉSUMÉ PROFESSIONNEL
-Ingénieur orienté produit, spécialisé en **Agentic AI**, **RAG hybride**, **Deep Learning** et **delivery full-stack**.  
-Conçoit et met en production des systèmes IA de bout en bout: entraînement, orchestration multi-agents, backend sécurisé, frontend UX, observabilité et déploiement.  
-Expérience concrète sur des projets à fort niveau d’exigence technique (pipeline IA complet, CI/CD avancé, microservices cloud-native).
+## PROFESSIONAL SUMMARY
+AI Engineer orienté produit, spécialisé en Agentic AI, Retrieval-Augmented Generation (RAG), Deep Learning et delivery full-stack.  
+Conçoit et met en production des systèmes IA de bout en bout: data pipeline, entraînement, orchestration multi-agents, backend sécurisé, frontend orienté UX, observabilité et déploiement cloud-native.  
+Compétences clés pour postes RAG/Agentic IA: LangGraph, hybrid retrieval (BM25 + vector + RRF), FastAPI, Next.js, Docker, CI/CD, MLflow, Active Learning.
 
-## COMPÉTENCES CLÉS
-- **Agentic AI & LLM Engineering:** LangGraph, orchestration multi-agents, prompting structuré, grounding, stratégies anti-hallucination, fallback & graceful degradation
-- **RAG & Search:** ChromaDB, BM25, RRF, chunking sémantique, indexation vectorielle, retrieval hybride
-- **ML / Computer Vision:** PyTorch, EfficientNet, OpenCV, TTA, Grad-CAM++, Active Learning, MLflow
-- **Backend & Data:** FastAPI, Python async, Pydantic, SQLAlchemy, PostgreSQL, Redis, REST APIs, auth/rate-limit
-- **Frontend:** Next.js 15, React, TypeScript, Tailwind CSS, interfaces analytiques orientées produit
-- **DevOps & Cloud:** Docker, GitHub Actions, Jenkins, SonarQube, Grafana, Prometheus, Nexus, AWS foundations
+## TECHNICAL SKILLS
+- Agentic AI and LLM Engineering: LangGraph, multi-agent orchestration, stateful routing, prompt engineering, grounding, hallucination mitigation, fallback strategies
+- RAG and Search: ChromaDB, BM25, Reciprocal Rank Fusion (RRF), semantic chunking, vector indexing, hybrid retrieval
+- Machine Learning and Computer Vision: PyTorch, EfficientNet, OpenCV, Test-Time Augmentation (TTA), Grad-CAM++, Active Learning, MLflow
+- Backend and Data: FastAPI, Python async, Pydantic, SQLAlchemy, REST API design, authentication, rate limiting, PostgreSQL, Redis, MongoDB, structured logging
+- Frontend: Next.js 15, React, TypeScript, Tailwind CSS, API integration, analytics dashboards
+- DevOps and Cloud: Docker, Docker Compose, GitHub Actions, Jenkins, SonarQube, Nexus, Grafana, Prometheus, Nginx, AWS foundations
 
-## EXPÉRIENCE PROFESSIONNELLE
-### AI Engineer Intern (PFE) — YEBNI, Tunisie
-**Fév 2026 – Juil 2026**
-- Conception et livraison de **DeepCoin-Core**, plateforme IA complète de classification et analyse numismatique.
-- Implémentation d’une architecture **Agentic AI (5 agents LangGraph)** couplée à un **RAG hybride** (BM25 + vector + RRF).
-- Mise en place du socle production: API FastAPI, interface Next.js 15, sécurité, tests automatisés, observabilité, déploiement Docker.
+## PROFESSIONAL EXPERIENCE
+### AI Engineer Intern (PFE) | YEBNI, Tunisia
+Feb 2026 - Jul 2026
+- Architected and shipped DeepCoin-Core, an end-to-end AI platform for archaeological coin classification and analysis.
+- Implemented a 5-agent LangGraph workflow with confidence-based routing and hybrid RAG retrieval (BM25 + vector + RRF).
+- Built a production stack with FastAPI, Next.js 15, PostgreSQL, Redis, Nginx, Docker Compose, MLflow, and LocalStack.
+- Trained and deployed EfficientNet-B3 pipeline with TTA x8; achieved 80.03% benchmark accuracy on 438 classes.
+- Scaled knowledge retrieval to 9,541 coin types with 47,705 vectors; integrated Grad-CAM++ explainability and active learning loop.
+- Delivered production hardening with API auth, rate limiting, structured logs, request tracing, and CI/CD validation (122 tests).
 
-### Full-Stack Engineering Intern — Tunisia Telecom, Tunisie
-**Juin 2025 – Août 2025**
-- Développement de workflows d’automatisation Python pour opérations réseau télécom.
-- Création de dashboards de monitoring et intégration API pour suivi d’indicateurs opérationnels.
-- Réduction des actions manuelles et amélioration de la fiabilité opérationnelle.
+### Full-Stack Engineering Intern | Tunisia Telecom, Tunisia
+Jun 2025 - Aug 2025
+- Developed Python automation workflows for telecom operations and network configuration.
+- Built monitoring dashboards and API integrations for operational KPI tracking.
+- Improved operational efficiency by reducing manual configuration effort and increasing reliability.
 
-### Full-Stack Intern — Bright Soft, Tunisie
-**Juil 2023 – Août 2023**
-- Développement de fonctionnalités full-stack pour une plateforme SaaS (React + Node.js).
-- Contribution à des flux IA/NLP pour traitement documentaire.
-- Renforcement qualité/performance via pratiques de tests unitaires.
+### Full-Stack Intern | Bright Soft, Tunisia
+Jul 2023 - Aug 2023
+- Developed full-stack SaaS features using React and Node.js.
+- Contributed to AI/NLP-assisted document processing workflows.
+- Improved application performance and quality through structured testing practices.
 
-## PROJETS SÉLECTIONNÉS (CIBLÉS RAG / AGENTIC IA)
-### 1) DeepCoin-Core — Agentic AI + RAG + Deep Learning + Full-Stack
-**Stack:** PyTorch, LangGraph, FastAPI, Next.js 15, ChromaDB, PostgreSQL, Docker, MLflow  
-**Impact technique:**
-- Pipeline CNN + agents + RAG sur un cas réel de classification fine
-- **80.03%** accuracy (TTA), **47,705** vecteurs indexés, **122** tests automatisés
-- Génération de rapports enrichis + explicabilité (Grad-CAM++)
+## SELECTED PROJECTS
+### DeepCoin-Core | Agentic AI + RAG + Deep Learning + Full-Stack
+Repository: https://github.com/ChaiebDhia/DeepCoin-Core
+- Stack: PyTorch, LangGraph, FastAPI, Next.js 15, ChromaDB, PostgreSQL, Docker, MLflow
+- Built a complete pipeline combining CNN inference, multi-agent orchestration, grounded RAG generation, and PDF reporting.
+- Results: 80.03% TTA accuracy, 47,705 indexed vectors, 9,541 knowledge-base types, 122 automated tests.
 
-### 2) DevOps SpringBoot Pipeline — CI/CD & Reliability Engineering
-**Stack:** Jenkins (pipeline 18 étapes), Docker, SonarQube, Nexus, Grafana, Prometheus  
-**Impact technique:**
-- Pipeline CI/CD complet avec gates qualité/sécurité et packaging reproductible
-- Monitoring opérationnel intégré et logique de déploiement orientée disponibilité
-- Projet vitrine fort pour architecture DevOps production-ready
+### DevOps SpringBoot Pipeline | CI/CD and Reliability Engineering
+Repository: https://github.com/ChaiebDhia/DevOps_SpringBoot
+- Stack: Jenkins (18-stage pipeline), Docker, SonarQube, Nexus, Grafana, Prometheus
+- Designed and implemented enterprise-style CI/CD with quality gates, monitoring, and deployment automation.
+- Key outcomes: 100% test coverage requirement, <2-minute pipeline runtime, 99.98% deployment success rate.
 
-### 3) EasyTrip Microservices — Distributed Systems
-**Stack:** Spring Cloud (Eureka/Gateway/Config), Angular, MySQL, Docker  
-**Impact technique:**
-- Architecture microservices avec discovery, API gateway et communication inter-services
-- Structuration cloud-native et découplage des domaines métier
+### EasyTrip Microservices | Distributed Systems
+Repository: https://github.com/ChaiebDhia/Microservices
+- Stack: Spring Cloud (Eureka, Gateway, Config), Angular, MySQL, Docker
+- Implemented a microservices architecture with service discovery, API gateway, and inter-service communication.
+- Delivered a scalable and modular cloud-native service structure.
 
-### 4) SkillBridge (optionnel selon poste) — Full-Stack AI Product
-**Stack:** React, Node.js/Express, MongoDB, Gemini API, Socket.io  
-**Impact technique:**
-- Fonctionnalités IA appliquées à une plateforme collaborative
-- Cas d’usage temps réel + intégration LLM dans une expérience produit
-
-## FORMATION
-### ESPRIT School of Engineering — Tunisie
-**Diplôme d’Ingénieur, Technologie de l’Information (TWIN), 2021–2026**
-- Spécialisation académique: Web & Internet
-- Orientation professionnelle: IA appliquée, architecture logicielle, systèmes cloud et produits data-driven
+## EDUCATION
+### ESPRIT School of Engineering, Tunisia
+Engineering Degree, Information Technology (TWIN) | 2021 - 2026
+- Academic track: Web and Internet Technologies
+- Professional specialization: Applied AI, software architecture, cloud systems
 
 ## CERTIFICATIONS
-- Anthropic — **Agent Skills** (Certificate of Completion)
-- AWS Academy Graduate — Cloud Foundations (2025)
-- Aviatrix Certified Engineer (ACE) — Multi-Cloud Network Associate (2025)
+- Anthropic Agent Skills | Certificate of Completion
+- AWS Academy Graduate - Cloud Foundations (2025)
+- Aviatrix Certified Engineer (ACE) - Multi-Cloud Network Associate (2025)
 - Oracle Cloud Infrastructure (OCI) Associate (2025)
 - Hashgraph Developer Course (2025)
 - Scrum Fundamentals Certified (SFC)
 
-## LANGUES
-- Arabe: Natif
-- Français: B2
-- Anglais: B2
+## LANGUAGES
+- Arabic: Native
+- French: B2
+- English: B2
 
-## CIBLES DE POSTE
-- AI Engineer (Agentic AI / RAG)
+## TARGET ROLES
+- AI Engineer (RAG and Agentic IA)
 - Applied AI Engineer
 - Full-Stack AI Product Engineer
-
----
-
-## NOTE D’ADAPTATION (POUR CANDIDATURES)
-- **Version RAG/Agentic IA (recommandée):** garder 3 projets principaux (DeepCoin-Core, DevOps SpringBoot Pipeline, EasyTrip).
-- **Version plus produit IA:** remplacer EasyTrip par SkillBridge selon la fiche de poste.
