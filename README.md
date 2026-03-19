@@ -1,10 +1,12 @@
 ﻿# DeepCoin-Core
 
-> **Agentic AI orchestration. Hybrid RAG grounding. Deep Learning CNN inference. Full-stack product delivery.**
+> **LangGraph 5-agent orchestration. Hybrid RAG grounding. EfficientNet-B3 CNN inference. Full-stack production delivery.**
 >
-> **DeepCoin-Core** is an enterprise-grade AI system that classifies a 2,300-year-old coin from a single photograph, explains the decision with Grad-CAM++, and delivers a grounded historical report through a five-agent pipeline.
+> **DeepCoin-Core** is an enterprise-grade AI product that classifies a 2,300-year-old coin from one photograph, explains model attention with Grad-CAM++, and generates grounded historical reports with source-constrained RAG.
 >
-> This is not a prototype. It is engineered like a production AI platform: thread-safe services, grounded LLM prompts designed to prevent hallucinations, graceful degradation for out-of-distribution inputs, hardened API security, CI/CD with 122 passing tests, and a complete FastAPI + Next.js stack wired to MLflow and Active Learning.
+> Built with **PyTorch + EfficientNet-B3**, **ChromaDB (47,705 vectors) + BM25**, **FastAPI + Next.js 15**, **MLflow**, **Active Learning**, **Docker**, and **CI/CD (122 tests passing)**.
+
+> **Recruiter snapshot:** this repository demonstrates end-to-end ownership across AI research, backend architecture, frontend delivery, MLOps, and production hardening.
 
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://python.org)
 [![PyTorch 2.6+cu124](https://img.shields.io/badge/PyTorch-2.6%2Bcu124-EE4C2C.svg)](https://pytorch.org)
