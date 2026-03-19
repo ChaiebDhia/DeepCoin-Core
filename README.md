@@ -1,10 +1,10 @@
 ﻿# DeepCoin-Core
 
-> **Seven production build layers. 122 passing tests. A CI/CD pipeline. A full-stack web application. A five-agent AI system. An explainable deep learning model. All of it built to classify a 2,300-year-old coin from a single photograph in under 20 seconds.**
+> **Agentic AI orchestration. Hybrid RAG grounding. Deep Learning CNN inference. Full-stack product delivery.**
 >
-> This is not a prototype. Every layer is engineered to the standard you would find at a funded AI product company  security hardening, thread-safe singletons, grounded LLM prompts that cannot hallucinate, graceful degradation paths that guarantee useful output even for coins the model has never seen, and a React frontend with Framer Motion animations, streaming AI chat, and active-learning feedback loops wired to the training pipeline.
+> **DeepCoin-Core** is an enterprise-grade AI system that classifies a 2,300-year-old coin from a single photograph, explains the decision with Grad-CAM++, and delivers a grounded historical report through a five-agent pipeline.
 >
-> **DeepCoin-Core** fuses a fine-tuned **EfficientNet-B3** vision model with a **Hybrid RAG engine** (47,705 ChromaDB vectors + BM25 keyword index), a **LangGraph five-agent state machine**, a **FastAPI backend with JWT auth, rate-limiting and structured logging**, a **Next.js 15 full-stack frontend**, **Grad-CAM++ visual explainability**, **MLflow experiment tracking**, and an **Active Learning loop** that continuously improves the model from curator corrections.
+> This is not a prototype. It is engineered like a production AI platform: thread-safe services, grounded LLM prompts designed to prevent hallucinations, graceful degradation for out-of-distribution inputs, hardened API security, CI/CD with 122 passing tests, and a complete FastAPI + Next.js stack wired to MLflow and Active Learning.
 
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://python.org)
 [![PyTorch 2.6+cu124](https://img.shields.io/badge/PyTorch-2.6%2Bcu124-EE4C2C.svg)](https://pytorch.org)
@@ -26,11 +26,11 @@
 | ChromaDB vectors | **47,705** -- 5 semantic chunks x 9,541 coin types |
 | Full pipeline latency | **< 20 s** with Gemini / Ollama LLM |
 | Test suite | **122 / 122 passing** -- unit + integration, Python 3.11 + 3.12 matrix |
-| Build layers complete | **6 of 7** (Layers 0-5 + Layer 7 CI/CD) |
+| Build layers complete | **7 of 7** (Layers 0-7 shipped, including Docker + CI/CD) |
 | Frontend pages | **9 pages** -- classify, history, explore, chat, about, docs, admin, auth |
 | Explainability | **Grad-CAM++** heatmaps at 19 x 19 spatial resolution embedded in every PDF |
 | Active learning | **End-to-end** -- curator correction -> export -> weighted retraining |
-| Docker | **Gap 4 -- in progress** (7 services: FastAPI + Next.js + PG + Redis + Nginx + MLflow + Chroma) |
+| Docker | **Complete** (7-service stack: FastAPI + Next.js + PostgreSQL + Redis + Nginx + MLflow + LocalStack) |
 
 ---
 
@@ -204,14 +204,14 @@ Each layer is self-contained, enterprise-hardened, and fully committed to `main`
 | **3** | **Five-Agent System** | Complete | LangGraph orchestrator . Historian (RAG narrative) . Validator (multi-scale HSV) . Investigator (VLM + OpenCV) . Synthesis (fpdf2 PDF) . per-node logging + retry + graceful degradation |
 | **4** | **FastAPI Backend** | Complete | JWT auth . X-API-Key . slowapi rate-limit . SQLite WAL store . GZip . HSTS . CSP . X-Request-ID . /api/metrics . JSON structured logging . Active Learning routes . streaming chat SSE . prompt injection guard |
 | **5** | **Next.js Frontend** | Complete | 9 pages . Framer Motion . CountUp . dynamic agent pipeline modal . 3-state CNN display . streaming AI chat . admin dashboard . history + explore + docs + about pages . delete + filter + CN deep links . Grad-CAM card . screenshot detection . active-learning feedback . JWT silent refresh |
-| **6** | **Docker + Infrastructure** | In Progress | 7 services: FastAPI . Next.js . PostgreSQL . Redis . MLflow . Nginx . ChromaDB |
+| **6** | **Docker + Infrastructure** | Complete | 7 services: FastAPI . Next.js . PostgreSQL . Redis . MLflow . Nginx . LocalStack . plus migration profile |
 | **7** | **Tests + CI/CD** | Complete | 122 tests (unit + integration) . pytest-asyncio . Python 3.11+3.12 matrix . GitHub Actions . flake8 + black |
 
 > **A+++ Production Gaps** -- built on top of the 7 layers:
 > - **Gap 1: MLflow Tracking** -- Complete: every training run logged with params, per-epoch metrics, and model artifact
 > - **Gap 2: Grad-CAM++** -- Complete: 19x19 heatmaps embedded in PDFs and displayed in the web UI
 > - **Gap 3: Active Learning** -- Complete: curator corrections -> weighted export -> --active-learning-dir retraining
-> - **Gap 4: Docker Compose** -- In progress
+> - **Gap 4: Docker Compose** -- Complete: full 7-service wiring with health checks and persistent volumes
 > - **Gap 5: Observability** -- Planned: Prometheus + Grafana dashboard
 > - **Gap 6: ArcFace Loss** -- Planned: metric learning for 85%+ accuracy target
 
@@ -543,7 +543,7 @@ Priority 4:  None set       -> Structured fallback   (KB fields only -- no crash
 | TanStack Query | 5 | Server state management |
 | Zustand | 5 | Client state (with _cancelFn abort bridge) |
 
-### Infrastructure (Gap 4 -- in progress)
+### Infrastructure (Gap 4 -- complete)
 
 | Component | Version | Role |
 |-----------|---------|------|
@@ -759,11 +759,11 @@ deepcoin/
 |   +-- metadata/
 |       +-- cn_types_metadata_full.json  # 9,541 CN types (~3.2 MB)
 |       +-- chroma_db_rag/           # 47,705-vector production index
-+-- ENGINEERING_JOURNAL.md           # 188 sections -- every decision, every bug
++-- ENGINEERING_JOURNAL.md           # 199 sections -- every decision, every bug
 +-- .github/
 |   +-- copilot-instructions.md      # Persistent AI context (full project knowledge)
 |   +-- workflows/ci.yml             # GitHub Actions (Python 3.11+3.12 matrix)
-+-- docker-compose.yml               # Gap 4 -- 7 services (in progress)
++-- docker-compose.yml               # Gap 4 complete -- 7 services + migration profile
 +-- pyproject.toml                   # Build config + lint/test tool config
 +-- Makefile                         # Developer shortcuts (api/test/lint/fmt/train/mlflow)
 +-- requirements.txt                 # 50+ Python dependencies
@@ -802,7 +802,7 @@ deepcoin/
 | 1 | MLflow Tracking | Complete | Every training run logged -- params, metrics, model artifact |
 | 2 | Grad-CAM++ | Complete | 19x19 heatmaps in PDFs + web UI (GradCAMPlusPlus, features[-4]) |
 | 3 | Active Learning | Complete | Curator corrections -> weighted export -> retraining injection |
-| **4** | **Docker Compose** | **In Progress** | 7 services: FastAPI + Next.js + PostgreSQL + Redis + MLflow + Nginx + ChromaDB |
+| **4** | **Docker Compose** | **Complete** | 7 services: FastAPI + Next.js + PostgreSQL + Redis + MLflow + Nginx + LocalStack |
 | 5 | Observability | Planned | Prometheus metrics -> Grafana dashboard (latency, KB hit rate, route distribution) |
 | 6 | ArcFace Loss | Planned | Replace CrossEntropy head with metric learning -- target: 85%+ accuracy |
 | 7 | PostgreSQL Migration | Planned | Replace SQLite store with Postgres (shipped in Docker) |
