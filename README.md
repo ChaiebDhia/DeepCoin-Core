@@ -6,7 +6,7 @@
 >
 > Built with **PyTorch + EfficientNet-B3**, **ChromaDB (47,705 vectors) + BM25**, **FastAPI + Next.js 15**, **MLflow**, **Active Learning**, **Docker**, and **CI/CD (122 tests passing)**.
 
-> **Recruiter snapshot:** this repository demonstrates end-to-end ownership across AI research, backend architecture, frontend delivery, MLOps, and production hardening.
+> **What this repository proves:** end-to-end ownership across AI research, backend architecture, frontend delivery, MLOps, and production hardening.
 
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://python.org)
 [![PyTorch 2.6+cu124](https://img.shields.io/badge/PyTorch-2.6%2Bcu124-EE4C2C.svg)](https://pytorch.org)
@@ -23,7 +23,7 @@
 
 | What | Numbers |
 |------|---------|
-| CNN accuracy (TTA x8, 438 classes) | **80.03%** -- PFE-grade on a hard fine-grained task |
+| CNN accuracy (TTA x8, 438 classes) | **80.03%** -- benchmark result on a hard fine-grained classification task |
 | Knowledge Base coverage | **9,541 types / 9,716** in Corpus Nummorum (98.2%) |
 | ChromaDB vectors | **47,705** -- 5 semantic chunks x 9,541 coin types |
 | Full pipeline latency | **< 20 s** with Gemini / Ollama LLM |
@@ -88,7 +88,7 @@ DeepCoin-Core addresses all six requirements -- not as a demo, but as production
 
 **Deep Learning** is a branch of AI where a neural network learns to recognise patterns from examples without being programmed with explicit rules.
 
-For DeepCoin-Core, we use **EfficientNet-B3**, a convolutional neural network invented by Google Brain that processes an image through 18 stacked convolutional layers -- detecting progressively more complex features: first pixel edges, then textures, then semantic concepts like "helmeted portrait" or "eagle reverse."
+For DeepCoin-Core, we use **EfficientNet-B3**, a convolutional neural network introduced by Google Research that processes an image through 18 stacked convolutional layers -- detecting progressively more complex features: first pixel edges, then textures, then semantic concepts like "helmeted portrait" or "eagle reverse."
 
 The key technique is **transfer learning** (fine-tuning):
 
@@ -243,7 +243,7 @@ Level 3 -- Truly OOD (< 40%):
   Report: "No exact match. Closest types: [...]"  <- never empty, always useful
 ```
 
-The system **never returns an error to the user.** Every path produces a complete professional report.
+The system is designed for graceful degradation: even low-confidence or out-of-distribution inputs still return a useful, structured report.
 
 ---
 
