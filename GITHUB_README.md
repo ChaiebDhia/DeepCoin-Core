@@ -142,46 +142,11 @@ Key delivery outcomes:
 
 ---
 
-## Selected Projects
+## Featured Repositories
 
-### DeepCoin-Core (Production AI System)
-
-End-to-end AI platform for archaeological coin classification and analysis:
-
-- CNN + Agentic AI + Hybrid RAG + Full-stack delivery
-- FastAPI backend, Next.js frontend, MLflow tracking, explainability, and active learning
-
-Repo: https://github.com/ChaiebDhia/DeepCoin-Core
-
-### EasyTrip — Microservices-Based Travel Management Platform
-
-Spring Boot microservices platform with service discovery and API gateway:
-
-- Spring Cloud (Eureka, Gateway, Config)
-- Angular frontend
-- MySQL/H2 data services
-- Feign for inter-service communication
-- Dockerized services
-
-Repo: https://github.com/ChaiebDhia/Microservices
-
-### SkillBridge — AI-Augmented Skill Exchange Platform
-
-MERN-based collaborative learning and skill exchange platform with Gemini-powered features:
-
-- React + Redux frontend, Node.js/Express backend, MongoDB
-- AI assistant features (chat/support/summarization workflows)
-- Real-time collaboration tools (Socket.io/WebRTC patterns)
-
-Repo: https://github.com/InnovativeSquad-PI-4TWIN4/PiWebInovativeSquad
-
-### DevOps Pipeline for Spring Boot
-
-CI/CD pipeline project focused on automation quality and deployment speed:
-
-- Multi-stage pipeline design (build, test, quality checks, delivery)
-- Dockerized delivery workflow
-- Reliability and repeatability emphasis
+- **[DeepCoin-Core](https://github.com/ChaiebDhia/DeepCoin-Core)** — Agentic AI + RAG + Deep Learning for archaeological coin analysis (production-ready)
+- **[EasyTrip Microservices](https://github.com/ChaiebDhia/Microservices)** — Spring Cloud distributed system with service discovery and API gateway
+- **[SkillBridge](https://github.com/InnovativeSquad-PI-4TWIN4/PiWebInovativeSquad)** — MERN platform with real-time collaboration and Gemini AI integration
 
 ---
 
