@@ -213,6 +213,8 @@
 197. [Section 197 — MLflow Live Demo for the Encadrant: Step-by-Step with Real Proof](#section-197)
 198. [Section 198 — Active Learning Live Demo for the Encadrant: Step-by-Step](#section-198)
 199. [Section 199 — Complete Project State After Gap 4 (March 7, 2026)](#section-199)
+200. [Section 200 — AI Leadership Handoff, Reality Audit & Enterprise P0 Critique (March 21, 2026)](#section-200)
+201. [Section 201 — Forward Roadmap: Actual Unfinished Business (March 21, 2026)](#section-201)
 
 ---
 
@@ -43622,3 +43624,78 @@ tracks every training experiment in MLflow, learns from user corrections via Act
 its visual reasoning with Grad-CAM++ heatmaps.
 Everything is tested (122 tests), linted, and deployed on a CI/CD pipeline."
 
+
+
+---
+
+## Section 200 — AI Leadership Handoff, Reality Audit & Enterprise P0 Critique (March 21, 2026)
+
+This section formally documents the transition of DeepCoin-Core's architectural leadership to a new AI session, and the execution of a Google/InstaDeep-tier "reality audit" identifying critical P0 architectural flaws overlooked in previous development phases.
+
+### 1. The Handoff & Memory Establishment
+*   **Context:** Leadership transferred from a prior LLM. The immediate directive was: "Read everything, do not bluff, give a 100% honest critique, and establish a foolproof memory system so you never hallucinate."
+*   **Execution:** Created `AI_LEAD_MEMORY.md` as the definitive, unvarnished source of truth mapping out the VRAM constraints (RTX 3050 Ti - 4.3 GB), the `venv` path (`c:\Users\Administrator\deepcoin\venv`), and the exact file-by-file communication flow (Frontend Zustand -> FastAPI async `classify.py` -> LangGraph Gatekeeper -> EfficientNet-B3 -> ChromaDB RAG -> fpdf2).
+
+### 2. The Unvarnished Technical Audit (The 5 Flaws)
+An honest review of the codebase revealed that the documentation outpaced the actual implementation logic. The following structural deficits were identified:
+
+**A. The Monolithic ML Serving Crisis (VRAM Timebomb)**
+*   *Documented:* System scales gracefully.
+*   *Reality:* FastAPI loads `EfficientNet-B3` natively into the API route memory. A simple `uvicorn --workers 4` command will load 4 separate tensors, instantly triggering CUDA Out-Of-Memory (OOM) on a 4.3GB GPU.
+*   *Fix Required:* Decouple inference behind a Redis/Celery queue or Triton Inference Server.
+
+**B. The Open-Set Fallacy (Architectural Defect)**
+*   *Documented:* Investigator handles unknown coins.
+*   *Reality:* The Softmax head natively classifies only 438 classes. With 9,716 types in the wild, the CNN is mathematically blind to 95% of the domain.
+*   *Fix Required:* Transition from Softmax to Metric Learning (ArcFace/CosFace) using 1536-d embeddings & KNN vector search over the entire corpus.
+
+**C. The S3 Storage Illusion (Stateful Container Risk)**
+*   *Documented:* `docker-compose.yml` lists `localstack` for S3 bucket storage.
+*   *Reality:* The codebase uses literal `save_path = reports_dir / filename` locally and cleans them with FastAPI background loops. `boto3` is completely absent. A container restart deletes all user PDFs.
+*   *Fix Required:* Enforce explicit Docker Volumes for `/reports/` and strip the false S3 claims, or implement the true `boto3` SDK.
+
+**D. The Split-Brain Data Layer**
+*   *Documented:* Fully migrated to Postgres 17.
+*   *Reality:* Development, testing (122 Pytest hits), and older routes still heavily invoke `src/api/_store.py` (legacy SQLite via WAL). Only `classify.py` uses SQLAlchemy/PG.
+*   *Fix Required:* Pure eradication of `_store.py` and strict enforcement of the SQLAlchemy session.
+
+### 3. Priority P0: The Silent Authentication Failure (Blocker Fix)
+*   **The Bug:** In `src/api/auth/email.py`, if `RESEND_API_KEY` is missing in `production`, the backend simply logged `[EMAIL DEV-MODE]` and `returned True`. Neither Next.js nor FastAPI knew the email failed.
+*   **The Symptom:** Users were committed to the DB as `pending` but never received the verification link. They were permanently locked out of the system. Password resets failed exactly the same way.
+*   **The Resolution Executed:**
+    1. Edited `email.py` to `raise RuntimeError` if keys are missing in production. Caught exceptions returning `False`.
+    2. Edited `router.py` to intercept `False` and execute `await db.rollback()`, throwing HTTP 500.
+    3. Added Alembic migration (`003_email_logs.py`) and schema for an `email_log` database table to track outbound fidelity.
+
+---
+
+## Section 201 — Forward Roadmap: Exact Unfinished Business & Unified Targets (March 21, 2026)
+
+Based on a strict reality-check and cross-referencing with the `AI_LEAD_MEMORY.md` architectural audit, here is the combined, definitive list of unfinished business. 
+
+We must strictly resolve these gaps before declaring the project enterprise-ready.
+
+### 1. MLflow & Active Learning UI Reality Check
+*   **The Claim:** Previous sections stated MLflow and Active Learning were complete.
+*   **The Reality:** The Python scripts exist, but lack full end-to-end integration mapping in the real app.
+*   **Action Plan:** Boot up the full Docker/Next.js stack, trigger a misclassified API call (mark-as-wrong feedback), ensure the database flags the specimen, and run a live trigger to watch MLflow register the new weights.
+
+### 2. Fully Decoupling SQLite (`_store.py`) to PostgreSQL
+*   **The Flaw:** `_store.py` implements legacy SQLite WAL operations, while authentication utilizes Postgres 17. 
+*   **Action Plan:** Eradicate `_store.py` entirely, transitioning 100% of routes to SQLAlchemy via PostgreSQL to cure the split-brain data layer.
+
+### 3. Email Telemetry Admin Dashboard
+*   **The Flaw:** We successfully patched the P0 unverified user registration bug by tracking exceptions and logging them to an `email_log` PostgreSQL table. However, there is no UI to actually read this table.
+*   **Action Plan:** Wire the `email_log` up to an internal admin dashboard endpoint so operators can monitor failing verification emails.
+
+### 4. VRAM Monolith & Thread Pool Starvation
+*   **The Flaw:** FastAPI currently loads `EfficientNet-B3` natively into API memory and runs heavy CPU tasks (`fpdf2`, `cv2` (OpenCV, a computer vison engine that mathematically calculates image pixels to resize or change colors)) inside the web server's async thread pools.
+*   **Action Plan:** Offload both PyTorch ML Inference and PDF generation to external asynchronous worker queues (e.g., Celery + Redis).
+
+### 5. S3 Integration vs File System State
+*   **The Flaw:** `docker-compose` claims to use LocalStack, but the code writes locally to `/reports`.
+*   **Action Plan:** Either strictly mount a Docker volume for `/reports` to prevent data loss on container restart, or implement the true `boto3` integration (Boto3 is the official Python tool used to push and save files into Amazon Web Services / AWS cloud 'buckets'. Right now, if the server restarts, all PDFs are deleted because they are saved locally. Boto3 sends them to the cloud permanently).
+
+### 6. Security Hardening & The Open-Set Fallacy
+*   **The Flaw:** Frontend Docker node images contain high-sev CVEs, and the core Machine Learning model uses a 438-class Softmax which mathematically fails on 95% of the 9,700 coin types in the wild.
+*   **Action Plan:** Update Docker to `node:22-alpine` and migrate the AI classifier to ArcFace Metric Learning (KNN vector embeddings).

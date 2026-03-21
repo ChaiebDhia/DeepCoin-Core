@@ -427,3 +427,47 @@ class ChatSession(Base):
 
     def __repr__(self) -> str:
         return f"<ChatSession id={self.id[:8]} user={self.user_id[:8]} title={self.title[:30]}"
+
+
+class EmailLog(Base):
+    """
+    Audit log of all outbound emails (verification, reset, marketing).
+    Provides non-repudiation and delivery tracking.
+    """
+    __tablename__ = "email_logs"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, server_default=func.gen_random_uuid())
+    user_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    to_email: Mapped[str] = mapped_column(String(255), nullable=False)
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="sent")
+    error_message: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
+
+    # Relationship
+    user: Mapped["User"] = relationship()
+
+    def __repr__(self) -> str:
+        return f"<EmailLog {self.to_email} subject={self.subject[:20]}>"
+
+
+class EmailLog(Base):
+    """
+    Audit log of all outbound emails (verification, reset, marketing).
+    Provides non-repudiation and delivery tracking.
+    """
+    __tablename__ = "email_logs"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, server_default=func.gen_random_uuid())
+    user_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    to_email: Mapped[str] = mapped_column(String(255), nullable=False)
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="sent")
+    error_message: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
+
+    # Relationship
+    user: Mapped["User"] = relationship()
+
+    def __repr__(self) -> str:
+        return f"<EmailLog {self.to_email} subject={self.subject[:20]}>"

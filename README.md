@@ -4,7 +4,7 @@
 >
 > **DeepCoin-Core** is an enterprise-grade AI product that classifies a 2,300-year-old coin from one photograph, explains model attention with Grad-CAM++, and generates grounded historical reports with source-constrained RAG.
 >
-> Built with **PyTorch + EfficientNet-B3**, **ChromaDB (47,705 vectors) + BM25**, **FastAPI + Next.js 15**, **MLflow**, **Active Learning**, **Docker**, and **CI/CD (122 tests passing)**.
+> Built with **PyTorch + EfficientNet-B3**, **ChromaDB (47,705 vectors) + BM25**, **FastAPI + Next.js 15**, **MLflow**, **Active Learning**, **Docker**, and **CI tooling (122 tests discovered by pytest)**.
 
 > **What this repository proves:** end-to-end ownership across AI research, backend architecture, frontend delivery, MLOps, and production hardening.
 
@@ -27,12 +27,39 @@
 | Knowledge Base coverage | **9,541 types / 9,716** in Corpus Nummorum (98.2%) |
 | ChromaDB vectors | **47,705** -- 5 semantic chunks x 9,541 coin types |
 | Full pipeline latency | **< 20 s** with Gemini / Ollama LLM |
-| Test suite | **122 / 122 passing** -- unit + integration, Python 3.11 + 3.12 matrix |
-| Build layers complete | **7 of 7** (Layers 0-7 shipped, including Docker + CI/CD) |
+| Test suite | **122 tests discovered** -- unit + integration via `pytest --collect-only` |
+| Layers implemented | **0 to 7 implemented** (enterprise hardening still in progress) |
 | Frontend pages | **9 pages** -- classify, history, explore, chat, about, docs, admin, auth |
 | Explainability | **Grad-CAM++** heatmaps at 19 x 19 spatial resolution embedded in every PDF |
 | Active learning | **End-to-end** -- curator correction -> export -> weighted retraining |
-| Docker | **Complete** (7-service stack: FastAPI + Next.js + PostgreSQL + Redis + Nginx + MLflow + LocalStack) |
+| Docker | **Implemented baseline** (7-service stack wired; production hardening pending) |
+| CI/CD maturity | **CI complete, CD pending** (tests/lint/type-check in GitHub Actions; deploy workflow not automated) |
+
+### ⚠️ CRITICAL: Email/Password Reset Gaps
+
+**See `ENTERPRISE_AUDIT.md` for comprehensive end-to-end analysis.**
+
+Current email system uses **Resend.com only, with NO fallback providers or error handling**:
+- ❌ **Registration emails NOT sent if RESEND_API_KEY is missing** → user stuck in pending state
+- ❌ **Password reset emails NOT sent if RESEND_API_KEY is missing** → user cannot reset password
+- ❌ **No delivery confirmation** — cannot verify emails actually reached inbox
+- ❌ **No retry logic** — transient errors = lost emails
+- ❌ **No audit trail** — cannot troubleshoot email issues
+
+**Before production deployment**, implement:
+1. Email failure detection (fail registration if email send fails)
+2. Email audit table (email_log) for forensics
+3. Resend webhook handler for delivery confirmation
+4. Retry logic with exponential backoff
+5. SendGrid/AWS SES fallback providers
+
+See `ENTERPRISE_AUDIT.md` **Sections 5-7** for complete action items.
+
+### Current maturity note (March 2026)
+
+- The product is feature-rich and runnable end-to-end **for development purposes**.
+- **Enterprise production deployment is BLOCKED until email system is hardened** (see critical gaps above).
+- Enterprise completion requires: email redundancy, deployment automation, container security remediation, observability/alerting.
 
 ---
 
@@ -196,7 +223,7 @@ Result: **zero hallucination on structured facts.** The LLM contributes only pro
 
 ## Build Layers -- The Full Engineering Map
 
-Each layer is self-contained, enterprise-hardened, and fully committed to `main`. No half-finished code.
+Each layer is implemented in code and committed to `main`. Enterprise operations hardening is still in progress.
 
 | # | Layer | Status | What Was Built |
 |---|-------|--------|----------------|
@@ -206,14 +233,14 @@ Each layer is self-contained, enterprise-hardened, and fully committed to `main`
 | **3** | **Five-Agent System** | Complete | LangGraph orchestrator . Historian (RAG narrative) . Validator (multi-scale HSV) . Investigator (VLM + OpenCV) . Synthesis (fpdf2 PDF) . per-node logging + retry + graceful degradation |
 | **4** | **FastAPI Backend** | Complete | JWT auth . X-API-Key . slowapi rate-limit . SQLite WAL store . GZip . HSTS . CSP . X-Request-ID . /api/metrics . JSON structured logging . Active Learning routes . streaming chat SSE . prompt injection guard |
 | **5** | **Next.js Frontend** | Complete | 9 pages . Framer Motion . CountUp . dynamic agent pipeline modal . 3-state CNN display . streaming AI chat . admin dashboard . history + explore + docs + about pages . delete + filter + CN deep links . Grad-CAM card . screenshot detection . active-learning feedback . JWT silent refresh |
-| **6** | **Docker + Infrastructure** | Complete | 7 services: FastAPI . Next.js . PostgreSQL . Redis . MLflow . Nginx . LocalStack . plus migration profile |
-| **7** | **Tests + CI/CD** | Complete | 122 tests (unit + integration) . pytest-asyncio . Python 3.11+3.12 matrix . GitHub Actions . flake8 + black |
+| **6** | **Docker + Infrastructure** | Implemented (hardening pending) | 7 services: FastAPI . Next.js . PostgreSQL . Redis . MLflow . Nginx . LocalStack . plus migration profile |
+| **7** | **Tests + CI/CD** | CI complete, CD pending | 122 tests (unit + integration) . pytest-asyncio . Python 3.11+3.12 matrix . GitHub Actions . flake8 + black |
 
 > **A+++ Production Gaps** -- built on top of the 7 layers:
 > - **Gap 1: MLflow Tracking** -- Complete: every training run logged with params, per-epoch metrics, and model artifact
 > - **Gap 2: Grad-CAM++** -- Complete: 19x19 heatmaps embedded in PDFs and displayed in the web UI
 > - **Gap 3: Active Learning** -- Complete: curator corrections -> weighted export -> --active-learning-dir retraining
-> - **Gap 4: Docker Compose** -- Complete: full 7-service wiring with health checks and persistent volumes
+> - **Gap 4: Docker Compose** -- Implemented baseline: full 7-service wiring present; production hardening still required
 > - **Gap 5: Observability** -- Planned: Prometheus + Grafana dashboard
 > - **Gap 6: ArcFace Loss** -- Planned: metric learning for 85%+ accuracy target
 
@@ -804,10 +831,12 @@ deepcoin/
 | 1 | MLflow Tracking | Complete | Every training run logged -- params, metrics, model artifact |
 | 2 | Grad-CAM++ | Complete | 19x19 heatmaps in PDFs + web UI (GradCAMPlusPlus, features[-4]) |
 | 3 | Active Learning | Complete | Curator corrections -> weighted export -> retraining injection |
-| **4** | **Docker Compose** | **Complete** | 7 services: FastAPI + Next.js + PostgreSQL + Redis + MLflow + Nginx + LocalStack |
+| **4** | **Docker Compose** | **Implemented (hardening pending)** | 7 services: FastAPI + Next.js + PostgreSQL + Redis + MLflow + Nginx + LocalStack |
 | 5 | Observability | Planned | Prometheus metrics -> Grafana dashboard (latency, KB hit rate, route distribution) |
 | 6 | ArcFace Loss | Planned | Replace CrossEntropy head with metric learning -- target: 85%+ accuracy |
-| 7 | PostgreSQL Migration | Planned | Replace SQLite store with Postgres (shipped in Docker) |
+| 7 | PostgreSQL Migration | Planned | Replace residual SQLite paths in runtime/history with Postgres-only architecture |
+| 8 | Deployment Automation | Planned | Add CD workflow (build, scan, deploy, rollback) |
+| 9 | Container Security Hardening | Planned | Resolve current base-image vulnerability findings and enforce scan gate in CI |
 
 ---
 

@@ -1,9 +1,45 @@
+## 🚨 CRITICAL AI DIRECTIVE & WORKFLOW: NEVER FORGET! 🚨
+1. **SENIOR TO BABY MINDSET**: Always explain engineering logic like a Senior Engineer teaching a total beginner. Unpack EVERY technical term. Never just name-drop things like cv2 or oto3 or Open-Set. Explain *what* it is and *why* it matters simply.
+2. **PROACTIVE ENGINEERING**: If the user forgets a security step, a best practice, or an edge case, you must add it automatically. You are the Senior AI Architect.
+3. **STRICT 6-STEP WORKFLOW**:
+   - Step 1: Explain the plan in simple, deep detail BEFORE coding.
+   - Step 2: Write the code.
+   - Step 3: Explain exactly what was changed and how the files flow.
+   - Step 4: Update AI_LEAD_MEMORY.md automatically.
+   - Step 5: Update ENGINEERING_JOURNAL.md automatically.
+   - Step 6: **ALWAYS UPDATE THE TABLE OF CONTENTS (TOC)** in the journal to match new sections.
+
 # DeepCoin-Core — Copilot Persistent Context
 # ============================================
 # This file is automatically injected into every GitHub Copilot Chat session.
 # It gives Copilot full knowledge of the project state, decisions, and rules.
 # NEVER delete this file. Update it after every major milestone.
-# Last updated: March 2026 — Grad-CAM upgraded to GradCAM++ at features[-4] 19×19 (b15c2b7). Amber warning in AnalysisPanel fixed: was "not in training set" (WRONG) → "photograph style differs from training data" (correct). Root cause: BNF 1966 catalog scans inside the training set score 15-28% while standard _p composite photographs score 80-96% — intra-dataset distribution shift. Journal sections 183-184 added (28b4d0a). 3-panel Grad-CAM++ comparison figure added (scripts/compare_heatmaps.py, 98a8a6c). V4 retraining deferred — 80.03% is PFE-grade; law of diminishing returns. MLflow + Active Learning testing guides written (Sections 186-188). Next: Gap 4 — Docker Compose full wiring (7 services).
+# Last updated: March 2026 — historical log retained below; see Canonical Status Override for current truth snapshot.
+
+## CANONICAL STATUS OVERRIDE (March 20, 2026)
+
+This block is the current truth snapshot and **overrides conflicting older statements below**.
+
+- Core implementation status:
+  - Layers 0–5: implemented in codebase
+  - Layer 6 (Docker): implemented baseline, enterprise hardening pending
+  - Layer 7: CI implemented; CD/deployment automation still pending
+- A+++ gaps:
+  - Gap 1 (MLflow): complete
+  - Gap 2 (Grad-CAM++): complete
+  - Gap 3 (Active Learning): complete
+  - Gap 4 (Docker wiring): implemented baseline
+  - Gap 5 (Observability): pending
+  - Gap 6 (ArcFace): pending
+- Verified test discovery in current workspace: **122 tests collected** (`pytest --collect-only`)
+- Auth capabilities are present in backend: register/login/verify/resend/refresh/logout/forgot-password/reset-password
+- Current known enterprise-grade blockers:
+  - Container vulnerability findings still flagged for frontend image base
+  - No automated CD pipeline (build/scan/deploy/rollback)
+  - Observability/alerting dashboard not yet fully wired
+  - Ongoing documentation drift across long historical sections
+
+When sections conflict, trust in this order: code/tests > this override block > `CLAUDE.md` > historical sections below.
 
 ---
 
@@ -2005,3 +2041,16 @@ app/
 ├── about/page.tsx        ← NEW: Project story (Server Component, SEO)
 └── docs/page.tsx         ← NEW: REST API reference (Server Component, SEO)
 ```
+
+
+## 🤖 AI LEAD ENGINEER DIRECTIVE & GOLDEN RULE 🤖
+*Note added by Senior AI Architect (March 21, 2026):*
+**Whenever a new feature, bug fix, task, or architectural shift is successfully completed in this project, I (the AI) MUST automatically update AI_LEAD_MEMORY.md and this file (.github/copilot-instructions.md) to reflect the new state. NO EXCEPTIONS.**
+This guarantees the project's memory is perfectly synced.
+
+## 🚨 ENTERPRISE ARCHITECTURE CRITIQUE (Google/InstaDeep standard)
+- **Monolithic ML:** FastAPI API holds PyTorch EfficientNet in-memory. Blocks horizontal scaling (uvicorn --workers will cause CUDA OOM). Fix required: Extract inference to Redis worker queue / Triton.
+- **Architectural Error (Closed vs Open Set):** Softmax with 438 classes is mathematically flawed for 9,716 unknown coin types. Fix required: Rearchitect to Metric Learning (ArcFace) + Vector DB for embeddings.
+- **12-Factor App Violations:** Heavy reliance on stateful local folder paths (/reports) instead of actual S3 storage. Python code doesn't use boto3 despite Docker's LocalStack claims.
+- **Concurrency Defect:** fpdf2 operations running inside FastAPI’s threadpool will cause starvation under load.
+- **P0 Silent Auth Failure:** email.py returns True when API keys missing, committing broken pending users.

@@ -256,9 +256,15 @@ async def register(
         ip_address=client_ip(request),
     )
 
-    # 6. Send email (after audit is written; does NOT block the commit)
+    # 6. Send email (after audit is written)
     if not is_dev:
-        await send_verification_email(user.email, raw_token)  # type: ignore[possibly-undefined]
+        email_sent = await send_verification_email(user.email, raw_token)  # type: ignore[possibly-undefined]
+        if not email_sent:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to send verification email. System misconfigured."
+            )
 
     msg = (
         "Account created. You can sign in immediately."
@@ -479,7 +485,13 @@ async def resend_verification(
             token      = raw_token,          # no prefix — standard verification token
             expires_at = datetime.now(timezone.utc) + timedelta(hours=_VERIFY_EXPIRE_HOURS),
         ))
-        await send_verification_email(user.email, raw_token)
+        email_sent = await send_verification_email(user.email, raw_token)
+        if not email_sent:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to send verification email. System misconfigured."
+            )
         await write_audit(db, action="user.resend_verification", user_id=user.id)
         logger.info("Resent verification email to user id=%s", user.id)
 
@@ -752,7 +764,13 @@ async def forgot_password(
             token=f"reset:{raw_token}",   # prefix distinguishes reset from verification tokens
             expires_at=datetime.now(timezone.utc) + timedelta(hours=_PASSWORD_RESET_EXPIRE_HOURS),
         ))
-        await send_password_reset_email(user.email, raw_token)
+        email_sent = await send_password_reset_email(user.email, raw_token)
+        if not email_sent:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to send reset email. System misconfigured."
+            )
         await write_audit(db, action="user.forgot_password", user_id=user.id)
 
     # Always return the same message — do NOT leak whether the email exists
