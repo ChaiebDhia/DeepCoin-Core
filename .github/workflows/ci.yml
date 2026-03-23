@@ -125,13 +125,7 @@ jobs:
       # ── Linting (fast — runs before tests so lint errors surface first) ──
       - name: Lint with flake8
         run: |
-          # E501 (line too long) is handled by black; ignore here to avoid
-          # noise from auto-formatted lines that are slightly over 79 chars.
-          # W503/W504: line break before/after binary operator — black's style.
-          flake8 src/ tests/ \
-            --max-line-length=110 \
-            --extend-ignore=E501,W503,W504,E203 \
-            --exclude=src/api/db/migrations/
+          flake8 src/ tests/
 
       # ── Format check ─────────────────────────────────────────────────────
       - name: Check formatting with black

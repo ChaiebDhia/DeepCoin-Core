@@ -1,0 +1,37 @@
+[flake8]
+max-line-length = 110
+extend-ignore =
+    E203,
+    W503,
+    W504,
+    E501,
+    E221,
+    E222,
+    E231,
+    E251,
+    E261,
+    E272,
+    E128,
+    E302,
+    E303,
+    E305,
+    W291,
+    W292,
+    W293,
+    W391,
+    E401,
+    E402,
+    F401,
+    F811,
+    F841,
+    E741,
+    B008
+exclude =
+    venv/,
+    data/,
+    models/,
+    .git/,
+    __pycache__/,
+    src/api/db/migrations/
+per-file-ignores =
+    tests/*:S101,F401
