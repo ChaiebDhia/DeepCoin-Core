@@ -2058,3 +2058,6 @@ This guarantees the project's memory is perfectly synced.
 ## 🟢 RECENT COMPLETED TASKS (March 22, 2026)
 * Fixed Resend "No Activity" bug by booting uvicorn with `--env-file .env` flag, restoring transactional email logs.
 * Redesigned `/api/subscribers` and Waitlist UX inside Next.js to allow users to directly Unsubscribe inside `/dashboard` seamlessly and reuse their auth session for the Notify Me feature.
+* (March 23, 2026) Solved the 'AssertionError: Status code 204 must not have a response body' boot crash. Identified rom __future__ import annotations stringifies types natively triggering FastAPI 0.115's JSON deserializer to violently reject 204 No Content endpoints. Mass purged it globally, and enforced esponse_class=Response manually across all Route DELETE requests.
+* (March 23, 2026) Solidified a multi-arch boundary. The Pytest test runners natively execute on a strict win32 Python 3.11.8 pipeline locally preventing stringified syncio PEP 695 loops, while Docker utilizes linux 3.12-slim strictly for path traversal defense. 
+* (March 23, 2026) Unlocked Pytest configurations from a rigid UnicodeDecodeError created by Starlette misreading .env variables containing standard UTF-8 characters under the Windows implicit cp1252 charmap. Force-casted the configurations directly to pure ASCII.

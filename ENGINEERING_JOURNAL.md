@@ -218,6 +218,8 @@
 202. [Section 202 — P0 Silent Auth Failure & Email System Hardening](#202-p0-silent-auth-failure--email-system-hardening)
 203. [Section 203 — Admin Account Initialization & Live Verification](#203-admin-account-initialization--live-verification)
 204. [Section 204 — Full SMTP Email Migration & Final Cleanup](#204-full-smtp-email-migration--final-cleanup)
+205. [Section 205 — The Environment Alignment: Python 3.12 vs 3.11 & Windows Testing](#205-the-environment-alignment-python-312-vs-311--windows-testing)
+206. [Section 206 — The Silent Killer: FastAPI 204 Responses vs. __future__ Annotations](#206-the-silent-killer-fastapi-204-responses-vs-__future__-annotations)
 
 ---
 
