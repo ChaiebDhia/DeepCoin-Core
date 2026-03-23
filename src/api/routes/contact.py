@@ -1,12 +1,12 @@
-"""
+﻿"""
 src/api/routes/contact.py
 ==========================
-Contact message inbox — stores messages from the /contact form in a JSON file.
+Contact message inbox â€” stores messages from the /contact form in a JSON file.
 
 WHAT:
-    POST /api/contact  — any visitor submits a message; stored in
+    POST /api/contact  â€” any visitor submits a message; stored in
                          data/contact_messages.json
-    GET  /api/admin/contact — admin/curator reads all messages
+    GET  /api/admin/contact â€” admin/curator reads all messages
 
 WHY file-based (not a DB table):
     Contact messages are very low-volume (tens per year, not millions).
@@ -25,7 +25,7 @@ STORAGE FORMAT (each element in the list):
         "read":       bool
     }
 """
-from __future__ import annotations
+
 
 import json
 import threading
@@ -34,18 +34,18 @@ from datetime import datetime, timezone
 from pathlib  import Path
 from typing   import Any
 
-from fastapi             import APIRouter, Depends, HTTPException
+from fastapi             import APIRouter, Depends, HTTPException, Response
 from pydantic            import BaseModel, EmailStr, Field
 
 from src.api.auth.deps   import get_current_user
 from src.api.db.models   import User, UserRole
 
-# ── Storage path ──────────────────────────────────────────────────────────────
+# â”€â”€ Storage path â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _STORE_PATH = Path("data/contact_messages.json")
 _LOCK        = threading.Lock()
 
-# ── Thread-safe file helpers ──────────────────────────────────────────────────
+# â”€â”€ Thread-safe file helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _load() -> list[dict[str, Any]]:
     """Read the JSON file; return empty list if it doesn't exist yet."""
@@ -66,10 +66,10 @@ def _save(messages: list[dict[str, Any]]) -> None:
     )
 
 
-# ── Schemas ───────────────────────────────────────────────────────────────────
+# â”€â”€ Schemas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class ContactRequest(BaseModel):
-    """Incoming contact form payload — validated by Pydantic before storing."""
+    """Incoming contact form payload â€” validated by Pydantic before storing."""
 
     name:    str = Field(..., min_length=1, max_length=120)
     email:   str = Field(..., min_length=3, max_length=254)
@@ -77,7 +77,7 @@ class ContactRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
 
 
-# ── Router ────────────────────────────────────────────────────────────────────
+# â”€â”€ Router â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 router = APIRouter(tags=["Contact"])
 
@@ -92,7 +92,7 @@ async def submit_contact(body: ContactRequest) -> dict[str, str]:
     Store a contact message from any visitor (no auth required).
 
     WHAT: Appends a new message record to data/contact_messages.json.
-    WHY  no auth: The contact form is visible to unauthenticated visitors —
+    WHY  no auth: The contact form is visible to unauthenticated visitors â€”
          potential collaborators, recruiters, and museum partners who haven't
          registered yet.  Requiring auth would defeat the purpose.
     SPAM: Rate-limiting is inherited from the SlowAPI middleware applied at
@@ -127,7 +127,7 @@ async def list_contact_messages(
     """
     Return all contact messages, newest first.
 
-    ACCESS: admin or curator role — regular analysts cannot read other people's
+    ACCESS: admin or curator role â€” regular analysts cannot read other people's
             contact messages.
     """
     if current_user.role not in (UserRole.admin, UserRole.curator):
@@ -176,7 +176,7 @@ async def mark_read(
 
 @router.delete(
     "/api/admin/contact/{message_id}",
-    status_code=204,
+    status_code=204, response_class=Response,
     summary="Delete a contact message (admin only)",
 )
 async def delete_contact_message(
@@ -193,3 +193,4 @@ async def delete_contact_message(
         if len(filtered) == len(messages):
             raise HTTPException(status_code=404, detail="Message not found.")
         _save(filtered)
+

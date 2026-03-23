@@ -25,7 +25,7 @@ AUTH MODEL:
         A per-endpoint check is explicit and readable. A decorator would
         hide the auth logic, making code reviews harder.
 """
-from __future__ import annotations
+
 
 import math
 from datetime import datetime, timezone

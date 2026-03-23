@@ -1,7 +1,7 @@
-"""
+﻿"""
 src/api/routes/chat_history.py
 ===============================
-AI Chat session history — save, list, load, and delete per-user conversations.
+AI Chat session history â€” save, list, load, and delete per-user conversations.
 
 WHAT:
     Persists AI chat conversations in PostgreSQL so users can return to
@@ -13,17 +13,17 @@ WHY per-user (not public):
     History must be scoped to the authenticated user only.
 
 ENDPOINTS:
-    GET    /api/chat/history         — list sessions (newest first, no messages body)
-    POST   /api/chat/history         — save / update a session
-    GET    /api/chat/history/{id}    — load a single session with full messages
-    DELETE /api/chat/history/{id}    — delete a session
+    GET    /api/chat/history         â€” list sessions (newest first, no messages body)
+    POST   /api/chat/history         â€” save / update a session
+    GET    /api/chat/history/{id}    â€” load a single session with full messages
+    DELETE /api/chat/history/{id}    â€” delete a session
 """
-from __future__ import annotations
+
 
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/chat", tags=["Chat History"])
 
 
-# ── Pydantic schemas ───────────────────────────────────────────────────────────
+# â”€â”€ Pydantic schemas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class ChatMessageIn(BaseModel):
     """
@@ -59,8 +59,8 @@ class SaveSessionRequest(BaseModel):
     """
     Body for POST /api/chat/history.
 
-    title    — display name (typically the first user message, truncated).
-    messages — full array of messages in the conversation.
+    title    â€” display name (typically the first user message, truncated).
+    messages â€” full array of messages in the conversation.
     """
     title:    str = Field(..., min_length=1, max_length=200)
     messages: list[ChatMessageIn] = Field(..., min_length=1)
@@ -68,7 +68,7 @@ class SaveSessionRequest(BaseModel):
 
 class SessionSummary(BaseModel):
     """
-    One row in the history list — no messages, just metadata for the sidebar.
+    One row in the history list â€” no messages, just metadata for the sidebar.
     """
     id:            str
     title:         str
@@ -79,12 +79,12 @@ class SessionSummary(BaseModel):
 
 class SessionDetail(SessionSummary):
     """
-    Full session, including all messages — returned for GET /api/chat/history/{id}.
+    Full session, including all messages â€” returned for GET /api/chat/history/{id}.
     """
     messages: list[dict[str, Any]]
 
 
-# ── helpers ───────────────────────────────────────────────────────────────────
+# â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _to_summary(row: ChatSession) -> SessionSummary:
     return SessionSummary(
@@ -107,7 +107,7 @@ def _to_detail(row: ChatSession) -> SessionDetail:
     )
 
 
-# ── GET /api/chat/history ─────────────────────────────────────────────────────
+# â”€â”€ GET /api/chat/history â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.get("/history", response_model=list[SessionSummary])
 async def list_chat_history(
@@ -126,13 +126,13 @@ async def list_chat_history(
         select(ChatSession)
         .where(ChatSession.user_id == current_user.id)
         .order_by(ChatSession.updated_at.desc())
-        .limit(100)           # safety cap — 100 sessions is more than enough
+        .limit(100)           # safety cap â€” 100 sessions is more than enough
     )
     rows = result.scalars().all()
     return [_to_summary(r) for r in rows]
 
 
-# ── POST /api/chat/history ────────────────────────────────────────────────────
+# â”€â”€ POST /api/chat/history â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.post("/history", response_model=SessionSummary, status_code=201)
 async def save_chat_session(
@@ -149,8 +149,8 @@ async def save_chat_session(
     the current conversation) or when the page is about to unload.
 
     Body fields:
-        title    — first user message, truncated to 200 chars
-        messages — complete message array
+        title    â€” first user message, truncated to 200 chars
+        messages â€” complete message array
 
     Returns the saved session summary (with generated id).
     """
@@ -166,7 +166,7 @@ async def save_chat_session(
     return _to_summary(session)
 
 
-# ── GET /api/chat/history/{session_id} ────────────────────────────────────────
+# â”€â”€ GET /api/chat/history/{session_id} â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.get("/history/{session_id}", response_model=SessionDetail)
 async def get_chat_session(
@@ -194,9 +194,9 @@ async def get_chat_session(
     return _to_detail(session)
 
 
-# ── DELETE /api/chat/history/{session_id} ─────────────────────────────────────
+# â”€â”€ DELETE /api/chat/history/{session_id} â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-@router.delete("/history/{session_id}", status_code=204)
+@router.delete("/history/{session_id}", status_code=204, response_class=Response)
 async def delete_chat_session(
     session_id:   str,
     current_user: User = Depends(get_current_user),
@@ -221,3 +221,4 @@ async def delete_chat_session(
     await db.execute(delete(ChatSession).where(ChatSession.id == session_id))
     await db.commit()
     logger.info("Chat session deleted: %s (user=%s)", session_id, current_user.id)
+

@@ -27,7 +27,7 @@ API:
         type_id, denomination, region, date_range, material,
         mint, authority, in_training_set, text_snippet
 """
-from __future__ import annotations
+
 
 import logging
 import re

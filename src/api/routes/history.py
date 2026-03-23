@@ -30,7 +30,7 @@ WHY pure async SQLAlchemy (no asyncio.to_thread):
     DB calls directly in the async route without blocking the event loop.
 """
 
-from __future__ import annotations
+
 
 import logging
 import uuid
@@ -243,7 +243,7 @@ async def get_history_item(
 
 @router.delete(
     "/history/{record_id}",
-    status_code=204,
+    status_code=204, response_class=Response,
     summary="Delete one past classification by ID",
 )
 async def delete_history_item(

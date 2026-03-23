@@ -38,7 +38,7 @@ RATE LIMITING:
     gated behind the same 10/min rate limit as /api/classify.  Left open
     in development for testing convenience.
 """
-from __future__ import annotations
+
 
 import asyncio
 import json

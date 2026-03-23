@@ -1,34 +1,34 @@
-"""
+﻿"""
 src/api/routes/chat_sessions.py
 ================================
-Chat session history — save, list, retrieve, and delete AI chat conversations.
+Chat session history â€” save, list, retrieve, and delete AI chat conversations.
 
 WHAT: These endpoints store and retrieve AI chat histories per user.
       Each "session" is one conversation thread: a list of messages with
       {role, content, sources, provider}.
 
 WHY this is separate from the chat.py endpoint:
-    chat.py handles the LLM inference: question → answer.
+    chat.py handles the LLM inference: question â†’ answer.
     chat_sessions.py handles persistence: save, list, load, delete.
-    Separation of concerns — inference and storage are independent concerns.
+    Separation of concerns â€” inference and storage are independent concerns.
 
 AUTHENTICATION:
     All routes below require a valid JWT.  Guest users can use /api/chat
     without authentication, but chat history is a per-user feature.
 
 ENDPOINTS:
-    POST   /api/chat/sessions           — create a new session (first message)
-    GET    /api/chat/sessions           — list user's sessions (paginated, newest first)
-    GET    /api/chat/sessions/{id}      — fetch a session with all messages
-    PATCH  /api/chat/sessions/{id}      — append messages to an existing session
-    DELETE /api/chat/sessions/{id}      — delete a session
+    POST   /api/chat/sessions           â€” create a new session (first message)
+    GET    /api/chat/sessions           â€” list user's sessions (paginated, newest first)
+    GET    /api/chat/sessions/{id}      â€” fetch a session with all messages
+    PATCH  /api/chat/sessions/{id}      â€” append messages to an existing session
+    DELETE /api/chat/sessions/{id}      â€” delete a session
 """
-from __future__ import annotations
+
 
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/chat/sessions", tags=["Chat History"])
 
 
-# ── Pydantic schemas ──────────────────────────────────────────────────────────
+# â”€â”€ Pydantic schemas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class MessageIn(BaseModel):
     """One chat message to store."""
@@ -94,7 +94,7 @@ class SessionListResponse(BaseModel):
     limit: int
 
 
-# ── helpers ───────────────────────────────────────────────────────────────────
+# â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _to_summary(s: ChatSession) -> SessionSummary:
     return SessionSummary(
@@ -106,7 +106,7 @@ def _to_summary(s: ChatSession) -> SessionSummary:
     )
 
 
-# ── POST /api/chat/sessions — create ─────────────────────────────────────────
+# â”€â”€ POST /api/chat/sessions â€” create â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.post("", response_model=SessionDetail, status_code=201)
 async def create_session(
@@ -140,7 +140,7 @@ async def create_session(
     )
 
 
-# ── GET /api/chat/sessions — list ────────────────────────────────────────────
+# â”€â”€ GET /api/chat/sessions â€” list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.get("", response_model=SessionListResponse)
 async def list_sessions(
@@ -177,7 +177,7 @@ async def list_sessions(
     )
 
 
-# ── GET /api/chat/sessions/{id} — fetch ──────────────────────────────────────
+# â”€â”€ GET /api/chat/sessions/{id} â€” fetch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.get("/{session_id}", response_model=SessionDetail)
 async def get_session(
@@ -206,7 +206,7 @@ async def get_session(
     )
 
 
-# ── PATCH /api/chat/sessions/{id} — append ───────────────────────────────────
+# â”€â”€ PATCH /api/chat/sessions/{id} â€” append â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.patch("/{session_id}", response_model=SessionDetail)
 async def append_messages(
@@ -243,9 +243,9 @@ async def append_messages(
     )
 
 
-# ── DELETE /api/chat/sessions/{id} ───────────────────────────────────────────
+# â”€â”€ DELETE /api/chat/sessions/{id} â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-@router.delete("/{session_id}", status_code=204)
+@router.delete("/{session_id}", status_code=204, response_class=Response)
 async def delete_session(
     session_id:   str,
     current_user: User       = Depends(get_current_user),
@@ -265,3 +265,4 @@ async def delete_session(
     await db.delete(row)
     await db.commit()
     logger.info("Deleted chat session %s (user=%s)", session_id[:8], current_user.id[:8])
+

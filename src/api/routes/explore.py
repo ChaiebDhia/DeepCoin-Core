@@ -21,7 +21,7 @@ WHY user info is excluded:
     We surface the coin data (label, route, confidence) but strip user_id
     and any PII. This is GDPR-safe by design.
 """
-from __future__ import annotations
+
 
 from typing import Any
 

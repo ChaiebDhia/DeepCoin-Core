@@ -1,30 +1,30 @@
-"""
+﻿"""
 routes/subscribers.py
 =====================
-POST   /api/subscribers                     — waitlist / newsletter email capture
-GET    /api/subscribers/confirm?token=xxx   — confirm subscription via email link
-GET    /api/subscribers/unsubscribe?token=xxx — remove from list via email link
-GET    /api/subscribers                     — admin: list all subscribers (auth required)
+POST   /api/subscribers                     â€” waitlist / newsletter email capture
+GET    /api/subscribers/confirm?token=xxx   â€” confirm subscription via email link
+GET    /api/subscribers/unsubscribe?token=xxx â€” remove from list via email link
+GET    /api/subscribers                     â€” admin: list all subscribers (auth required)
 
 ENTERPRISE CONFIRMATION FLOW
-─────────────────────────────
-1. User submits email → POST /api/subscribers
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+1. User submits email â†’ POST /api/subscribers
 2. Backend generates a UUID confirm_token, stores subscriber with
    status="pending", and (if SMTP_USER is set) fires a transactional
    email via the SMTP server containing:
-     • A confirmation link  → /confirm-subscription?token=<uuid>
-     • An unsubscribe link  → /api/subscribers/unsubscribe?token=<uuid>
+     â€¢ A confirmation link  â†’ /confirm-subscription?token=<uuid>
+     â€¢ An unsubscribe link  â†’ /api/subscribers/unsubscribe?token=<uuid>
 3. Frontend shows either:
-     • email_sent=true  → "Check your inbox for a confirmation link"
-     • email_sent=false → inline dev-mode link (SMTP_USER not set)
-4. User clicks confirmation link → GET /api/subscribers/confirm?token=xxx
-   → status set to "confirmed"
-5. User clicks unsubscribe link  → GET /api/subscribers/unsubscribe?token=xxx
-   → record deleted from JSON
+     â€¢ email_sent=true  â†’ "Check your inbox for a confirmation link"
+     â€¢ email_sent=false â†’ inline dev-mode link (SMTP_USER not set)
+4. User clicks confirmation link â†’ GET /api/subscribers/confirm?token=xxx
+   â†’ status set to "confirmed"
+5. User clicks unsubscribe link  â†’ GET /api/subscribers/unsubscribe?token=xxx
+   â†’ record deleted from JSON
 
 WHY token-based (not magic-link / OAuth):
     Simple, stateless, zero dependencies beyond random UUID generation.
-    A UUID4 is 122 bits of entropy — brute-force infeasible at any
+    A UUID4 is 122 bits of entropy â€” brute-force infeasible at any
     foreseeable scale for an academic project mailing list.
 
 WHY JSON file instead of a DB table:
@@ -32,9 +32,9 @@ WHY JSON file instead of a DB table:
     JSON keeps it out of the main DB schema, trivially exportable as CSV,
     and requires zero migrations. Threading lock ensures safe concurrent writes.
 
-REQUIRED ENV VARS (all optional — graceful degradation if absent):
-    SMTP_USER   — SMTP username for transactional email
-    APP_BASE_URL     — Public URL prefix, e.g. https://deepcoin.ai
+REQUIRED ENV VARS (all optional â€” graceful degradation if absent):
+    SMTP_USER   â€” SMTP username for transactional email
+    APP_BASE_URL     â€” Public URL prefix, e.g. https://deepcoin.ai
                        Used to build confirmation / unsubscribe links.
                        Defaults to http://localhost:3000 in development.
 """
@@ -57,7 +57,7 @@ from email.message import EmailMessage
 import smtplib
 from email.message import EmailMessage
 import httpx
-from fastapi            import APIRouter, Depends, Query
+from fastapi            import APIRouter, Depends, Query, Response
 from fastapi.responses  import HTMLResponse
 from pydantic           import BaseModel, field_validator
 from src.api.auth       import require_api_key, get_current_user
@@ -65,11 +65,11 @@ from src.api.db.models  import User
 
 logger = logging.getLogger(__name__)
 
-# ── Router ────────────────────────────────────────────────────────────────────
+# â”€â”€ Router â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 router = APIRouter(prefix="/api/subscribers", tags=["Subscribers"])
 
-# ── Config ────────────────────────────────────────────────────────────────────
+# â”€â”€ Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _lock           = threading.Lock()
 _DATA_FILE      = Path("data/subscribers.json")
@@ -78,14 +78,14 @@ _SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 APP_BASE_URL    = os.getenv("APP_BASE_URL", "http://localhost:3000").rstrip("/")
 SENDER_EMAIL    = os.getenv("DEEPCOIN_SENDER_EMAIL", "DeepCoin <noreply@deepcoin.ai>")
 
-# ── Schema ────────────────────────────────────────────────────────────────────
+# â”€â”€ Schema â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class SubscribeRequest(BaseModel):
     """
     Request body for POST /api/subscribers.
 
     FIELDS:
-        email — must match a basic email pattern after stripping whitespace
+        email â€” must match a basic email pattern after stripping whitespace
                 and lowercasing. No strict RFC-5322 validation: we want to
                 accept edge-case valid addresses without rejecting real users.
     """
@@ -99,7 +99,7 @@ class SubscribeRequest(BaseModel):
 
         WHAT: strips whitespace, lowercases, rejects strings that don't
               contain an @ with non-empty local and domain parts.
-        WHY lowercase: de-duplicates FOO@bar.com vs foo@bar.com — the same
+        WHY lowercase: de-duplicates FOO@bar.com vs foo@bar.com â€” the same
               inbox, but different strings without normalisation.
         """
         v = v.strip().lower()
@@ -120,11 +120,11 @@ class SubscribeResponse(BaseModel):
     Response body for POST /api/subscribers.
 
     FIELDS:
-        ok            — always True on success
-        message       — human-readable status string
-        confirm_token — UUID the frontend can use to build a dev-mode
+        ok            â€” always True on success
+        message       â€” human-readable status string
+        confirm_token â€” UUID the frontend can use to build a dev-mode
                         inline confirmation link when no email is sent
-        email_sent    — True when the SMTP call succeeded;
+        email_sent    â€” True when the SMTP call succeeded;
                         False in dev (SMTP_USER not set)
     """
     ok:            bool
@@ -133,7 +133,7 @@ class SubscribeResponse(BaseModel):
     email_sent:    bool
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _load_records() -> list[dict]:
     """Read data/subscribers.json; return [] on any error."""
@@ -162,13 +162,13 @@ def _send_confirmation_email(email: str, confirm_token: str) -> bool:
           containing a confirmation link and an unsubscribe link.
 
     WHY SMTP via Gmail:
-        SMTP requires a single API key — no SMTP server, no TLS config,
+        SMTP requires a single API key â€” no SMTP server, no TLS config,
         no credential rotation. The free tier (3,000 emails/month) is
         sufficient for an academic project mailing list.
 
     RETURNS:
-        True  — Delivery successful to SMTP (email queued for delivery)
-        False — SMTP_USER not set, or any network/API error.
+        True  â€” Delivery successful to SMTP (email queued for delivery)
+        False â€” SMTP_USER not set, or any network/API error.
                 Failure is logged but NOT re-raised so the subscribe
                 endpoint always returns 200 (dev-mode graceful degradation).
     """
@@ -208,7 +208,7 @@ def _send_confirmation_email(email: str, confirm_token: str) -> bool:
       <div style="padding:16px 32px 28px;border-top:1px solid #e2e8f0;margin-top:8px">
         <p style="color:#94a3b8;font-size:12px;margin:0">
           If you didn&rsquo;t sign up, you can safely ignore this email.
-          &nbsp;·&nbsp;
+          &nbsp;Â·&nbsp;
           <a href="{unsubscribe_url}" style="color:#94a3b8">Unsubscribe</a>
         </p>
       </div>
@@ -251,7 +251,7 @@ def _send_confirmation_email(email: str, confirm_token: str) -> bool:
     return False
 
 
-# ── Endpoints ─────────────────────────────────────────────────────────────────
+# â”€â”€ Endpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.get(
     "",
@@ -265,7 +265,7 @@ async def list_subscribers() -> list[SubscriberRecord]:
     Return all email subscribers in chronological order.
 
     WHAT: Reads data/subscribers.json and returns the full list.
-    WHY protected: subscriber emails are PII — only admins should access them.
+    WHY protected: subscriber emails are PII â€” only admins should access them.
     Auth: X-API-Key header (same key as /api/metrics).
     """
     with _lock:
@@ -291,7 +291,7 @@ async def my_subscription_status(current_user: User = Depends(get_current_user))
         return {"subscribed": False, "status": None}
 
 
-@router.delete("/me", status_code=204, summary="Unsubscribe (logged-in user)")
+@router.delete("/me", status_code=204, response_class=Response, summary="Unsubscribe (logged-in user)")
 async def unsubscribe_me(current_user: User = Depends(get_current_user)):
     with _lock:
         records = _load_records()
@@ -304,7 +304,7 @@ async def unsubscribe_me(current_user: User = Depends(get_current_user)):
 
 @router.delete(
     "/{email:path}",
-    status_code=204,
+    status_code=204, response_class=Response,
     summary="Delete a subscriber by email (admin-only)",
     description=(
         "Remove a subscriber from the waitlist. "
@@ -360,7 +360,7 @@ async def subscribe(req: SubscribeRequest) -> SubscribeResponse:
         5. For an already-confirmed address: returns success silently
 
     IDEMPOTENCY:
-        Re-submitting the same pending email returns the existing token —
+        Re-submitting the same pending email returns the existing token â€”
         useful if the user hits submit twice or the confirmation email
         gets lost and they try again.
 
@@ -375,15 +375,15 @@ async def subscribe(req: SubscribeRequest) -> SubscribeResponse:
         existing = next((r for r in records if r.get("email") == req.email), None)
 
         if existing:
-            # Already confirmed — silent success
+            # Already confirmed â€” silent success
             if existing.get("status") == "confirmed":
                 return SubscribeResponse(
                     ok=True,
-                    message="You're already confirmed — we'll keep you posted!",
+                    message="You're already confirmed â€” we'll keep you posted!",
                     confirm_token=existing.get("confirm_token", ""),
                     email_sent=False,
                 )
-            # Pending — return same token so frontend can show dev link again
+            # Pending â€” return same token so frontend can show dev link again
             token = existing.get("confirm_token") or str(uuid.uuid4())
             existing["confirm_token"] = token            # repair in case it was missing
             _save_records(records)
@@ -402,7 +402,7 @@ async def subscribe(req: SubscribeRequest) -> SubscribeResponse:
     msg = (
         "Check your inbox for a confirmation link."
         if email_sent
-        else "Almost there — click the confirmation link to complete your signup."
+        else "Almost there â€” click the confirmation link to complete your signup."
     )
     return SubscribeResponse(ok=True, message=msg, confirm_token=token, email_sent=email_sent)
 
@@ -416,13 +416,13 @@ async def confirm_subscription(token: str = Query(...)) -> HTMLResponse:
           "confirmed", and returns a simple HTML success page.
 
     WHY HTML response instead of JSON:
-        The link is clicked directly in an email client — the browser
+        The link is clicked directly in an email client â€” the browser
         opens the URL raw with no JS. An HTML response lets us show a
         branded confirmation page immediately, even before the Next.js
         frontend is loaded. The Next.js /confirm-subscription page also
         calls this endpoint and can render a richer UI.
 
-    NOTE: This is a GET endpoint — the token acts as the credential.
+    NOTE: This is a GET endpoint â€” the token acts as the credential.
           UUID4 (122 bits entropy) is sufficient for this use-case.
     """
     with _lock:
@@ -483,7 +483,7 @@ async def unsubscribe(token: str = Query(...)) -> HTMLResponse:
 
         _save_records(records)
 
-    logger.info("Unsubscribed via token %s…", token[:8])
+    logger.info("Unsubscribed via token %sâ€¦", token[:8])
     return HTMLResponse(_html_page(
         "Unsubscribed",
         "You&rsquo;ve been removed from the list. No further emails will be sent.",
@@ -501,7 +501,7 @@ async def my_subscription_status(current_user: User = Depends(get_current_user))
         return {"subscribed": False, "status": None}
 
 
-# ── HTML page helper ──────────────────────────────────────────────────────────
+# â”€â”€ HTML page helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _html_page(title: str, body: str, *, success: bool) -> str:
     """
@@ -512,14 +512,14 @@ def _html_page(title: str, body: str, *, success: bool) -> str:
         none of the Tailwind/CSS variables are available. Inline styles
         ensure the page looks reasonable regardless of environment.
     """
-    icon   = "✅" if success else "❌"
+    icon   = "âœ…" if success else "âŒ"
     colour = "#10b981" if success else "#ef4444"
     return f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>{title} — DeepCoin</title>
+  <title>{title} â€” DeepCoin</title>
 </head>
 <body style="margin:0;font-family:sans-serif;background:#0a1628;color:#f1f5f9;
              display:flex;align-items:center;justify-content:center;min-height:100vh">
@@ -538,3 +538,4 @@ def _html_page(title: str, body: str, *, success: bool) -> str:
   </div>
 </body>
 </html>"""
+

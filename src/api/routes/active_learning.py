@@ -38,7 +38,7 @@ minutes per submission.  The correct design:
     (Celery task queue in the Docker stack).
 """
 
-from __future__ import annotations
+
 
 import logging
 from pathlib import Path
