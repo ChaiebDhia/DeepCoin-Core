@@ -28,7 +28,6 @@ Why asyncio.to_thread for the Gatekeeper:
     This is THE most important async pattern for ML APIs.
 """
 
-from __future__ import annotations
 
 import asyncio
 import logging
