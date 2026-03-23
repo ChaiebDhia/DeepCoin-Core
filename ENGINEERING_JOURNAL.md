@@ -16140,6 +16140,16 @@ src/api/routes/classify.py          POST /api/classify endpoint handler. Validat
 src/api/routes/history.py           GET /api/history, GET /api/history/{id}, DELETE /api/history/{id}.
                                     Reads and deletes from SQLite via _store.py.
 
+src/api/routes/subscribers.py       Endpoints for users to join the waitlist, verify emails,
+                                    and check subscription status dynamically.
+
+src/api/routes/active_learning.py   Exposes endpoints to retrieve unconfident predictions and
+                                    submit expert corrections to explicitly retrain the model.
+
+src/api/auth/email.py               Handles sending transactional emails (verification, full
+                                    password reset) natively using Python's smtplib via Gmail.
+                                    Prevents silent failing if credentials are missing.
+
 src/api/logging_config.py           Configures JSON-formatted structured logging.
                                     `LOG_FORMAT=json`  machine-readable logs for log aggregators.
                                     `LOG_FORMAT=text` (default)  human-readable for development.
@@ -16150,6 +16160,10 @@ frontend/app/layout.tsx             Root wrapper: sets up QueryClientProvider, n
 
 frontend/app/page.tsx               Home page: CoinUploader + AgentPipeline + AnalysisPanel.
                                     The main classify workflow.
+
+frontend/app/settings/page.tsx      Personal settings dashboard where an authenticated user can
+                                    manage their account, including one-click unsubscribe
+                                    functionality from the newsletter.
 
 frontend/app/history/page.tsx       Paginated history list. URL-synced page number.
                                     Client component inside Suspense wrapper.
@@ -43737,7 +43751,8 @@ We injected a secure Python script via the native API session context to establi
 Even after fixing our silent authentication trap (Section 202), we faced an external infrastructure wall: **Resend's API Sandbox**. We discovered that Resend would only send emails to domains that we explicitly verified on their platform, hard-blocking our ability to test live registration logic against external personal emails (like @esprit.tn). 
 
 **The Fix:**
-1. **Ripping out Vendor Lock-In:** We gutted esend entirely from the codebase (src/api/auth/email.py and src/api/routes/subscribers.py). The application no longer relies on their proprietary SDK.
+1. **Ripping out Vendor Lock-In:** We gutted 
+esend entirely from the codebase (src/api/auth/email.py and src/api/routes/subscribers.py). The application no longer relies on their proprietary SDK.
 2. **Native Python SMTP:** We configured the backend to construct multipart emails securely using the native email.message library, and then manually blast them through Google's SMTP servers (smtp.gmail.com:465) utilizing App Passwords via SMTP_SSL. This bypassed the Sandbox limitations and allows unrestricted email delivery.
 3. **Waitlist UI Dashboards:** Integrated waitlist and newsletter Unsubscribe mechanics directly into the logged-in user dashboard (dashboard/page.tsx). A user can seamlessly view their specific status via case-insensitive checks without manual form entry.
 4. **Scaffolding Eradication:** We wrote countless \.py\ scripts globally on the root folder while executing mass regex upgrades to code. We wiped the environment dynamically (Remove-Item *.py -Force) to guarantee our workspace remains clean without unpushed clutter.
