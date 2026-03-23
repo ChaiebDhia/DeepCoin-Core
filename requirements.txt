@@ -3,8 +3,8 @@
 # Deep Learning
 torch>=2.6.0
 torchvision>=0.21.0
-opencv-python==4.10.0.84
-albumentations==1.4.20
+opencv-python>=4.13.0
+albumentations>=1.4.20
 
 # Data Science
 numpy>=1.26.0,<2.0.0
