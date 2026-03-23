@@ -32,7 +32,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi             import APIRouter, Depends, HTTPException, Query
+from fastapi             import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy          import asc, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm      import joinedload
@@ -544,7 +544,7 @@ async def update_user_status(
 
 @router.delete(
     "/users/{user_id}",
-    status_code = 204,
+    status_code = 204, response_class=Response,
     summary     = "Permanently delete a user account (admin only)",
 )
 async def delete_user(
@@ -583,7 +583,7 @@ async def delete_user(
 
 @router.delete(
     "/feedback/{feedback_id}",
-    status_code = 204,
+    status_code = 204, response_class=Response,
     summary     = "Delete a user correction record (admin / curator only)",
 )
 async def delete_feedback(
