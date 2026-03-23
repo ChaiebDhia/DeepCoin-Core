@@ -2053,7 +2053,7 @@ This guarantees the project's memory is perfectly synced.
 - **Architectural Error (Closed vs Open Set):** Softmax with 438 classes is mathematically flawed for 9,716 unknown coin types. Fix required: Rearchitect to Metric Learning (ArcFace) + Vector DB for embeddings.
 - **12-Factor App Violations:** Heavy reliance on stateful local folder paths (/reports) instead of actual S3 storage. Python code doesn't use boto3 despite Docker's LocalStack claims.
 - **Concurrency Defect:** fpdf2 operations running inside FastAPI’s threadpool will cause starvation under load.
-- **P0 Silent Auth Failure:** email.py returns True when API keys missing, committing broken pending users.
+- **P0 Silent Auth Failure:** email.py returned True when API keys missing, committing broken pending users. FIXED: Resend removed entirely, pure smtplib implementation hard-fails on bad credentials.
 
 ## 🟢 RECENT COMPLETED TASKS (March 22, 2026)
 * Fixed Resend "No Activity" bug by booting uvicorn with `--env-file .env` flag, restoring transactional email logs.

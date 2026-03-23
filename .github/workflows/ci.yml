@@ -119,6 +119,7 @@ jobs:
       # ── Project + dev dependencies ────────────────────────────────────────
       - name: Install project and dev dependencies
         run: |
+          pip install setuptools wheel
           pip install -e ".[dev]"
 
       # ── Linting (fast — runs before tests so lint errors surface first) ──
