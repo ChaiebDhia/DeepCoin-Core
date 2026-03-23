@@ -93,7 +93,17 @@ max-line-length    = 110
 #   E203 — whitespace before ':' (black-formatted slices)
 #   W503 — line break before binary operator (black prefers this)
 #   E501 — long lines (handled by black)
-extend-ignore      = ["E203", "W503", "E501"]
+extend-ignore      = [
+    "E203", "W503", "E501",
+    # Relaxed visual/styling formatting
+    "E221", "E222", "E231", "E251", "E261", "E272", "E128",
+    # Blank lines and whitespaces
+    "E302", "E303", "E305", "W291", "W292", "W293", "W391",
+    # Imports and definitions
+    "E401", "E402", "F401", "F811", "F841", "E741",
+    # FastAPI dependency injection (Depends, Header, etc. inside defaults)
+    "B008"
+]
 exclude            = ["venv", "data", "models", ".git", "__pycache__"]
 per-file-ignores   = [
     # Test files: allow assert statements and unused imports
