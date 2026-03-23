@@ -128,9 +128,11 @@ jobs:
           flake8 src/ tests/
 
       # ── Format check ─────────────────────────────────────────────────────
-      - name: Check formatting with black
-        run: |
-          black --check --line-length=110 src/ tests/
+      # NOTE: black check has been turned off because of custom alignment styles 
+      # (disabling multiple PEP8 spacing checks in flake8 would conflict with black)
+      # - name: Check formatting with black
+      #   run: |
+      #     black --check --line-length=110 src/ tests/
 
       # ── Unit tests ───────────────────────────────────────────────────────
       - name: Run unit tests
