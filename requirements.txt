@@ -3,7 +3,7 @@
 # Deep Learning
 torch>=2.6.0
 torchvision>=0.21.0
-opencv-python>=4.13.0
+opencv-python>=4.10.0
 albumentations>=1.4.20
 
 # Data Science
