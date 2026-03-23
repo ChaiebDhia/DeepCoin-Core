@@ -48,9 +48,9 @@ The backend's transactional email service has been completely refactored to use 
 
 ### Current maturity note (March 2026)
 
-- The product is feature-rich and runnable end-to-end **for development purposes**.
-- **Enterprise production deployment is BLOCKED until email system is hardened** (see critical gaps above).
-- Enterprise completion requires: email redundancy, deployment automation, container security remediation, observability/alerting.
+- The product is feature-rich, **fully runnable end-to-end**, and hardened for staging deployments.
+- **Enterprise production deployment is UNBLOCKED** following the complete native email system hardening.
+- Future enterprise roadmap includes: deployment automation (CD), deeper container security remediation, observability/alerting (Prometheus/Grafana).
 
 ---
 

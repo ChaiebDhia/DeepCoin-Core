@@ -215,6 +215,9 @@
 199. [Section 199 — Complete Project State After Gap 4 (March 7, 2026)](#section-199)
 200. [Section 200 — AI Leadership Handoff, Reality Audit & Enterprise P0 Critique (March 21, 2026)](#section-200)
 201. [Section 201 — Forward Roadmap: Actual Unfinished Business (March 21, 2026)](#section-201)
+202. [Section 202 — P0 Silent Auth Failure & Email System Hardening](#202-p0-silent-auth-failure--email-system-hardening)
+203. [Section 203 — Admin Account Initialization & Live Verification](#203-admin-account-initialization--live-verification)
+204. [Section 204 — Full SMTP Email Migration & Final Cleanup](#204-full-smtp-email-migration--final-cleanup)
 
 ---
 
