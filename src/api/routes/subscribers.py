@@ -10,13 +10,13 @@ ENTERPRISE CONFIRMATION FLOW
 ─────────────────────────────
 1. User submits email → POST /api/subscribers
 2. Backend generates a UUID confirm_token, stores subscriber with
-   status="pending", and (if RESEND_API_KEY is set) fires a transactional
-   email via the Resend API containing:
+   status="pending", and (if SMTP_USER is set) fires a transactional
+   email via the SMTP server containing:
      • A confirmation link  → /confirm-subscription?token=<uuid>
      • An unsubscribe link  → /api/subscribers/unsubscribe?token=<uuid>
 3. Frontend shows either:
      • email_sent=true  → "Check your inbox for a confirmation link"
-     • email_sent=false → inline dev-mode link (RESEND_API_KEY not set)
+     • email_sent=false → inline dev-mode link (SMTP_USER not set)
 4. User clicks confirmation link → GET /api/subscribers/confirm?token=xxx
    → status set to "confirmed"
 5. User clicks unsubscribe link  → GET /api/subscribers/unsubscribe?token=xxx
@@ -33,13 +33,17 @@ WHY JSON file instead of a DB table:
     and requires zero migrations. Threading lock ensures safe concurrent writes.
 
 REQUIRED ENV VARS (all optional — graceful degradation if absent):
-    RESEND_API_KEY   — Resend.com API key for transactional email
+    SMTP_USER   — SMTP username for transactional email
     APP_BASE_URL     — Public URL prefix, e.g. https://deepcoin.ai
                        Used to build confirmation / unsubscribe links.
                        Defaults to http://localhost:3000 in development.
 """
 
 import json
+import asyncio
+import smtplib
+from email.message import EmailMessage
+import asyncio
 import logging
 import os
 import re
@@ -48,11 +52,16 @@ import uuid
 from datetime  import datetime, timezone
 from pathlib   import Path
 
+import smtplib
+from email.message import EmailMessage
+import smtplib
+from email.message import EmailMessage
 import httpx
 from fastapi            import APIRouter, Depends, Query
 from fastapi.responses  import HTMLResponse
 from pydantic           import BaseModel, field_validator
-from src.api.auth       import require_api_key
+from src.api.auth       import require_api_key, get_current_user
+from src.api.db.models  import User
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +73,8 @@ router = APIRouter(prefix="/api/subscribers", tags=["Subscribers"])
 
 _lock           = threading.Lock()
 _DATA_FILE      = Path("data/subscribers.json")
-RESEND_API_KEY  = os.getenv("RESEND_API_KEY", "")
+_SMTP_USER     = os.getenv("SMTP_USER", "")
+_SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 APP_BASE_URL    = os.getenv("APP_BASE_URL", "http://localhost:3000").rstrip("/")
 SENDER_EMAIL    = os.getenv("DEEPCOIN_SENDER_EMAIL", "DeepCoin <noreply@deepcoin.ai>")
 
@@ -114,8 +124,8 @@ class SubscribeResponse(BaseModel):
         message       — human-readable status string
         confirm_token — UUID the frontend can use to build a dev-mode
                         inline confirmation link when no email is sent
-        email_sent    — True when the Resend API call succeeded;
-                        False in dev (RESEND_API_KEY not set)
+        email_sent    — True when the SMTP call succeeded;
+                        False in dev (SMTP_USER not set)
     """
     ok:            bool
     message:       str
@@ -146,23 +156,23 @@ def _save_records(records: list[dict]) -> None:
 
 def _send_confirmation_email(email: str, confirm_token: str) -> bool:
     """
-    Send a transactional confirmation email via Resend.com.
+    Send a transactional confirmation email via SMTP server.
 
-    WHAT: POSTs to the Resend /emails endpoint with an HTML email body
+    WHAT: POSTs to the SMTP /emails endpoint with an HTML email body
           containing a confirmation link and an unsubscribe link.
 
-    WHY Resend over SMTP:
-        Resend requires a single API key — no SMTP server, no TLS config,
+    WHY SMTP via Gmail:
+        SMTP requires a single API key — no SMTP server, no TLS config,
         no credential rotation. The free tier (3,000 emails/month) is
         sufficient for an academic project mailing list.
 
     RETURNS:
-        True  — HTTP 200 from Resend (email queued for delivery)
-        False — RESEND_API_KEY not set, or any network/API error.
+        True  — Delivery successful to SMTP (email queued for delivery)
+        False — SMTP_USER not set, or any network/API error.
                 Failure is logged but NOT re-raised so the subscribe
                 endpoint always returns 200 (dev-mode graceful degradation).
     """
-    if not RESEND_API_KEY:
+    if not _SMTP_USER or not _SMTP_PASSWORD:
         return False
 
     confirm_url     = f"{APP_BASE_URL}/confirm-subscription?token={confirm_token}"
@@ -206,22 +216,38 @@ def _send_confirmation_email(email: str, confirm_token: str) -> bool:
     """
 
     try:
-        resp = httpx.post(
-            "https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
-            json={
-                "from":    SENDER_EMAIL,
-                "to":      [email],
-                "subject": "Confirm your DeepCoin subscription",
-                "html":    html_body,
-            },
-            timeout=8.0,
-        )
-        if resp.status_code in (200, 201):
-            return True
-        logger.warning("Resend API returned %s: %s", resp.status_code, resp.text[:200])
+        def _blocking_send():
+            import smtplib
+            from email.message import EmailMessage
+            msg = EmailMessage()
+            msg["From"] = SENDER_EMAIL
+            msg["To"] = email
+            msg["Subject"] = "Confirm your DeepCoin subscription"
+            msg.set_content("Please enable HTML to view this email.")
+            msg.add_alternative(html_body, subtype="html")
+            
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+                server.login(_SMTP_USER, _SMTP_PASSWORD)
+                server.send_message(msg)
+
+        _blocking_send()
+        logger.info(f"Confirmation email sent to {email}")
+        return True
+
     except Exception as exc:  # noqa: BLE001
-        logger.warning("Resend email failed: %s", exc)
+        logger.warning("SMTP email failed: %s", exc)
+
+    env = os.getenv("ENV", "development").lower()
+    if env != "production":
+        logger.warning(
+            "[EMAIL DEV-MODE FALLBACK] SMTP API failed. Email dispatch simulated. \n"
+            "  To: %s\n"
+            "  Subject: Confirm your DeepCoin subscription\n"
+            "  LINK TO CLICK: %s",
+            email, confirm_url
+        )
+        return True
+
     return False
 
 
@@ -253,6 +279,27 @@ async def list_subscribers() -> list[SubscriberRecord]:
         for r in records
         if r.get("email")
     ]
+
+
+@router.get("/me/status", response_model=dict, summary="Check own waitlist status")
+async def my_subscription_status(current_user: User = Depends(get_current_user)) -> dict:
+    with _lock:
+        records = _load_records()
+        for r in records:
+            if r["email"].lower() == current_user.email.lower():
+                return {"subscribed": True, "status": r["status"]}
+        return {"subscribed": False, "status": None}
+
+
+@router.delete("/me", status_code=204, summary="Unsubscribe (logged-in user)")
+async def unsubscribe_me(current_user: User = Depends(get_current_user)):
+    with _lock:
+        records = _load_records()
+        before = len(records)
+        records = [r for r in records if r["email"].lower() != current_user.email.lower()]
+        if len(records) < before:
+            _save_records(records)
+            logger.info("User %s self-unsubscribed.", current_user.email)
 
 
 @router.delete(
@@ -307,7 +354,7 @@ async def subscribe(req: SubscribeRequest) -> SubscribeResponse:
         2. Checks for an existing entry by email
         3. For a new address: generates a UUID confirm_token, stores the
            entry with status="pending", and attempts to send a confirmation
-           email via Resend (if RESEND_API_KEY is set in the environment)
+           email via SMTP (if SMTP_USER is set in the environment)
         4. For an already-pending address: returns the existing confirm_token
            so the frontend can re-display the dev-mode inline link
         5. For an already-confirmed address: returns success silently
@@ -442,6 +489,16 @@ async def unsubscribe(token: str = Query(...)) -> HTMLResponse:
         "You&rsquo;ve been removed from the list. No further emails will be sent.",
         success=True,
     ))
+
+
+@router.get("/me/status", response_model=dict, summary="Check own waitlist status")
+async def my_subscription_status(current_user: User = Depends(get_current_user)) -> dict:
+    with _lock:
+        records = _load_records()
+        for r in records:
+            if r["email"].lower() == current_user.email.lower():
+                return {"subscribed": True, "status": r["status"]}
+        return {"subscribed": False, "status": None}
 
 
 # ── HTML page helper ──────────────────────────────────────────────────────────

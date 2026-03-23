@@ -33,7 +33,7 @@ import {
   Compass, ArrowRight, BookOpen,
 } from "lucide-react";
 import { motion }                  from "framer-motion";
-import { getUserStats }            from "@/lib/api";
+import { getUserStats, } from "@/lib/api";
 import type { UserStatsResponse }  from "@/types/api";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -142,7 +142,6 @@ export default function DashboardPage() {
     staleTime: 60_000,
     retry:     1,
   });
-
   if (status === "loading" || status === "unauthenticated") {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -471,6 +470,8 @@ export default function DashboardPage() {
             </Link>
           </motion.div>
         )}
+
+        
 
       </div>
     </div>

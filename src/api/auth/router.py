@@ -258,7 +258,7 @@ async def register(
 
     # 6. Send email (after audit is written)
     if not is_dev:
-        email_sent = await send_verification_email(user.email, raw_token)  # type: ignore[possibly-undefined]
+        email_sent = await send_verification_email(user.email, raw_token, db=db, user_id=user.id)
         if not email_sent:
             await db.rollback()
             raise HTTPException(
@@ -448,7 +448,7 @@ async def verify_email(
 @router.post(
     "/resend-verification",
     response_model=MessageResponse,
-    summary="Resend email verification link",
+    summary="SMTP email verification link",
 )
 async def resend_verification(
     body: ForgotPasswordRequest,   # reuse — only needs email: EmailStr
@@ -485,7 +485,7 @@ async def resend_verification(
             token      = raw_token,          # no prefix — standard verification token
             expires_at = datetime.now(timezone.utc) + timedelta(hours=_VERIFY_EXPIRE_HOURS),
         ))
-        email_sent = await send_verification_email(user.email, raw_token)
+        email_sent = await send_verification_email(user.email, raw_token, db=db, user_id=user.id)
         if not email_sent:
             await db.rollback()
             raise HTTPException(
@@ -764,7 +764,7 @@ async def forgot_password(
             token=f"reset:{raw_token}",   # prefix distinguishes reset from verification tokens
             expires_at=datetime.now(timezone.utc) + timedelta(hours=_PASSWORD_RESET_EXPIRE_HOURS),
         ))
-        email_sent = await send_password_reset_email(user.email, raw_token)
+        email_sent = await send_password_reset_email(user.email, raw_token, db=db, user_id=user.id)
         if not email_sent:
             await db.rollback()
             raise HTTPException(

@@ -33,6 +33,7 @@
  */
 
 import { useState }              from "react";
+import { useSession }            from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mail, CheckCircle, Loader2, ArrowRight } from "lucide-react";
 
@@ -45,14 +46,18 @@ interface SubscribeResponse {
 }
 
 export function EmailCapture() {
+  const { data: session } = useSession();
   const [email,     setEmail]     = useState("");
   const [state,     setState]     = useState<State>("idle");
   const [error,     setError]     = useState("");
   const [emailSent, setEmailSent] = useState(false);
 
+  const isAuthed = !!session?.user?.email;
+  const submitEmail = isAuthed ? session.user.email : email;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!email.includes("@")) {
+    if (!submitEmail || !submitEmail.includes("@")) {
       setError("Please enter a valid email address.");
       return;
     }
@@ -63,7 +68,7 @@ export function EmailCapture() {
       const res = await fetch("/api/subscribers", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ email }),
+        body:    JSON.stringify({ email: submitEmail }),
       });
 
       if (!res.ok) {
@@ -145,23 +150,35 @@ export function EmailCapture() {
                 onSubmit={handleSubmit}
                 className="relative z-10 flex flex-col sm:flex-row items-stretch gap-3 max-w-md mx-auto"
               >
-                <input
-                  type="email"
-                  placeholder="your@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={state === "loading"}
-                  className="flex-1 px-4 py-3 rounded-xl border text-sm outline-none focus:ring-2 focus:ring-[var(--brand-gold)] disabled:opacity-50 transition-all"
-                  style={{
-                    backgroundColor: "var(--surface-2)",
-                    borderColor:     error ? "#ef4444" : "var(--border)",
-                    color:           "var(--text-primary)",
-                  }}
-                />
+                <div className="flex flex-col items-center w-full max-w-sm mb-4">
+                  {isAuthed && (
+                    <p className="text-sm mb-3" style={{ color: "var(--text-secondary)" }}>
+                      Subscribe as <strong>{session.user.email}</strong>
+                    </p>
+                  )}
+                  {error && (
+                    <p className="text-red-500 text-xs mb-3 font-semibold">{error}</p>
+                  )}
+                </div>
+                {!isAuthed && (
+                  <input
+                    type="email"
+                    placeholder="your@email.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    disabled={state === "loading"}
+                    className="flex-1 px-4 py-3 rounded-xl border text-sm outline-none focus:ring-2 focus:ring-[var(--brand-gold)] disabled:opacity-50 transition-all"
+                    style={{
+                      backgroundColor: "var(--surface-2)",
+                      borderColor:     error ? "#ef4444" : "var(--border)",
+                      color:           "var(--text-primary)",
+                    }}
+                  />
+                )}
                 <button
                   type="submit"
                   disabled={state === "loading"}
-                  className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 hover:brightness-110 disabled:opacity-60 flex-shrink-0"
+                  className={`inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 hover:brightness-110 disabled:opacity-60 flex-shrink-0 ${isAuthed ? 'w-full max-w-xs' : ''}`}
                   style={{ backgroundColor: "var(--brand-gold)", color: "#0a1628" }}
                 >
                   {state === "loading" ? (
@@ -190,8 +207,8 @@ export function EmailCapture() {
                   </p>
                   <p className="text-sm max-w-xs" style={{ color: "var(--text-secondary)" }}>
                     {emailSent
-                      ? <>We&rsquo;ll reach out to <strong>{email}</strong> when the public API launches or a new model version is released.</>
-                      : <>We saved <strong>{email}</strong>. You&rsquo;ll be the first to know when we launch.</>}
+                      ? <>We&rsquo;ll reach out to <strong>{submitEmail}</strong> when the public API launches or a new model version is released.</>
+                      : <>We saved <strong>{submitEmail}</strong>. You&rsquo;ll be the first to know when we launch.</>}
                   </p>
                   <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
                     No spam. One email per major release. Unsubscribe any time.

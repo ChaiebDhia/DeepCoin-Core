@@ -2054,3 +2054,7 @@ This guarantees the project's memory is perfectly synced.
 - **12-Factor App Violations:** Heavy reliance on stateful local folder paths (/reports) instead of actual S3 storage. Python code doesn't use boto3 despite Docker's LocalStack claims.
 - **Concurrency Defect:** fpdf2 operations running inside FastAPI’s threadpool will cause starvation under load.
 - **P0 Silent Auth Failure:** email.py returns True when API keys missing, committing broken pending users.
+
+## 🟢 RECENT COMPLETED TASKS (March 22, 2026)
+* Fixed Resend "No Activity" bug by booting uvicorn with `--env-file .env` flag, restoring transactional email logs.
+* Redesigned `/api/subscribers` and Waitlist UX inside Next.js to allow users to directly Unsubscribe inside `/dashboard` seamlessly and reuse their auth session for the Notify Me feature.

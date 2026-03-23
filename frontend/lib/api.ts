@@ -997,6 +997,15 @@ export async function getUserStats(): Promise<import("@/types/api").UserStatsRes
   return data;
 }
 
+export async function getSubscriptionStatus(): Promise<{ subscribed: boolean; status: string | null }> {
+  const { data } = await classifyApiClient.get<{ subscribed: boolean; status: string | null }>("/api/subscribers/me/status");
+  return data;
+}
+
+export async function unsubscribeMe(): Promise<void> {
+  await classifyApiClient.delete("/api/subscribers/me");
+}
+
 // ── Contact messages ──────────────────────────────────────────────────────────
 
 /** Submit a contact form message (public — no auth required). */

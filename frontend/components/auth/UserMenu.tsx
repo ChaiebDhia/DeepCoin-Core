@@ -26,7 +26,7 @@ import { useState, useRef, useEffect } from "react";
 import { useSession, signOut }         from "next-auth/react";
 import Link                            from "next/link";
 import { motion, AnimatePresence }     from "framer-motion";
-import { LogOut, ChevronDown, ShieldCheck, Coins, History, LayoutDashboard } from "lucide-react";
+import { LogOut, ChevronDown, ShieldCheck, Coins, History, LayoutDashboard, Settings } from "lucide-react";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -217,6 +217,15 @@ export function UserMenu() {
                   My Dashboard
                 </Link>
               )}
+              <Link
+                href="/settings"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-[var(--surface-2)] transition-colors"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                <Settings size={15} />
+                Settings
+              </Link>
             </div>
 
             {/* Sign out */}
