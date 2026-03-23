@@ -47,12 +47,20 @@ DATABASE_URL: str = os.getenv(
     "postgresql+asyncpg://deepcoin:deepcoin@localhost:5432/deepcoin",
 )
 
+# If running tests (SQLite), remove postgres-specific pool args
+is_sqlite = DATABASE_URL.startswith("sqlite")
+
+engine_kwargs = {"echo": False}
+if not is_sqlite:
+    engine_kwargs.update({
+        "pool_pre_ping": True,  # reconnect if server closed idle connections
+        "pool_size": 5,         # 5 persistent connections (single-worker API)
+        "max_overflow": 10,     # allow 10 extra connections under spike load
+    })
+
 engine = create_async_engine(
     DATABASE_URL,
-    pool_pre_ping=True,   # reconnect if server closed idle connections
-    pool_size=5,          # 5 persistent connections (single-worker API)
-    max_overflow=10,      # allow 10 extra connections under spike load
-    echo=False,           # set True in dev to log every SQL statement
+    **engine_kwargs
 )
 
 # ── Session factory ───────────────────────────────────────────────────────────
