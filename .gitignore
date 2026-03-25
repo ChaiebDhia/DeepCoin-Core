@@ -115,3 +115,4 @@ mlartifacts/
 # Active Learning exports (images + CSV  can be regenerated)
 data/active_learning/
 data/active_learning/**
+AI_LEAD_MEMORY.md
