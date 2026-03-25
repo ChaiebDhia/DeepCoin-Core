@@ -43866,3 +43866,18 @@ When multiple developers or AI coding agents work on the same massive Enterprise
 3. **Why this Matters for Architecture:**
    * This is called **Local State Isolation**. It allows the AI Lead to maintain hundreds of pages of raw contextual thoughts deeply connected to the local development folder without bloating the official repository. 
    * The file is still 100% saved on your computer, so the AI will never "forget" project history, but GitHub remains perfectly pristine. 
+
+
+## Section 200: Infrastructure Observability - Prometheus & Grafana (Gap 5)
+
+**Date:** March 2026
+
+**Goal:** Cement the Enterprise-grade architecture by fully implementing Gap 5 (Observability).
+
+**Execution:**
+- Added prometheus and grafana services to docker-compose.yml.
+- Configured prometheus.yml with secure scrape bindings targeted at the /api/metrics endpoint.
+- Updated FastAPI auth layer (pi_key.py) to gracefully accept both X-API-Key headers and standard Authorization: Bearer tokens, allowing Prometheus strict but native metric polling over Docker DNS without breaking security controls.
+- Added Grafana datasource.yml so it seamlessly auto-connects to Prometheus without user intervention.
+
+**Result:** The Docker stack now tracks full 360-degree observability of metrics, closing out Gap 5 fully. The configuration is successfully validated.

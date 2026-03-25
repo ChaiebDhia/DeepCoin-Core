@@ -39,7 +39,7 @@ import hmac
 import logging
 import os
 
-from fastapi import HTTPException, Security
+from fastapi import HTTPException, Security, Request
 from fastapi.security.api_key import APIKeyHeader
 
 logger = logging.getLogger(__name__)
@@ -52,6 +52,7 @@ _api_key_scheme = APIKeyHeader(
 
 
 async def require_api_key(
+    request: Request,
     api_key: str | None = Security(_api_key_scheme),
 ) -> None:
     """
@@ -75,10 +76,16 @@ async def require_api_key(
         logger.debug("Auth: DEEPCOIN_API_KEY not set — open access (dev mode)")
         return
 
+    # Check for Bearer token fallback (e.g. from Prometheus scrape_configs)
+    if not api_key:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            api_key = auth_header.replace("Bearer ", "", 1)
+
     if not api_key:
         raise HTTPException(
             status_code=401,
-            detail="Missing API key. Provide 'X-API-Key' header.",
+            detail="Missing API key. Provide 'X-API-Key' header or 'Authorization: Bearer'.",
             headers={"WWW-Authenticate": "ApiKey"},
         )
 

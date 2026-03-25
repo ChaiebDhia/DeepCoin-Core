@@ -342,6 +342,36 @@ services:
       retries: 5
       start_period: 15s
 
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    # We pass the env var to a file to be read as bearer token for /api/metrics
+    entrypoint: >
+      /bin/sh -c "mkdir -p /var/run/secrets && echo 'Bearer '$$DEEPCOIN_API_KEY > /var/run/secrets/api_token && /bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus"
+    environment:
+      DEEPCOIN_API_KEY: ${DEEPCOIN_API_KEY:-}
+    ports:
+      - "9090:9090"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    restart: unless-stopped
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+
   #  Alembic migration runner (profile-triggered helper) 
   #
   # NOT a permanently-running service.  Execute once before first stack start:
@@ -368,6 +398,8 @@ services:
 
 #  Named volumes 
 volumes:
+  prometheus_data:          # Prometheus TSDB
+  grafana_data:             # Grafana dashboards & users
   postgres_data:            # PostgreSQL WAL + B-tree data files
   redis_data:               # Redis AOF persistence (appendonly yes)
   reports_data:             # Generated PDF reports  served via /api/reports/
