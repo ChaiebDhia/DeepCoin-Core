@@ -46,6 +46,22 @@ The backend's transactional email service has been completely refactored to use 
 - ✅ **Zero Service Lock-in** — Core logic migrated to Python's robust built-in modules (`email.message`) which can be effortlessly pointed at AWS SES, SendGrid, or any other primary MTA inside production.
 - ✅ **Dashboard Unsubscribe Automation** — Real-time subscription state polling directly inside Next.js user dashboards.
 
+
+## Getting Started & Model Weights (For Reviewers & Recruiters)
+
+> **MLOps Architectural Note:** Following enterprise repository best practices, the heavy `best_model.pth` (EfficientNet-B3 parameters ~40MB+) and ChromaDB `chroma_db_rag/` vector embeddings (~180MB+) are intentionally **not tracked in git**. A Git repository should host code and logic, not raw compiled weights.
+
+If you are cloning this project to review the architecture, the entire pipeline is completely structurally sound and tested. 
+
+To run inference or spin up the web application locally for yourself:
+1. **Provide the Weights:** You will need to either:
+   - Run the training pipeline locally via `python scripts/train.py` (requires raw dataset).
+   - **Reach out directly to Dhia Chaieb** for the pre-compiled `.pth` checkpoints and the raw `.json` knowledge-base corpus to inject into your `/models/` directory.
+2. **Environment:** Setup via `pip install -r requirements.txt` on a strict **Python 3.11** virtual environment (optimized heavily for PyTorch 2.6 + `asyncio` compatibility on Windows).
+3. **Boot:** Run `uvicorn src.api.main:app --port 8000` (FastAPI backend) and `npm run dev` in the `/frontend` directory (Next.js 15).
+
+*For a deep dive into every single bug fixed, architectural decision, and why the systems flows the way it does, read the `ENGINEERING_JOURNAL.md`.*
+
 ### Current maturity note (March 2026)
 
 - The product is feature-rich, **fully runnable end-to-end**, and hardened for staging deployments.
