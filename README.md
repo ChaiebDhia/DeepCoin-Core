@@ -111,7 +111,7 @@ Museums, auction houses, and research institutions need a system that can:
 
 DeepCoin-Core addresses all six requirements -- not as a demo, but as production software with security hardening, monitoring, and comprehensive test coverage.
 
-> **PFE (Final Year Engineering Internship)** -- ESPRIT School of Engineering x YEBNI, Tunisia
+> **PFE (Final Year Engineering Internship)** -- ESPRIT (Ecole Supérieure Privée d'Ingénierie et de Technologies) x YEBNI, Tunisia
 > Student: **Dhia Chaieb** | dhia.chaieb@esprit.tn | GitHub: ChaiebDhia
 
 ---
