@@ -14,214 +14,260 @@
 ## Table of Contents
 
 1. [What We Are Building](#1-what-we-are-building)
-2. [The Dataset — Where It All Starts](#2-the-dataset--where-it-all-starts)
-3. [Phase 0 — Project Scaffolding](#3-phase-0--project-scaffolding)
-4. [Phase 1 — Data Pipeline](#4-phase-1--data-pipeline)
-5. [Phase 2 — The Dataset Class (Deep Dive)](#5-phase-2--the-dataset-class-deep-dive)
-6. [Phase 3 — CUDA Installation](#6-phase-3--cuda-installation)
-7. [Phase 4 — Training V1 (Every Block Explained)](#7-phase-4--training-v1-every-block-explained)
-8. [Phase 5 — Training V2 (Interrupted)](#8-phase-5--training-v2-interrupted)
-9. [Phase 6 — Training V3 (Enterprise Grade, Full Rebuild)](#9-phase-6--training-v3-enterprise-grade-full-rebuild)
-10. [Phase 7 — Model Audit (Complete Diagnostic)](#10-phase-7--model-audit-complete-diagnostic)
-11. [Phase 8 — Test-Time Augmentation](#11-phase-8--test-time-augmentation)
+2. [The Dataset — Where It All Starts](#2-the-dataset-where-it-all-starts)
+3. [Phase 0 — Project Scaffolding](#3-phase-0-project-scaffolding)
+4. [Phase 1 — Data Pipeline](#4-phase-1-data-pipeline)
+5. [Phase 2 — The Dataset Class (Deep Dive)](#5-phase-2-the-dataset-class-deep-dive)
+6. [Phase 3 — CUDA Installation](#6-phase-3-cuda-installation)
+7. [Phase 4 — Training V1 (Every Block Explained)](#7-phase-4-training-v1-every-block-explained)
+8. [Phase 5 — Training V2 (Interrupted)](#8-phase-5-training-v2-interrupted)
+9. [Phase 6 — Training V3 (Enterprise Grade, Full Rebuild)](#9-phase-6-training-v3-enterprise-grade-full-rebuild)
+10. [Phase 7 — Model Audit (Complete Diagnostic)](#10-phase-7-model-audit-complete-diagnostic)
+11. [Phase 8 — Test-Time Augmentation](#11-phase-8-test-time-augmentation)
 12. [Every File in the Project Explained](#12-every-file-in-the-project-explained)
 13. [Every Problem and How It Was Solved](#13-every-problem-and-how-it-was-solved)
 14. [What Gemini Suggested and What We Did With It](#14-what-gemini-suggested-and-what-we-did-with-it)
-15. [Git History — Every Commit Explained](#15-git-history--every-commit-explained)
+15. [Git History — Every Commit Explained](#15-git-history-every-commit-explained)
 16. [Final Results Summary](#16-final-results-summary)
-17. [What Comes Next (Roadmap)](#17-what-comes-next-roadmap)
-18. [Full Glossary — Every Technical Term Explained Like You're 5](#18-full-glossary--every-technical-term-explained-like-youre-5)
-19. [Phase 9 — Inference Engine (Layer 1)](#19-phase-9--inference-engine-layer-1)
-20. [Phase 10 — Knowledge Base v1 (Layer 2, First Pass)](#20-phase-10--knowledge-base-v1-layer-2-first-pass)
-21. [Phase 11 — The 5-Agent System: First Working Version (Layer 3)](#21-phase-11--the-5-agent-system-first-working-version-layer-3)
-22. [Phase 12 — Enterprise RAG Upgrade: All 9716 Types (Layer 3 Final)](#22-phase-12--enterprise-rag-upgrade-all-9716-types-layer-3-final)
-22b. [Commit c5b7f0d: qwen3-vl:4b Activated + Think-Tag Fix](#section-22b--commit-c5b7f0d-qwen3-vl4b-activated--think-tag-fix-february-28-2026)
-23. [Layer 4 — FastAPI Backend (Production API)](#23-layer-4--fastapi-backend-production-api)
-24. [Layer 4 Phase 2 — X-API-Key Authentication](#24-layer-4-phase-2--x-api-key-authentication)
-25. [Layer 4 Phase 2 — Rate Limiting + SQLite WAL Store + Metrics](#25-layer-4-phase-2--rate-limiting-slowapi--sqlite-wal-store--metrics-endpoint)
-26. [Layer 4 Phase 2 — Developer Tooling: pyproject.toml, Makefile, Tests](#26-layer-4-phase-2--developer-tooling-pyprojecttoml-makefile-envexample-and-34-unit-tests)
-27. [Phase 14 — Layer 4 Security Hardening and Production Audit](#27-phase-14--layer-4-security-hardening-and-production-audit)
-28. [Layer 1 Security Patch — weights_only=True](#28-layer-1-security-patch--weights_onlytrue)
-29. [Complete Bug Registry Addendum — Bugs 14 and 15](#29-complete-bug-registry-addendum--bugs-14-and-15)
-30. [Final Git History — All Commits to 1b210ef](#30-final-git-history--all-commits-to-1b210ef)
-31. [Phase 15 — Layer 0-3 Enterprise Audit](#31-phase-15--layer-0-3-enterprise-audit)
-32. [Layer 5 — Next.js 15 Enterprise Frontend](#32-layer-5--nextjs-15-enterprise-frontend-march-2026)
-33. [Layer 5 v2 — Animated Mission Control & UX Overhaul](#33-layer-5-v2--animated-mission-control--ux-overhaul-march-2026)
-34. [Layer 5 Security Audit — HTTP Headers, AbortController, Blob URLs](#34-layer-5-security-audit--http-headers-abortcontroller-blob-urls-march-2026)
-35. [Layer 5 Runtime Proxy Fixes — IPv6 + Turbopack Timeout](#35-layer-5-runtime-proxy-fixes--ipv6--turbopack-timeout-march-2026)
-36. [Layer 5 Live Testing UX Fixes](#36-layer-5-live-testing-ux-fixes--health-dot-modal-synthesis-march-2026)
-37. [CLAHE Train/Inference Mismatch + Investigator UX](#37-clahe-traininference-mismatch--investigator-ux-march-2026)
-38. [Cancel Button & Abort Architecture](#38-cancel-button--abort-architecture-march-2026)
-39. [Backend Production Audit — P2 to P9](#39-backend-production-audit--p2-to-p9-march-2026)
-40. [Deep Hardening Audit — P10 to P16](#40-deep-hardening-audit--p10-to-p16-march-2026)
-41. [3-Way CNN Display States — Identified / TTA Consensus / Deep Search](#41-3-way-cnn-display-states--identified--tta-consensus--deep-search-march-2026)
-42. [Confidence Anxiety Elimination + History Detail Enrichment](#42-confidence-anxiety-elimination--history-detail-enrichment-march-2026)
-43. [Phase 3 — CN Links, Delete Button, Filter Bar](#43-phase-3--cn-links-delete-button-filter-bar-march-2026)
-44. [Phase 4 — CTA Banner, Linked Badges, Stats Strip, Copy Link](#44-phase-4--cta-banner-linked-badges-stats-strip-copy-link-march-2026)
-45. [Known Issue: Material Check False Mismatch — Patina/HSV Problem](#45-known-issue-material-check-false-mismatch--patinahsv-problem-march-2026)
-46. [Section 46 — Thirteen Missing Commits: The Complete Engineering Record](#section-46--thirteen-missing-commits-the-complete-engineering-record)
-47. [Section 47 — Complete File Inventory: Every File, Every Function (2026)](#section-47--complete-file-inventory-every-file-every-function-2026)
-48. [Section 48 — End-to-End Data Flow: From Browser Click to PDF Download](#section-48--end-to-end-data-flow-from-browser-click-to-pdf-download)
-49. [Section 49 — Engineering Foundations: The "Why" Behind Every Technology](#section-49--engineering-foundations-the-why-behind-every-technology)
-50. [Section 50 — FastAPI Backend Architecture: Every File, Every Line, Every Decision](#section-50--fastapi-backend-architecture-every-file-every-line-every-decision)
-51. [Section 51 — Frontend Architecture Deep Dive: Every File, Every Pattern, Every Decision](#section-51--frontend-architecture-deep-dive-every-file-every-pattern-every-decision)
-52. [Section 52 — How to Rebuild This Entire System From Scratch](#section-52--how-to-rebuild-this-entire-system-from-scratch)
-53. [Section 53 — The Complete Baby Engineer's Reference: Every Term, Every Gap, Every Relationship](#section-53--the-complete-baby-engineers-reference-every-term-every-gap-every-relationship)
-54. [Section 54 — TTA UX Overhaul + Critical Auto-Crop Bug Fix](#section-54--tta-ux-overhaul--critical-auto-crop-bug-fix)
-55. [Section 55 — Screenshot Warning Banner](#section-55--screenshot-warning-banner)
-56. [Section 56 — Waiting Animation + Mark-as-Wrong Feedback](#section-56--waiting-animation--mark-as-wrong-feedback)
-57. [Section 57 — Phase A1: PostgreSQL Database Layer (Enterprise Auth Foundation)](#section-57--phase-a1-postgresql-database-layer-enterprise-auth-foundation)
-58. [Section 58 — Phase A2: JWT Authentication System (Register, Login, Tokens, RBAC)](#section-58--phase-a2-jwt-authentication-system-register-login-tokens-rbac)
-59. [Section 59 — Full Annotated `gatekeeper.py`: Every Line Explained](#section-59--full-annotated-gatekeeperpy--every-line-explained)
-60. [Section 60 — Full Annotated `historian.py`: Every Line Explained](#section-60--full-annotated-historianpy--every-line-explained)
-61. [Section 61 — Frontend: `store.ts` + `CoinUploader.tsx` From Blank Files](#section-61--frontend--storets--coinuploadertsx-from-blank-files)
-62. [Section 62 — Phase A3: Per-User Rate Limiting + AuditLog Writes](#section-62--phase-a3-per-user-rate-limiting--auditlog-writes)
-63. [Section 63 — Complete Testing Guide: From A1 to A3, Every Layer](#section-63--how-to-test-the-entire-deepcoin-system-the-complete-guide)
-64. [Section 64 — Documentation Standard: What Enterprise Grade Really Means](#section-64--documentation-standard-what-enterprise-grade-really-means)
-65. [Section 65 — Docker WSL Corruption Fix + PostgreSQL Container Launch](#section-65--docker-wsl-corruption-fix--postgresql-container-launch-march-3-2026)
-66. [Section 66 — Alembic Migration Bug: DuplicateObjectError for ENUM Types](#section-66--alembic-migration-bug-duplicateobjecterror-for-enum-types-march-3-2026)
-67. [Section 67 — bcrypt 5.0.0 Incompatibility + Full A2/A3 Live Demo](#section-67--bcrypt-500-incompatibility--full-a2a3-live-demo-march-3-2026)
-68. [Section 68 — A4: Migrate History Routes to PostgreSQL ORM](#section-68--a4-migrate-history-routes-to-postgresql-orm-march-3-2026)
-69. [Section 69 — A5: NextAuth.js v5 — Credentials Provider + JWT Sessions](#section-69--a5-nextauthjs-v5--credentials-provider--jwt-sessions-march-3-2026)
-70. [Section 70 — A6: Frontend Auth UI — Login, Register, UserMenu, SessionProvider](#section-70--a6-frontend-auth-ui--login-register-usermenu-sessionprovider-march-3-2026)
-71. [Section 71 — Layer 6: Docker Infrastructure — Dockerfiles, Nginx, Compose](#section-71--layer-6-docker-infrastructure--dockerfiles-nginx-compose-march-3-2026)
-72. [Section 72 — Enterprise Homepage Redesign: 11 New Components](#section-72--enterprise-homepage-redesign-11-new-components)
-73. [Section 73 — Bugs Found and Fixed: Post-Layer-6 Homepage Integration](#section-73--bugs-found-and-fixed-post-layer-6-homepage-integration)
-74. [Section 74 — TechStack Bento Grid Redesign](#section-74--techstack-bento-grid-redesign)
-75. [Section 75 — New Pages: /analyse and /admin](#section-75--new-pages-analyse-and-admin)
-76. [Section 76 — RegisterForm Success Message + Zustand Singleton Bug](#section-76--registerform-success-message--zustand-singleton-bug)
-77. [Section 77 — Project State After Post-Layer-6 Fixes](#section-77--project-state-after-post-layer-6-fixes)
-78. [Section 78 — Auth-Guarded CTA + Subscriber Endpoint + NavLinks](#section-78--auth-guarded-cta--subscriber-endpoint--navlinks)
-79. [Section 79 — Three New Public Pages + Subscriber Admin + Route Handler Proxy](#section-79--three-new-public-pages--subscriber-admin--route-handler-proxy)
-80. [Section 80 — Post-Layer-7-Prep Bug Fixes and New Features](#section-80--post-layer-7-prep-bug-fixes-and-new-features)
-81. [Section 81 — Five New Backend Routes](#section-81--five-new-backend-routes)
-82. [Section 82 — Frontend: Explore Rewrite, Admin Panels, AI Chat Page](#section-82--frontend-explore-rewrite-admin-panels-ai-chat-page)
-83. [Section 83 — Admin Access Guide, TypeScript Types, Project State](#section-83--admin-access-guide-typescript-types-project-state)
-84. [Section 84 — Enterprise Chat Page Redesign v2](#section-84--enterprise-chat-page-redesign-v2)
-85. [Section 85 — TutorialModal: Floating Help Guide](#section-85--tutorialmodal-floating-help-guide)
-86. [Section 86 — AI Chat CTA in AnalysisPanel](#section-86--ai-chat-cta-in-analysispanel)
-87. [Section 87 — Admin Access Restriction Page](#section-87--admin-access-restriction-page)
-88. [Section 88 — Bug Fixes: PDF Download, Sources Blank, Scroll Issues](#section-88--bug-fixes-pdf-download-sources-blank-scroll-issues)
-89. [Section 89 — Chat Session History: Backend](#section-89--chat-session-history-backend)
-90. [Section 90 — Chat Session History: Frontend](#section-90--chat-session-history-frontend)
-91. [Section 91 — TypeScript Fix: ES2018 dotAll Regex Flag](#section-91--typescript-fix-es2018-dotall-regex-flag)
-92. [Section 92 — Project State After March 3 Session](#section-92--project-state-after-march-3-session)
-93. [Section 93 — Prior Session Polish](#section-93--prior-session-polish)
-94. [Section 94 — Bug 31: PDF Download Broken in History Table](#section-94--bug-31-pdf-download-broken-in-history-table)
-95. [Section 95 — Bug 32: /analyse Accessible Without Authentication](#section-95--bug-32-analyse-accessible-without-authentication)
-96. [Section 96 — Mobile Responsiveness: TutorialModal + AgentPipeline](#section-96--mobile-responsiveness-tutorialmodal--agentpipeline)
-97. [Section 97 — Enterprise Email Subscription Confirmation System](#section-97--enterprise-email-subscription-confirmation-system)
-98. [Section 98 — Project State After March 4 Morning Session](#section-98--project-state-after-march-4-morning-session)
-99. [Section 99 — Bug 33: PDF Download 404 on Windows (Backslash Path)](#section-99--bug-33-pdf-download-404-on-windows-backslash-path)
-100. [Section 100 — Bug 34: Stale PDF Download Button Persists After New Upload](#section-100--bug-34-stale-pdf-download-button-persists-after-new-upload)
-101. [Section 101 — Admin Dashboard Enterprise Redesign v2](#section-101--admin-dashboard-enterprise-redesign-v2)
-102. [Section 102 — Bug 35: Admin Page 401 Race Condition](#section-102--bug-35-admin-page-401-race-condition)
-103. [Section 103 — Project State After March 4 Bug Fix Batch](#section-103--project-state-after-march-4-bug-fix-batch)
-104. [Section 104 — Bug 36: AI Chat Returns Empty Responses](#section-104--bug-36-ai-chat-returns-empty-responses)
-105. [Section 105 — Bug 37: Blob URL ERR_FILE_NOT_FOUND (React Strict Mode)](#section-105--bug-37-blob-url-err_file_not_found-react-strict-mode)
-106. [Section 106 — Bug 38: Mark-as-Wrong Button Invisible](#section-106--bug-38-mark-as-wrong-button-invisible)
-107. [Section 107 — Project State After March 4 Afternoon Session](#section-107--project-state-after-march-4-afternoon-session)
-108. [Section 108 — Bugs 39 and 40 + Chat Context and CTA Enhancements](#section-108--bugs-39-and-40--chat-context-and-cta-enhancements)
-109. [Section 109 — CONTEXT N Root-Fix, Web Search Fallback, KB Discovery Endpoint](#section-109--context-n-root-fix-web-search-fallback-kb-discovery-endpoint)
-110. [Section 110 — Bug 41 and 42: Dead Server Recovery + LLM Header Leakage](#section-110--bug-41-and-42-dead-server-recovery--llm-header-leakage)
-111. [Section 111 — Project State After March 4 Evening Session](#section-111--project-state-after-march-4-evening-session)
-112. [Section 112 — Bugs 43 and 44: Hallucination Guards](#section-112--bugs-43-and-44-hallucination-guards)
-113. [Section 113 — Complete Project State (HEAD: d7860c4)](#section-113--complete-project-state-head-d7860c4)
-114. [Section 114 — The JWT Authentication System: Complete First-Principles Reference](#section-114--the-jwt-authentication-system-complete-first-principles-reference)
-115. [Section 115 — The RAG Engine and AI Chat Pipeline: Complete Technical Reference](#section-115--the-rag-engine-and-ai-chat-pipeline-complete-technical-reference)
-116. [Section 116 — Security Architecture: Every Defence Layer Explained](#section-116--security-architecture-every-defence-layer-explained)
-117. [Section 117 — Database Schema: Every Table, Column, and Constraint](#section-117--database-schema-every-table-column-and-constraint)
-118. [Section 118 — Configuration and Environment Variable Reference](#section-118--configuration-and-environment-variable-reference)
-119. [Section 119 — End-to-End Request Trace: Upload to PDF in One Journey](#section-119--end-to-end-request-trace-upload-to-pdf-in-one-journey)
-120. [Section 120 — Bug Pattern Analysis: 44 Bugs, 44 Lessons](#section-120--bug-pattern-analysis-44-bugs-44-lessons)
-121. [Section 121 — Complete Runbook: Running DeepCoin from Zero](#section-121--complete-runbook-running-deepcoin-from-zero)
-122. [Section 122 — Bug 45: Admin "All Analyses" Returns Empty (Missing `Path` Import)](#section-122--bug-45-admin-all-analyses-returns-empty-missing-path-import)
-123. [Section 123 — Chat State Persistence: Module-Level Cache Architecture](#section-123--chat-state-persistence-module-level-cache-architecture)
-124. [Section 124 — Conversation Memory: End-to-End Multi-Turn AI Chat](#section-124--conversation-memory-end-to-end-multi-turn-ai-chat)
-125. [Section 125 — Admin Users CRUD: Complete Technical Reference](#section-125--admin-users-crud-complete-technical-reference)
-126. [Section 126 — Navbar Active State: `usePathname` Pattern](#section-126--navbar-active-state-usepathname-pattern)
-127. [Section 127 — Project State After March 4 Evening Session](#section-127--project-state-after-march-4-evening-session)
-128. [Section 128 — Prompt Injection Guard (ChatMessage Literal Role Validation)](#section-128----prompt-injection-guard-chatmessage-literal-role-validation)
-129. [Section 129 — Stale Comment Cleanup (`classify.py`)](#section-129----stale-comment-cleanup-classifypy)
-130. [Section 130 — Explore Page `date_range` Empty String Bug (`kb.py`)](#section-130----explore-page-date_range-empty-string-bug-kbpy)
-131. [Section 131 — Chat SSE Streaming (`POST /api/chat/stream`)](#section-131----chat-sse-streaming-post-apichatstream)
-132. [Section 132 — Project State After SSE Streaming Session](#section-132----project-state-after-sse-streaming-session)
-133. [Section 133 — The JWT Expiry Problem (What Was Broken)](#section-133----the-jwt-expiry-problem-what-was-broken)
-134. [Section 134 — The Backend Was Already Complete (`POST /auth/refresh`)](#section-134----the-backend-was-already-complete-post-authrefresh)
-135. [Section 135 — JWT Refresh: Full Frontend Architecture](#section-135----jwt-refresh-full-frontend-architecture)
-136. [Section 136 — Confirm-Subscription UX Cleanup](#section-136----confirm-subscription-ux-cleanup)
-137. [Section 137 — Docker Base Image CVE Remediation](#section-137----docker-base-image-cve-remediation)
-138. [Section 138 — Project State After JWT Refresh Session](#section-138----project-state-after-jwt-refresh-session)
-139. [Section 139 — Layer 7: Why Tests and CI Are Non-Negotiable](#section-139----layer-7-why-tests-and-ci-are-non-negotiable)
-140. [Section 140 — Integration Test Architecture: The Mock Stack](#section-140----integration-test-architecture-the-mock-stack)
-141. [Section 141 — Three Bugs Found During Layer 7 Implementation](#section-141----three-bugs-found-during-layer-7-implementation)
-142. [Section 142 — GitHub Actions CI Pipeline](#section-142----github-actions-ci-pipeline)
-143. [Section 143 — Final Project State After Layer 7](#section-143----final-project-state-after-layer-7)
-144. [Section 144 — `tests/integration/conftest.py`: Complete Annotation, Every Line, Every Decision](#section-144--testsintegrationconftestpy-complete-annotation-every-line-every-decision)
-145. [Section 145 — `tests/integration/test_health.py`: Every Test Explained In Full](#section-145--testsintegrationtest_healthpy-every-test-explained-in-full)
-146. [Section 146 — `tests/integration/test_classify.py`: Every Test, Every Defence Layer](#section-146--testsintegrationtest_classifypy-every-test-every-defence-layer)
-147. [Section 147 — `test_history.py`, `test_chat_security.py`, `test_auth_flow.py`: Full Deep Dive](#section-147--test_historpy-test_chat_securitypy-test_auth_flowpy-full-deep-dive)
-148. [Section 148 — `.github/workflows/ci.yml`: Every YAML Key Explained](#section-148--githubworkflowsciyml-every-yaml-key-explained)
-149. [Section 149 — `pyproject.toml` Deep Dive + `asyncio_mode` + Complete Project State](#section-149--pyprojecttoml-deep-dive--asyncio_mode--complete-project-state)
-150. [Section 150 — A+++ Frontend Quality Audit: Methodology, Grading, and the Six Fixes](#section-150--a-frontend-quality-audit-methodology-grading-and-the-six-fixes)
-151. [Section 151 — Screenshot False-Positive Fix: Signal 2 Tightening + Signal 3 Removal](#section-151--screenshot-false-positive-fix-signal-2-tightening--signal-3-removal)
-152. [Section 152 — RAG Engine Date Dual-Key Fallback (`rag_engine.py`)](#section-152--rag-engine-date-dual-key-fallback-rag_enginepy)
-153. [Section 153 — `classify.py` Step-8 Stale Comment: Audit Events Clarification](#section-153--classifypy-step-8-stale-comment-audit-events-clarification)
-154. [Section 154 — `/docs` Page Replacement: From 433-Line Static Duplicate to One-Line Redirect](#section-154--docs-page-replacement-from-433-line-static-duplicate-to-one-line-redirect)
-155. [Section 155 — `/confirm-subscription` Dead Code Removal](#section-155--confirm-subscription-dead-code-removal)
-156. [Section 156 — `GET /api/admin/stats`: Live Route Distribution Analytics Endpoint](#section-156--get-apiadminstats-live-route-distribution-analytics-endpoint)
-157. [Section 157 — `AdminStatsResponse` + `getAdminStats()` + OverviewTab Route Chart](#section-157--adminstatsresponse--getadminstats--overviewtab-route-chart)
-158. [Section 158 — Enterprise-Grade Project Critique: Honest Assessment and Identified Gaps](#section-158--enterprise-grade-project-critique-honest-assessment-and-identified-gaps)
-159. [Section 159 — Project State After A+++ Audit Session (HEAD: `c6e3438`)](#section-159--project-state-after-a-audit-session-head-c6e3438)
-160. [Section 160 — Dashboard "Member Since" Fix (auth chain `created_at` propagation)](#section-160--dashboard-member-since-fix-auth-chain-created_at-propagation)
-161. [Section 161 — Chat Memory Fix (non-numismatic guard bypass for conversation history)](#section-161--chat-memory-fix-non-numismatic-guard-bypass-for-conversation-history)
-162. [Section 162 — Google/Scholar Always Visible (userQuery restoration on session reload)](#section-162--googlescholar-always-visible-userquery-restoration-on-session-reload)
-163. [Section 163 — Complete Auth Flow (resend-verification, forgot-password, reset-password, verify-email)](#section-163--complete-auth-flow-resend-verification-forgot-password-reset-password-verify-email)
-164. [Section 164 — Project State After Commit `8eb9b3c`](#section-164--project-state-after-commit-8eb9b3c)
-165. [Section 165 — A+++ Production Roadmap: Six Gaps to Enterprise-Grade](#section-165--a-production-roadmap-six-gaps-to-enterprise-grade)
-166. [Section 166 — MLflow Experiment Tracking: Full Implementation](#section-166--mlflow-experiment-tracking-full-implementation)
-167. [Section 167 — Grad-CAM Explainability: Heatmaps in the PDF Report](#section-167--grad-cam-explainability-heatmaps-in-the-pdf-report)
-168. [Section 168 — How to Test the Live App: MLflow, Grad-CAM, and Active Learning](#section-168--how-to-test-the-live-app--mlflow-grad-cam-and-active-learning)
-169. [Section 169 — Active Learning Loop: Engineering Design and Full Implementation](#section-169--active-learning-loop--engineering-design-and-full-implementation)
-170. [Section 170 — `src/core/gradcam.py`: Complete Annotated Reference](#section-170--srccoregradcampy--complete-annotated-reference)
-171. [Section 171 — `scripts/train.py` MLflow Integration: Full Annotated Reference](#section-171--scriptstrainpy-mlflow-integration--full-annotated-reference)
-172. [Section 172 — Complete File Communication Map](#section-172--complete-file-communication-map)
-173. [Section 173 — Project State After March 6 Session](#section-173--project-state-after-march-6-session)
-174. [Section 174 — Swagger 500 Fix: `response_class=None`](#section-174--swagger-500-fix-response_classnone)
-175. [Section 175 — Grad-CAM on the Web UI: End-to-End Engineering](#section-175--grad-cam-on-the-web-ui-end-to-end-engineering)
-176. [Section 176 — Bug Fix: `inference_time_ms` Always Zero](#section-176--bug-fix-inference_time_ms-always-zero)
-177. [Section 177 — A+++ Gaps Complete: Full Retrospective and Jury Preparation](#section-177--a-gaps-complete-full-retrospective-and-jury-preparation)
-178. [Section 178 — CSP Bug: `img-src` Blocked Grad-CAM PNG from Loading](#section-178--csp-bug-img-src-blocked-grad-cam-png-from-loading)
-179. [Section 179 — The 6 Production Gaps: "Good PFE" vs "Hire Immediately"](#section-179--the-6-production-gaps-good-pfe-vs-hire-immediately)
-180. [Section 180 — The Gold Ticket Additions: Senior-Level Thinking](#section-180--the-gold-ticket-additions-senior-level-thinking)
-181. [Section 181 — Production Standards Checklist: Where DeepCoin Stands](#section-181--production-standards-checklist-where-deepcoin-stands)
-182. [Section 182 — Project State After March 7 Session](#section-182--project-state-after-march-7-session)
-183. [Section 183 — Grad-CAM Border Attention: Root Cause, Diagnosis, and Fix](#section-183--grad-cam-border-attention--root-cause-diagnosis-and-fix)
-184. [Section 184 — BNF Photograph Source Mismatch: Intra-Dataset Distribution Shift Diagnosis](#section-184)
-185. [Section 185 — V4 Retraining Verdict: Law of Diminishing Returns at 80.03%](#section-185)
-186. [Section 186 — PFE Strategy: A+++ Production Gaps and Defense Preparation](#section-186)
-187. [Section 187 — Testing Guide: MLflow Experiment Tracking (Gap 1)](#section-187)
-188. [Section 188 — Testing Guide: Active Learning Loop (Gap 3)](#section-188)
-189. [Section 189 — Gap 4: Docker Compose Full Stack Wiring (7 Services)](#section-189)
-190. [Section 190 — Enterprise README Overhaul](#section-190)
-191. [Section 191 — Gap 4 Docker Deep Dive: What Is Docker and Why Does It Matter](#section-191)
-192. [Section 192 — Dockerfile.api: Complete Annotated Engineering Reference](#section-192)
-193. [Section 193 — frontend/Dockerfile: Complete Annotated Engineering Reference](#section-193)
-194. [Section 194 — Dockerfile.mlflow: Complete Annotated Engineering Reference](#section-194)
-195. [Section 195 — nginx/nginx.conf: Complete Annotated Engineering Reference](#section-195)
-196. [Section 196 — How the 7 Services Communicate (Network Architecture)](#section-196)
-197. [Section 197 — MLflow Live Demo for the Encadrant: Step-by-Step with Real Proof](#section-197)
-198. [Section 198 — Active Learning Live Demo for the Encadrant: Step-by-Step](#section-198)
-199. [Section 199 — Complete Project State After Gap 4 (March 7, 2026)](#section-199)
-200. [Section 200 — AI Leadership Handoff, Reality Audit & Enterprise P0 Critique (March 21, 2026)](#section-200)
-201. [Section 201 — Forward Roadmap: Actual Unfinished Business (March 21, 2026)](#section-201)
-202. [Section 202 — P0 Silent Auth Failure & Email System Hardening](#202-p0-silent-auth-failure--email-system-hardening)
-203. [Section 203 — Admin Account Initialization & Live Verification](#203-admin-account-initialization--live-verification)
-204. [Section 204 — Full SMTP Email Migration & Final Cleanup](#204-full-smtp-email-migration--final-cleanup)
-205. [Section 205 — The Environment Alignment & Multi-Architecture Boundary (Python 3.12 vs 3.11)](#205-the-environment-alignment--multi-architecture-boundary-python-312-vs-311)
-206. [Section 206 — The Silent Killer: Defeating FastAPI 204 HTTP Assertions & __future__ Annotations](#206-the-silent-killer-defeating-fastapi-204-http-assertions--__future__-annotations)
-207. [Section 207 — Global Dependency Stabilisation: CI/CD Pipeline & SQLite Pooling](#207-global-dependency-stabilisation-cicd-pipeline--sqlite-pooling)
-208. [Section 208 — Project Memory Governance & Git Tracking (`AI_LEAD_MEMORY.md`)](#208-project-memory-governance--git-tracking-ai_lead_memorymd)
+17. [What Comes Next — Complete Roadmap with Every Detail](#17-what-comes-next-complete-roadmap-with-every-detail)
+18. [Full Glossary — Every Technical Term Explained Like You're 5](#18-full-glossary-every-technical-term-explained-like-youre-5)
+19. [Phase 9 — Inference Engine (Layer 1)](#19-phase-9-inference-engine-layer-1)
+20. [Phase 10 — Knowledge Base v1 (Layer 2, First Pass)](#20-phase-10-knowledge-base-v1-layer-2-first-pass)
+21. [Phase 11 — 5-Agent System, First Pass](#21-phase-11-5-agent-system-first-pass)
+22. [Phase 12 — Enterprise RAG Upgrade (STEPs 0-8)](#22-phase-12-enterprise-rag-upgrade-steps-0-8)
+23. [Layer 4 — FastAPI Backend (Production API)](#23-layer-4-fastapi-backend-production-api)
+24. [Layer 4 Phase 2 — X-API-Key Authentication](#24-layer-4-phase-2-x-api-key-authentication)
+25. [Layer 4 Phase 2 — Rate Limiting (SlowAPI) + SQLite WAL Store + Metrics Endpoint](#25-layer-4-phase-2-rate-limiting-slowapi-sqlite-wal-store-metrics-endpoint)
+26. [Layer 4 Phase 2 — Developer Tooling: pyproject.toml, Makefile, .env.example, and 34 Unit Tests](#26-layer-4-phase-2-developer-tooling-pyprojecttoml-makefile-envexample-and-34-unit-tests)
+27. [Phase 14 — Layer 4 Security Hardening and Production Audit](#27-phase-14-layer-4-security-hardening-and-production-audit)
+28. [Layer 1 Security Patch — weights_only=True](#28-layer-1-security-patch-weights_onlytrue)
+29. [Complete Bug Registry Addendum — Bugs 14 and 15](#29-complete-bug-registry-addendum-bugs-14-and-15)
+30. [Final Git History — All Commits to 1b210ef](#30-final-git-history-all-commits-to-1b210ef)
+31. [Phase 15 — Layer 0-3 Enterprise Audit](#31-phase-15-layer-0-3-enterprise-audit)
+32. [Layer 5  Next.js 15 Enterprise Frontend (March 2026)](#32-layer-5-nextjs-15-enterprise-frontend-march-2026)
+33. [Layer 5 v2  Animated Mission Control & UX Overhaul (March 2026)](#33-layer-5-v2-animated-mission-control-ux-overhaul-march-2026)
+34. [Layer 5 Security Audit  HTTP Headers, AbortController, Blob Cleanup (March 2026)](#34-layer-5-security-audit-http-headers-abortcontroller-blob-cleanup-march-2026)
+35. [Layer 5 Runtime Proxy Fixes  IPv6 + Turbopack Timeout (March 2026)](#35-layer-5-runtime-proxy-fixes-ipv6-turbopack-timeout-march-2026)
+36. [Layer 5 Live Testing UX Fixes  Health Dot, Modal, Synthesis Cycling (March 2026)](#36-layer-5-live-testing-ux-fixes-health-dot-modal-synthesis-cycling-march-2026)
+37. [CLAHE Train/Inference Mismatch + Investigator UX (March 2026)](#37-clahe-traininference-mismatch-investigator-ux-march-2026)
+38. [Cancel Button & Abort Architecture (March 2026)](#38-cancel-button-abort-architecture-march-2026)
+39. [Backend Production Audit  P2 to P9 (March 2026)](#39-backend-production-audit-p2-to-p9-march-2026)
+40. [Deep Hardening Audit  P10 to P16 (March 2026)](#40-deep-hardening-audit-p10-to-p16-march-2026)
+41. [3-Way CNN Display States — Identified / TTA Consensus / Deep Search (March 2026)](#41-3-way-cnn-display-states-identified-tta-consensus-deep-search-march-2026)
+42. [Confidence Anxiety Elimination + History Detail Enrichment (March 2026)](#42-confidence-anxiety-elimination-history-detail-enrichment-march-2026)
+43. [Phase 3 — CN Links, Delete Button, Filter Bar (March 2026)](#43-phase-3-cn-links-delete-button-filter-bar-march-2026)
+44. [Phase 4 — CTA Banner, Linked Badges, Stats Strip, Copy Link (March 2026)](#44-phase-4-cta-banner-linked-badges-stats-strip-copy-link-march-2026)
+45. [Known Issue: Material Check False Mismatch — Patina/HSV Problem (March 2026)](#45-known-issue-material-check-false-mismatch-patinahsv-problem-march-2026)
+46. [Thirteen Missing Commits: The Complete Engineering Record](#46-thirteen-missing-commits-the-complete-engineering-record)
+47. [Complete File Inventory: Every File, Every Function (2026)](#47-complete-file-inventory-every-file-every-function-2026)
+48. [End-to-End Data Flow: From Browser Click to PDF Download](#48-end-to-end-data-flow-from-browser-click-to-pdf-download)
+49. [Engineering Foundations: The "Why" Behind Every Technology](#49-engineering-foundations-the-why-behind-every-technology)
+50. [FastAPI Backend Architecture: Every File, Every Line, Every Decision](#50-fastapi-backend-architecture-every-file-every-line-every-decision)
+51. [Frontend Architecture Deep Dive: Every File, Every Pattern, Every Decision](#51-frontend-architecture-deep-dive-every-file-every-pattern-every-decision)
+52. [How to Rebuild This Entire System From Scratch](#52-how-to-rebuild-this-entire-system-from-scratch)
+53. [The Complete Baby Engineer's Reference: Every Term, Every Gap, Every Relationship](#53-the-complete-baby-engineers-reference-every-term-every-gap-every-relationship)
+54. [TTA UX Overhaul + Critical Auto-Crop Bug Fix](#54-tta-ux-overhaul-critical-auto-crop-bug-fix)
+55. [Screenshot Warning Banner](#55-screenshot-warning-banner)
+56. [Waiting Animation + Mark-as-Wrong Feedback](#56-waiting-animation-mark-as-wrong-feedback)
+57. [Phase A1: PostgreSQL Database Layer (Enterprise Auth Foundation)](#57-phase-a1-postgresql-database-layer-enterprise-auth-foundation)
+58. [Phase A2: JWT Authentication System (Register, Login, Tokens, RBAC)](#58-phase-a2-jwt-authentication-system-register-login-tokens-rbac)
+59. [Full Annotated `gatekeeper.py`  Every Line Explained](#59-full-annotated-gatekeeperpy-every-line-explained)
+60. [Full Annotated `historian.py`  Every Line Explained](#60-full-annotated-historianpy-every-line-explained)
+61. [Frontend: `store.ts` + `CoinUploader.tsx` From Blank Files](#61-frontend-storets-coinuploadertsx-from-blank-files)
+62. [Phase A3: Per-User Rate Limiting + AuditLog Writes](#62-phase-a3-per-user-rate-limiting-auditlog-writes)
+63. [How to Test the Entire DeepCoin System: The Complete Guide](#63-how-to-test-the-entire-deepcoin-system-the-complete-guide)
+64. [Documentation Standard: What Enterprise Grade Really Means](#64-documentation-standard-what-enterprise-grade-really-means)
+65. [Docker WSL Corruption Fix + PostgreSQL Container Launch (March 3, 2026)](#65-docker-wsl-corruption-fix-postgresql-container-launch-march-3-2026)
+66. [Alembic Migration Bug: DuplicateObjectError for ENUM Types (March 3, 2026)](#66-alembic-migration-bug-duplicateobjecterror-for-enum-types-march-3-2026)
+67. [bcrypt 5.0.0 Incompatibility + Full A2/A3 Live Demo (March 3, 2026)](#67-bcrypt-500-incompatibility-full-a2a3-live-demo-march-3-2026)
+68. [A4: Migrate History Routes to PostgreSQL ORM (March 3, 2026)](#68-a4-migrate-history-routes-to-postgresql-orm-march-3-2026)
+69. [A5: NextAuth.js v5 — Credentials Provider + JWT Sessions (March 3, 2026)](#69-a5-nextauthjs-v5-credentials-provider-jwt-sessions-march-3-2026)
+70. [A6: Frontend Auth UI — Login, Register, UserMenu, SessionProvider (March 3, 2026)](#70-a6-frontend-auth-ui-login-register-usermenu-sessionprovider-march-3-2026)
+71. [Layer 6: Docker Infrastructure — Dockerfiles, Nginx, Compose (March 3, 2026)](#71-layer-6-docker-infrastructure-dockerfiles-nginx-compose-march-3-2026)
+72. [Enterprise Homepage Redesign (11 New Components)](#72-enterprise-homepage-redesign-11-new-components)
+73. [Bugs Found and Fixed: Post-Layer-6 Homepage Integration](#73-bugs-found-and-fixed-post-layer-6-homepage-integration)
+74. [TechStack Bento Grid Redesign](#74-techstack-bento-grid-redesign)
+75. [New Pages: `/analyse` and `/admin`](#75-new-pages-analyse-and-admin)
+76. [RegisterForm Success Message Fix + Zustand Singleton Deep-Dive](#76-registerform-success-message-fix-zustand-singleton-deep-dive)
+77. [Project State After All Post-Layer-6 Fixes](#77-project-state-after-all-post-layer-6-fixes)
+78. [Auth-Guarded Analyse CTA + Real Subscriber Endpoint + NavLinks Server Component](#78-auth-guarded-analyse-cta-real-subscriber-endpoint-navlinks-server-component)
+79. [Three New Public Pages + Subscriber Admin Panel + Next.js Route Handler](#79-three-new-public-pages-subscriber-admin-panel-nextjs-route-handler)
+80. [Post-Layer-7-Prep Bug Fixes and New Feature Additions (Current Session)](#80-post-layer-7-prep-bug-fixes-and-new-feature-additions-current-session)
+81. [Five New Backend Routes (explore, admin feedback, admin analyses, chat + PDF fix)](#81-five-new-backend-routes-explore-admin-feedback-admin-analyses-chat-pdf-fix)
+82. [Frontend: Explore Rewrite, Admin Panels, AI Chat Page, Chat in NavLinks](#82-frontend-explore-rewrite-admin-panels-ai-chat-page-chat-in-navlinks)
+83. [Admin Access Guide + New TypeScript Types + Project State](#83-admin-access-guide-new-typescript-types-project-state)
+84. [Enterprise Chat Page Redesign v2](#84-enterprise-chat-page-redesign-v2)
+85. [TutorialModal: Floating Help Guide](#85-tutorialmodal-floating-help-guide)
+86. [AI Chat CTA in AnalysisPanel](#86-ai-chat-cta-in-analysispanel)
+87. [Admin Access Restriction Page](#87-admin-access-restriction-page)
+88. [Bug Fixes: PDF Download, Sources Blank, Scroll Issues](#88-bug-fixes-pdf-download-sources-blank-scroll-issues)
+89. [Chat Session History: Backend](#89-chat-session-history-backend)
+90. [Chat Session History: Frontend](#90-chat-session-history-frontend)
+91. [TypeScript Fix: ES2018 dotAll Regex Flag](#91-typescript-fix-es2018-dotall-regex-flag)
+92. [Project State After March 3 Session](#92-project-state-after-march-3-session)
+93. [Prior Session Polish (commit d7f2052)](#93-prior-session-polish-commit-d7f2052)
+94. [Bug 31: PDF Download Broken in History Table (All Roles)](#94-bug-31-pdf-download-broken-in-history-table-all-roles)
+95. [Bug 32: /analyse Accessible Without Authentication](#95-bug-32-analyse-accessible-without-authentication)
+96. [Mobile Responsiveness: TutorialModal + AgentPipeline](#96-mobile-responsiveness-tutorialmodal-agentpipeline)
+97. [Enterprise Email Subscription Confirmation System](#97-enterprise-email-subscription-confirmation-system)
+98. [Project State After March 4 Session](#98-project-state-after-march-4-session)
+99. [Bug 33: PDF Download 404 on Windows  Full Backslash Path in URL](#99-bug-33-pdf-download-404-on-windows-full-backslash-path-in-url)
+100. [Bug 34: Stale PDF Download Button Persists Into New Analysis](#100-bug-34-stale-pdf-download-button-persists-into-new-analysis)
+101. [Admin Dashboard Enterprise Redesign v2](#101-admin-dashboard-enterprise-redesign-v2)
+102. [Bug 35: Admin Page 401 Race Condition (useQuery Before SessionSync)](#102-bug-35-admin-page-401-race-condition-usequery-before-sessionsync)
+103. [Project State After March 4 Session (Bug Fix Batch)](#103-project-state-after-march-4-session-bug-fix-batch)
+104. [Bug 36: AI Chat Returns Empty / Useless Responses ("Added Nothing")](#104-bug-36-ai-chat-returns-empty-useless-responses-added-nothing)
+105. [Bug 37: Blob URL ERR_FILE_NOT_FOUND in Console (React Strict Mode)](#105-bug-37-blob-url-err_file_not_found-in-console-react-strict-mode)
+106. [Bug 38: "Mark as Wrong" Button Invisible and Non-Clickable-Looking](#106-bug-38-mark-as-wrong-button-invisible-and-non-clickable-looking)
+107. [Project State After March 4 Afternoon Session](#107-project-state-after-march-4-afternoon-session)
+108. [Bugs 39 & 40 + AI Chat Context and CTA Enhancements](#108-bugs-39-40-ai-chat-context-and-cta-enhancements)
+109. [[CONTEXT N] Root-Fix, Web Search Fallback, KB Discovery Explore Page](#109-context-n-root-fix-web-search-fallback-kb-discovery-explore-page)
+110. [Bug 41 & Bug 42: Dead Server + LLM Section-Header Leakage](#110-bug-41-bug-42-dead-server-llm-section-header-leakage)
+111. [Project State After March 4 Evening Session](#111-project-state-after-march-4-evening-session)
+112. [Bugs 43 & 44: Hallucination Guards](#112-bugs-43-44-hallucination-guards)
+113. [Project State: March 4, 2026 (End of Night Session)](#113-project-state-march-4-2026-end-of-night-session)
+114. [The JWT Authentication System: Complete First-Principles Reference](#114-the-jwt-authentication-system-complete-first-principles-reference)
+115. [The RAG Engine and AI Chat Pipeline: Complete Technical Reference](#115-the-rag-engine-and-ai-chat-pipeline-complete-technical-reference)
+116. [Security Architecture: Every Defence Layer Explained](#116-security-architecture-every-defence-layer-explained)
+117. [Database Schema: Every Table, Column, and Constraint](#117-database-schema-every-table-column-and-constraint)
+118. [Configuration and Environment Variable Reference](#118-configuration-and-environment-variable-reference)
+119. [End-to-End Request Trace: Upload to PDF in One Journey](#119-end-to-end-request-trace-upload-to-pdf-in-one-journey)
+120. [Bug Pattern Analysis: 44 Bugs, 44 Lessons](#120-bug-pattern-analysis-44-bugs-44-lessons)
+121. [Complete Runbook: Running DeepCoin from Zero](#121-complete-runbook-running-deepcoin-from-zero)
+122. [â€” Bug 45: Admin "All Analyses" Returns Empty (Missing `Path` Import)](#122-â-bug-45-admin-all-analyses-returns-empty-missing-path-import)
+123. [â€” Chat State Persistence: Module-Level Cache Architecture](#123-â-chat-state-persistence-module-level-cache-architecture)
+124. [â€” Conversation Memory: End-to-End Multi-Turn AI Chat](#124-â-conversation-memory-end-to-end-multi-turn-ai-chat)
+125. [â€” Admin Users CRUD: Complete Technical Reference](#125-â-admin-users-crud-complete-technical-reference)
+126. [â€” Navbar Active State: `usePathname` Pattern](#126-â-navbar-active-state-usepathname-pattern)
+127. [â€” Project State After March 4 Evening Session](#127-â-project-state-after-march-4-evening-session)
+128. [- Prompt Injection Guard (ChatMessage Literal Role Validation)](#128---prompt-injection-guard-chatmessage-literal-role-validation)
+129. [- Stale Comment Cleanup (classify.py)](#129---stale-comment-cleanup-classifypy)
+130. [- Explore Page date_range Empty String Bug (kb.py)](#130---explore-page-date_range-empty-string-bug-kbpy)
+131. [- Chat SSE Streaming (POST /api/chat/stream)](#131---chat-sse-streaming-post-apichatstream)
+132. [- Project State After This Session](#132---project-state-after-this-session)
+133. [- The JWT Expiry Problem (What Was Broken)](#133---the-jwt-expiry-problem-what-was-broken)
+134. [- The Backend Was Already Complete (POST /auth/refresh)](#134---the-backend-was-already-complete-post-authrefresh)
+135. [- JWT Refresh: Full Frontend Architecture](#135---jwt-refresh-full-frontend-architecture)
+136. [- Confirm-Subscription UX Cleanup](#136---confirm-subscription-ux-cleanup)
+137. [- Docker Base Image CVE Remediation](#137---docker-base-image-cve-remediation)
+138. [- Project State After This Session](#138---project-state-after-this-session)
+139. [- Layer 7: Why Tests and CI Are Non-Negotiable](#139---layer-7-why-tests-and-ci-are-non-negotiable)
+140. [- Integration Test Architecture: The Mock Stack](#140---integration-test-architecture-the-mock-stack)
+141. [- Three Bugs Found During Layer 7 Implementation](#141---three-bugs-found-during-layer-7-implementation)
+142. [- GitHub Actions CI Pipeline](#142---github-actions-ci-pipeline)
+143. [- Final Project State After Layer 7](#143---final-project-state-after-layer-7)
+144. [`tests/integration/conftest.py`: Complete Annotation, Every Line, Every Decision](#144-testsintegrationconftestpy-complete-annotation-every-line-every-decision)
+145. [`tests/integration/test_health.py`: Every Test Explained In Full](#145-testsintegrationtest_healthpy-every-test-explained-in-full)
+146. [`tests/integration/test_classify.py`: Every Test, Every Defence Layer](#146-testsintegrationtest_classifypy-every-test-every-defence-layer)
+147. [`test_history.py`, `test_chat_security.py`, `test_auth_flow.py`: Full Deep Dive](#147-test_historypy-test_chat_securitypy-test_auth_flowpy-full-deep-dive)
+148. [`.github/workflows/ci.yml`: Every YAML Key Explained](#148-githubworkflowsciyml-every-yaml-key-explained)
+149. [`pyproject.toml` Deep Dive + `asyncio_mode` + Complete Project State](#149-pyprojecttoml-deep-dive-asyncio_mode-complete-project-state)
+150. [A+++ Frontend Quality Audit: Methodology, Grading, and the Six Fixes](#150-a-frontend-quality-audit-methodology-grading-and-the-six-fixes)
+151. [Screenshot False-Positive Fix: Signal 2 Tightening + Signal 3 Removal](#151-screenshot-false-positive-fix-signal-2-tightening-signal-3-removal)
+152. [RAG Engine Date Dual-Key Fallback (`rag_engine.py`)](#152-rag-engine-date-dual-key-fallback-rag_enginepy)
+153. [`classify.py` Step-8 Stale Comment: Audit Events Clarification](#153-classifypy-step-8-stale-comment-audit-events-clarification)
+154. [`/docs` Page Replacement: From 433-Line Static Duplicate to One-Line Redirect](#154-docs-page-replacement-from-433-line-static-duplicate-to-one-line-redirect)
+155. [`/confirm-subscription` Dead Code Removal](#155-confirm-subscription-dead-code-removal)
+156. [`GET /api/admin/stats`: Live Route Distribution Analytics Endpoint](#156-get-apiadminstats-live-route-distribution-analytics-endpoint)
+157. [`AdminStatsResponse` + `getAdminStats()` + OverviewTab Route Chart](#157-adminstatsresponse-getadminstats-overviewtab-route-chart)
+158. [Enterprise-Grade Project Critique: Honest Assessment and Identified Gaps](#158-enterprise-grade-project-critique-honest-assessment-and-identified-gaps)
+159. [Project State After A+++ Audit Session (HEAD: `c6e3438`)](#159-project-state-after-a-audit-session-head-c6e3438)
+46. [TTA Threshold Hardening + Active Nav Baseline (Commit 44b208b)](#46-tta-threshold-hardening-active-nav-baseline-commit-44b208b)
+47. [Auto-Crop Inference Bug Fix (Commit f76d274)](#47-auto-crop-inference-bug-fix-commit-f76d274)
+48. [Screenshot Warning + Mascot Animation (Commit 9befeb3)](#48-screenshot-warning-mascot-animation-commit-9befeb3)
+49. [Mark-as-Wrong Feedback System (Commit 9f8ce0d)](#49-mark-as-wrong-feedback-system-commit-9f8ce0d)
+50. [Enterprise Homepage Redesign (Commits 80c682e  8a820b4)](#50-enterprise-homepage-redesign-commits-80c682e-8a820b4)
+51. [NextAuth v5 Integration + Auth Flow (Commits ebc3050  8a820b4)](#51-nextauth-v5-integration-auth-flow-commits-ebc3050-8a820b4)
+52. [JWT Silent Refresh (Commit 40118e5)](#52-jwt-silent-refresh-commit-40118e5)
+53. [Email Subscription System (Commit 391e62e)](#53-email-subscription-system-commit-391e62e)
+54. [Public Pages: /about, /explore, /docs (Commit 932a67f)](#54-public-pages-about-explore-docs-commit-932a67f)
+55. [AI Chat System (Commits 584fe2c  06116a5)](#55-ai-chat-system-commits-584fe2c-06116a5)
+56. [Admin Dashboard (Commit 932a67f  current)](#56-admin-dashboard-commit-932a67f-current)
+57. [Layer 7  Tests and CI/CD (Commit b3e7030  current)](#57-layer-7-tests-and-cicd-commit-b3e7030-current)
+58. [8 Bug Fixes  March 3, 2026 (Commit b3bd803)](#58-8-bug-fixes-march-3-2026-commit-b3bd803)
+59. [5 New Fixes  Current Session (Commit b5da026)](#59-5-new-fixes-current-session-commit-b5da026)
+60. [Complete File Map  Current State](#60-complete-file-map-current-state)
+61. [Security Audit Checklist  Current State](#61-security-audit-checklist-current-state)
+62. [How to Resume Development](#62-how-to-resume-development)
+160. [Dashboard "Member Since" Fix (auth chain `created_at` propagation)](#160-dashboard-member-since-fix-auth-chain-created_at-propagation)
+161. [Chat Memory Fix (non-numismatic guard bypass for conversation history)](#161-chat-memory-fix-non-numismatic-guard-bypass-for-conversation-history)
+162. [Google/Scholar Always Visible (userQuery restoration on session reload)](#162-googlescholar-always-visible-userquery-restoration-on-session-reload)
+163. [Complete Auth Flow (resend verification, forgot password, reset password, verify email)](#163-complete-auth-flow-resend-verification-forgot-password-reset-password-verify-email)
+164. [Status After Commit `8eb9b3c`](#164-status-after-commit-8eb9b3c)
+165. [A+++ Production Roadmap: Six Gaps to Enterprise-Grade](#165-a-production-roadmap-six-gaps-to-enterprise-grade)
+166. [MLflow Experiment Tracking: Full Implementation](#166-mlflow-experiment-tracking-full-implementation)
+167. [Grad-CAM Explainability: Heatmaps in the PDF Report](#167-grad-cam-explainability-heatmaps-in-the-pdf-report)
+168. [How to Test the Live App  MLflow, Grad-CAM, and Active Learning](#168-how-to-test-the-live-app-mlflow-grad-cam-and-active-learning)
+169. [Active Learning Loop  Engineering Design and Full Implementation](#169-active-learning-loop-engineering-design-and-full-implementation)
+170. [`src/core/gradcam.py`  Complete Annotated Reference](#170-srccoregradcampy-complete-annotated-reference)
+171. [`scripts/train.py` MLflow Integration  Full Annotated Reference](#171-scriptstrainpy-mlflow-integration-full-annotated-reference)
+172. [Complete File Communication Map — How Every File Talks to Every Other File](#172-complete-file-communication-map-how-every-file-talks-to-every-other-file)
+173. [Project State After March 6 Session](#173-project-state-after-march-6-session)
+174. [Swagger 500 Fix — `response_class=None` in `active_learning.py`](#174-swagger-500-fix-response_classnone-in-active_learningpy)
+175. [Grad-CAM on the Web UI — End-to-End Engineering](#175-grad-cam-on-the-web-ui-end-to-end-engineering)
+176. [Bug Fix — `inference_time_ms` Always Zero in the CNN Card](#176-bug-fix-inference_time_ms-always-zero-in-the-cnn-card)
+177. [A+++ Gaps Complete — Full Retrospective and Jury Preparation](#177-a-gaps-complete-full-retrospective-and-jury-preparation)
+178. [CSP Bug — `img-src` Blocked Grad-CAM PNG from Loading](#178-csp-bug-img-src-blocked-grad-cam-png-from-loading)
+179. [The 6 Production Gaps — "Good PFE" vs "Hire Immediately"](#179-the-6-production-gaps-good-pfe-vs-hire-immediately)
+180. [The Gold Ticket Additions — Senior-Level Thinking](#180-the-gold-ticket-additions-senior-level-thinking)
+181. [Production Standards Checklist — Where DeepCoin Stands](#181-production-standards-checklist-where-deepcoin-stands)
+182. [Project State After March 7 Session](#182-project-state-after-march-7-session)
+183. [Grad-CAM Border Attention — Root Cause, Diagnosis, and Fix](#183-grad-cam-border-attention-root-cause-diagnosis-and-fix)
+184. [Confidence Diagnosis: BNF Photograph Source Mismatch](#184-confidence-diagnosis-bnf-photograph-source-mismatch)
+185. [Model Health Assessment: Should We Retrain?](#185-model-health-assessment-should-we-retrain)
+186. [PFE Strategy: Why We Stop Training at V3](#186-pfe-strategy-why-we-stop-training-at-v3)
+187. [Testing Guide: MLflow Experiment Tracking (Gap 1)](#187-testing-guide-mlflow-experiment-tracking-gap-1)
+188. [Testing Guide: Active Learning Loop (Gap 3)](#188-testing-guide-active-learning-loop-gap-3)
+189. [Gap 4: Docker Compose Full Stack Wiring (7 Services)](#189-gap-4-docker-compose-full-stack-wiring-7-services)
+190. [Enterprise README Overhaul: The Benchmark for Professional Documentation](#190-enterprise-readme-overhaul-the-benchmark-for-professional-documentation)
+191. [Gap 4 Explained Step By Step  What Is Docker and Why Does It Matter](#191-gap-4-explained-step-by-step-what-is-docker-and-why-does-it-matter)
+192. [Dockerfile.api  Complete Annotated Engineering Reference](#192-dockerfileapi-complete-annotated-engineering-reference)
+193. [frontend/Dockerfile  Complete Annotated Engineering Reference](#193-frontenddockerfile-complete-annotated-engineering-reference)
+194. [Dockerfile.mlflow  Complete Annotated Engineering Reference](#194-dockerfilemlflow-complete-annotated-engineering-reference)
+195. [nginx/nginx.conf  Complete Annotated Engineering Reference](#195-nginxnginxconf-complete-annotated-engineering-reference)
+196. [How the 7 Services Communicate (Network Architecture)](#196-how-the-7-services-communicate-network-architecture)
+197. [MLflow Live Demo for the Encadrant  Step-by-Step with Real Proof](#197-mlflow-live-demo-for-the-encadrant-step-by-step-with-real-proof)
+198. [Active Learning Live Demo for the Encadrant  Step-by-Step](#198-active-learning-live-demo-for-the-encadrant-step-by-step)
+199. [Complete Project State After Gap 4 (March 7, 2026)](#199-complete-project-state-after-gap-4-march-7-2026)
+200. [AI Leadership Handoff, Reality Audit & Enterprise P0 Critique (March 21, 2026)](#200-ai-leadership-handoff-reality-audit-enterprise-p0-critique-march-21-2026)
+201. [Forward Roadmap: Exact Unfinished Business & Unified Targets (March 21, 2026)](#201-forward-roadmap-exact-unfinished-business-unified-targets-march-21-2026)
+202. [P0 Silent Auth Failure & Email System Hardening](#202-p0-silent-auth-failure-email-system-hardening)
+203. [Admin Account Initialization & Live Verification](#203-admin-account-initialization-live-verification)
+204. [Full SMTP Email Migration & Final Cleanup](#204-full-smtp-email-migration-final-cleanup)
+205. [The Environment Alignment & Multi-Architecture Boundary (Python 3.12 vs 3.11)](#205-the-environment-alignment-multi-architecture-boundary-python-312-vs-311)
+206. [The Silent Killer: Defeating FastAPI 204 HTTP Assertions & `__future__` Annotations](#206-the-silent-killer-defeating-fastapi-204-http-assertions-__future__-annotations)
+207. [Global Dependency Stabilisation: CI/CD Pipeline & SQLite Pooling](#207-global-dependency-stabilisation-cicd-pipeline-sqlite-pooling)
+208. [Project Memory Governance & Git Tracking (`AI_LEAD_MEMORY.md`)](#208-project-memory-governance-git-tracking-ai_lead_memorymd)
+209. [Gap 4 & 5: Enterprise Infrastructure, DevOps & Zero-Trust Observability (0-to-Hero)](#209-gap-4-5-enterprise-infrastructure-devops-zero-trust-observability-0-to-hero)
+210. [The Grand Architect's Masterclass: Complete Retrospective from Section 186 to 208 (0-to-Hero)](#210-the-grand-architects-masterclass-complete-retrospective-from-section-186-to-208-0-to-hero)
+
+---
+
+## Architectural Overview & Reading Guide
+
+This journal documents the **DeepCoin-Core** project from Day 1 to Enterprise Deployment. With over 200 sections, it is designed as a *Masterclass* for Junior Engineers to understand professional AI System Design, Full-Stack Development, and DevOps.
+
+To grasp the system without being overwhelmed, study the project in these **Core Logical Phases**:
+
+1. **The Machine Learning Heart (Sections 1–10, 184–185)**
+   - Resolving preprocessing artifacts via CLAHE algorithms.
+   - Conquering long-tail datasets via PyTorch EfficientNet feature extraction.
+2. **The RAG & Semantic Core (Sections 24–40, 109–115)**
+   - Vectorizing a 9,716-type Corpus Nummorum into ChromaDB semantic space.
+   - Gatekeeper Agent Routing via LangGraph state conditionals and confidence thresholds. 
+3. **The API & Backend Architecture (Sections 45–55, 116–120, 134)**
+   - FastAPI dependency injection, typed Pydantic Schemas, and safe memory handling.
+   - JWT Auth systems fortified with strict Zero-Trust boundaries.
+4. **The Client Frontend (Next.js) (Sections 56–77, 101–107)**
+   - Utilizing Server vs Client bridging, Zustand reactive memory stores.
+   - Visualising AI processing states dynamically with Framer animations. 
+5. **Enterprise Reliability & DevOps (Sections 139–149, 189–200, 209)**
+   - Docker Container orchestration, defining bridged internal networks. 
+   - TSDB Observability natively via Prometheus and Grafana templates.
+   - Full Pytest Integration Testing across HTTP boundaries and SQLite states.
+6. **AI Safety, Governance, & P0 Fixes (Sections 128, 150-164, 202-208)**
+   - Halting LLM structured hallucinations, implementing Prompt-Injection defence.
+   - Diagnosing and rolling back silent SMTP (email) execution failures.
 
 ---
 
@@ -9941,7 +9987,7 @@ All four conditions align against silver detection for a patinated coin. The bro
 
 ---
 
-## Section 46  Thirteen Missing Commits: The Complete Engineering Record
+## 46. Thirteen Missing Commits: The Complete Engineering Record
 
 This section documents every significant commit not covered in Sections 145. Each entry follows
 the same template: **What changed**, **Why it was needed**, **How it was implemented**, and
@@ -10530,7 +10576,7 @@ They require the full pipeline to be running (model loaded, Ollama/GitHub token 
 and take 1560 seconds each. They are run manually before a demo or major commit.
 
 ---
-## Section 47  Complete File Inventory: Every File, Every Function (2026)
+## 47. Complete File Inventory: Every File, Every Function (2026)
 
 This section is the authoritative file-by-file reference for the entire project as of March 2026.
 If you clone the repo and wonder "what does this file do and why does it exist?", look here.
@@ -11326,7 +11372,7 @@ reports/                          # Generated PDF reports (cleaned up after 24h)
 ```
 
 ---
-## Section 48  End-to-End Data Flow: From Browser Click to PDF Download
+## 48. End-to-End Data Flow: From Browser Click to PDF Download
 
 This section traces a SINGLE coin classification request through every layer of the system.
 Follow this trace and you understand the whole project. Every function call, every file touched,
@@ -11838,7 +11884,7 @@ data/history.db
 Accessible at: `GET /api/history` (paginated list) and `GET /api/history/3f2a1b7c-...` (full).
 
 ---
-## Section 49  Engineering Foundations: The "Why" Behind Every Technology
+## 49. Engineering Foundations: The "Why" Behind Every Technology
 
 This section explains the CS concepts and engineering principles that power DeepCoin.
 This is NOT a list of commands. This is a CONCEPTUAL UNDERSTANDING section. Read this
@@ -12425,7 +12471,7 @@ badge becomes a navigable link.
 
 ---
 
-## Section 50  FastAPI Backend Architecture: Every File, Every Line, Every Decision
+## 50. FastAPI Backend Architecture: Every File, Every Line, Every Decision
 
 This section is the definitive reference for `src/api/`. Read it and you can rebuild
 the entire FastAPI layer from scratch  including WHY each design decision was made.
@@ -12894,7 +12940,7 @@ regardless of body content  the 204 is enough to trigger the refresh.
 
 ---
 
-## Section 51  Frontend Architecture Deep Dive: Every File, Every Pattern, Every Decision
+## 51. Frontend Architecture Deep Dive: Every File, Every Pattern, Every Decision
 
 This section is the definitive reference for `frontend/`. The goal: rebuild the entire
 Next.js frontend with full comprehension of why every pattern was chosen.
@@ -13592,7 +13638,7 @@ After 2 seconds, it resets. Standard pattern for clipboard copy feedback in mode
 
 ---
 
-## Section 52  How to Rebuild This Entire System From Scratch
+## 52. How to Rebuild This Entire System From Scratch
 
 This section is different from all others. Every other section explains what we built.
 This section tells you HOW to build it — step by step, file by file, command by command.
@@ -14197,7 +14243,7 @@ npx next build
 
 ---
 
-## Section 53  The Complete Baby Engineer's Reference: Every Term, Every Gap, Every Relationship
+## 53. The Complete Baby Engineer's Reference: Every Term, Every Gap, Every Relationship
 
 This section exists because the previous sections were written by an engineer **for** an engineer.
 You are learning. Before you can understand WHY we made decisions, you need to understand
@@ -16248,7 +16294,7 @@ Makefile                            Shortcuts: make api, make test, make lint, m
 
 ---
 
-## Section 54  TTA UX Overhaul + Critical Auto-Crop Bug Fix
+## 54. TTA UX Overhaul + Critical Auto-Crop Bug Fix
 **Date:** March 2, 2026 | **Commits:** `44b208b`, `f76d274`
 
 ---
@@ -16416,7 +16462,7 @@ If training images get different confidence than unseen test images, the pipelin
 
 ---
 
-## Section 55  Screenshot Warning Banner
+## 55. Screenshot Warning Banner
 **Date:** March 2, 2026 | **Commit:** `9befeb3`
 
 ---
@@ -16537,7 +16583,7 @@ All of these are handled by the existing `analyseImageQuality()` function in
 
 ---
 
-## Section 56  Waiting Animation + Mark-as-Wrong Feedback
+## 56. Waiting Animation + Mark-as-Wrong Feedback
 **Date:** March 2, 2026 | **Commits:** `9befeb3`, `9f8ce0d`
 
 ---
@@ -16747,7 +16793,7 @@ page and export it as a CSV for retraining.
 
 ---
 
-## Section 57 — Phase A1: PostgreSQL Database Layer (Enterprise Auth Foundation)
+## 57. Phase A1: PostgreSQL Database Layer (Enterprise Auth Foundation)
 **Date:** March 2026 | **Commit:** `40933f2`
 
 ---
@@ -17849,7 +17895,7 @@ Files added in Phase A1:
 
 ---
 
-## Section 58 — Phase A2: JWT Authentication System (Register, Login, Tokens, RBAC)
+## 58. Phase A2: JWT Authentication System (Register, Login, Tokens, RBAC)
 **Date:** March 2026 | **Commit:** `40933f2`
 
 ---
@@ -18995,7 +19041,7 @@ Tests after Phase A2: **37/37 passing**
 
 ---
 
-## Section 59  Full Annotated `gatekeeper.py`  Every Line Explained
+## 59. Full Annotated `gatekeeper.py`  Every Line Explained
 
 This section shows the complete `gatekeeper.py` (474 lines) with every decision explained.
 This is the most important file in the agent system  it is the traffic controller that routes
@@ -19259,7 +19305,7 @@ def get_gatekeeper() -> Gatekeeper:
 
 ---
 
-## Section 60  Full Annotated `historian.py`  Every Line Explained
+## 60. Full Annotated `historian.py`  Every Line Explained
 
 `historian.py` is 512 lines. It is the research librarian of the system: given a CNN
 prediction, it looks up the full coin record, structures it into 5 labeled knowledge
@@ -19540,7 +19586,7 @@ def _clean_narrative(text: str) -> str:
 
 ---
 
-## Section 61  Frontend: `store.ts` + `CoinUploader.tsx` From Blank Files
+## 61. Frontend: `store.ts` + `CoinUploader.tsx` From Blank Files
 
 ---
 
@@ -19935,7 +19981,7 @@ Zero prop drilling. Zero parent involvement. Pure Zustand cross-component commun
 
 ---
 
-## Section 62  Phase A3: Per-User Rate Limiting + AuditLog Writes
+## 62. Phase A3: Per-User Rate Limiting + AuditLog Writes
 
 ### What This Section Covers
 
@@ -20247,7 +20293,7 @@ and see exactly how much classification confidence improved (or degraded) since 
 
 ---
 
-## Section 63  How to Test the Entire DeepCoin System: The Complete Guide
+## 63. How to Test the Entire DeepCoin System: The Complete Guide
 
 **Date:** March 2026 | **Scope:** Layers 05, Phase A1A3 | **Tests:** 46 unit + manual integration
 
@@ -20674,7 +20720,7 @@ Two commands, 10 seconds, tells you immediately if something broke overnight.
 
 ---
 
-## Section 64  Documentation Standard: What Enterprise Grade Really Means
+## 64. Documentation Standard: What Enterprise Grade Really Means
 
 ---
 
@@ -20837,7 +20883,7 @@ No question about this system should require you to think on the spot. Every dec
 
 ---
 
-## Section 65 — Docker WSL Corruption Fix + PostgreSQL Container Launch (March 3, 2026)
+## 65. Docker WSL Corruption Fix + PostgreSQL Container Launch (March 3, 2026)
 
 ---
 
@@ -21178,7 +21224,7 @@ Disk freed: **19.67 GB** on D: drive. Final free space: **87.5 GB** on D:.
 
 ---
 
-## Section 66 — Alembic Migration Bug: DuplicateObjectError for ENUM Types (March 3, 2026)
+## 66. Alembic Migration Bug: DuplicateObjectError for ENUM Types (March 3, 2026)
 
 ---
 
@@ -21485,7 +21531,7 @@ Output:
 
 ---
 
-## Section 67 — bcrypt 5.0.0 Incompatibility + Full A2/A3 Live Demo (March 3, 2026)
+## 67. bcrypt 5.0.0 Incompatibility + Full A2/A3 Live Demo (March 3, 2026)
 
 ---
 
@@ -22434,7 +22480,7 @@ Layer 6 will:
 
 ---
 
-## Section 68 — A4: Migrate History Routes to PostgreSQL ORM (March 3, 2026)
+## 68. A4: Migrate History Routes to PostgreSQL ORM (March 3, 2026)
 
 ### 68.1  Why This Migration Was Needed
 
@@ -22552,7 +22598,7 @@ The 10 unit tests in `test_store.py` continue to pass unchanged — 48/48 total.
 
 ---
 
-## Section 69 — A5: NextAuth.js v5 — Credentials Provider + JWT Sessions (March 3, 2026)
+## 69. A5: NextAuth.js v5 — Credentials Provider + JWT Sessions (March 3, 2026)
 
 ### 69.1  What NextAuth.js Is and Why We Need It
 
@@ -22758,7 +22804,7 @@ AUTH_FASTAPI_URL=http://127.0.0.1:8000
 
 ---
 
-## Section 70 — A6: Frontend Auth UI — Login, Register, UserMenu, SessionProvider (March 3, 2026)
+## 70. A6: Frontend Auth UI — Login, Register, UserMenu, SessionProvider (March 3, 2026)
 
 ### 70.1  Overview
 
@@ -22943,7 +22989,7 @@ The only TS error encountered (NextAuth route handler — Section 69.6) was reso
 
 ---
 
-## Section 71 — Layer 6: Docker Infrastructure — Dockerfiles, Nginx, Compose (March 3, 2026)
+## 71. Layer 6: Docker Infrastructure — Dockerfiles, Nginx, Compose (March 3, 2026)
 
 ### 71.1  What Layer 6 Delivers
 
@@ -23297,7 +23343,7 @@ docker-compose.yml                         L6: AUTH_FASTAPI_URL + finalized
 
 ---
 
-## Section 72 — Enterprise Homepage Redesign (11 New Components)
+## 72. Enterprise Homepage Redesign (11 New Components)
 
 **Commit:** `80c682e` — feat: enterprise homepage redesign
 **Date:** March 3, 2026
@@ -23475,7 +23521,7 @@ WHY CSS variables instead of Tailwind config: Tailwind 4's JIT compiler requires
 
 ---
 
-## Section 73 — Bugs Found and Fixed: Post-Layer-6 Homepage Integration
+## 73. Bugs Found and Fixed: Post-Layer-6 Homepage Integration
 
 **Commits:** `20b7813`, `64f6991`
 **Date:** March 3, 2026
@@ -23763,7 +23809,7 @@ useEffect(() => {
 
 ---
 
-## Section 74 — TechStack Bento Grid Redesign
+## 74. TechStack Bento Grid Redesign
 
 **Commit:** `ebc3050` (partial — TechStack redesign)
 **Date:** March 3, 2026
@@ -23876,7 +23922,7 @@ This is academically correct attribution. The PFE committee will notice if a pub
 
 ---
 
-## Section 75 — New Pages: `/analyse` and `/admin`
+## 75. New Pages: `/analyse` and `/admin`
 
 **Commit:** `20b7813`
 **Date:** March 3, 2026
@@ -23958,7 +24004,7 @@ The UserMenu in the header shows the "Admin" link only for `admin` and `curator`
 
 ---
 
-## Section 76 — RegisterForm Success Message Fix + Zustand Singleton Deep-Dive
+## 76. RegisterForm Success Message Fix + Zustand Singleton Deep-Dive
 
 **Commit:** `8a820b4`
 **Date:** March 3, 2026
@@ -24062,7 +24108,7 @@ The `reset()` on mount approach is idiomatic, minimal, and has no side effects.
 
 ---
 
-## Section 77 — Project State After All Post-Layer-6 Fixes
+## 77. Project State After All Post-Layer-6 Fixes
 
 ### 77.1  Commits Landed Since b09d88e
 
@@ -24151,7 +24197,7 @@ All layers 0–6 are complete and enterprise-grade.
 
 ---
 
-## Section 78 — Auth-Guarded Analyse CTA + Real Subscriber Endpoint + NavLinks Server Component
+## 78. Auth-Guarded Analyse CTA + Real Subscriber Endpoint + NavLinks Server Component
 
 **Commits:** `47245da`, `391e62e`
 **Date:** March 3, 2026
@@ -24239,7 +24285,7 @@ Static links have no runtime behaviour. Every `"use client"` component in the la
 
 ---
 
-## Section 79 — Three New Public Pages + Subscriber Admin Panel + Next.js Route Handler
+## 79. Three New Public Pages + Subscriber Admin Panel + Next.js Route Handler
 
 **Commit:** `932a67f`
 **Date:** March 3, 2026
@@ -24356,7 +24402,7 @@ export async function GET() {
 
 ---
 
-## Section 80 — Post-Layer-7-Prep Bug Fixes and New Feature Additions (Current Session)
+## 80. Post-Layer-7-Prep Bug Fixes and New Feature Additions (Current Session)
 
 **Date:** March 3, 2026
 **Commits:** uncommitted (pre-push batch)
@@ -24495,7 +24541,7 @@ When a user marks an analysis as wrong and suggests the correct CN type, this is
 
 ---
 
-## Section 81 — Five New Backend Routes (explore, admin feedback, admin analyses, chat + PDF fix)
+## 81. Five New Backend Routes (explore, admin feedback, admin analyses, chat + PDF fix)
 
 **Files:** `src/api/routes/explore.py`, `src/api/routes/admin.py`, `src/api/routes/chat.py`, `src/api/main.py`
 **Date:** March 3, 2026
@@ -24644,7 +24690,7 @@ app.include_router(chat_router)       # POST /api/chat    (public)
 
 ---
 
-## Section 82 — Frontend: Explore Rewrite, Admin Panels, AI Chat Page, Chat in NavLinks
+## 82. Frontend: Explore Rewrite, Admin Panels, AI Chat Page, Chat in NavLinks
 
 **Date:** March 3, 2026
 
@@ -24845,7 +24891,7 @@ The chat is public — no account required. It's a discovery feature that builds
 
 ---
 
-## Section 83 — Admin Access Guide + New TypeScript Types + Project State
+## 83. Admin Access Guide + New TypeScript Types + Project State
 
 **Date:** March 3, 2026
 
@@ -25027,7 +25073,7 @@ app/
 
 ---
 
-## Section 84  Enterprise Chat Page Redesign v2
+## 84. Enterprise Chat Page Redesign v2
 
 **Date:** March 3, 2026  
 **Commit:** `06116a5`  
@@ -25096,7 +25142,7 @@ These are the same 5 semantic chunk types as in `rag_engine.py`. The frontend mi
 
 ---
 
-## Section 85  TutorialModal: Floating Help Guide
+## 85. TutorialModal: Floating Help Guide
 
 **Date:** March 3, 2026  
 **Commit:** `06116a5`  
@@ -25146,7 +25192,7 @@ This ensures the "?" button is available on every page without each page needing
 
 ---
 
-## Section 86  AI Chat CTA in AnalysisPanel
+## 86. AI Chat CTA in AnalysisPanel
 
 **Date:** March 3, 2026  
 **Commit:** `06116a5`  
@@ -25194,7 +25240,7 @@ const chatUrl = `/chat?q=${encodeURIComponent(
 
 ---
 
-## Section 87  Admin Access Restriction Page
+## 87. Admin Access Restriction Page
 
 **Date:** March 3, 2026  
 **Commit:** `06116a5`  
@@ -25236,7 +25282,7 @@ Prevents typos in the psql command. The session already has the email; using it 
 
 ---
 
-## Section 88  Bug Fixes: PDF Download, Sources Blank, Scroll Issues
+## 88. Bug Fixes: PDF Download, Sources Blank, Scroll Issues
 
 **Date:** March 3, 2026  
 **Session:** Pre-chat-history session (bugs reported by user during live testing)
@@ -25372,7 +25418,7 @@ useEffect(() => {
 
 ---
 
-## Section 89  Chat Session History: Backend
+## 89. Chat Session History: Backend
 
 **Date:** March 3, 2026  
 **Session:** Current (uncommitted)  
@@ -25517,7 +25563,7 @@ The router already has prefix `/api/chat/sessions` baked in so no extra prefix i
 
 ---
 
-## Section 90  Chat Session History: Frontend
+## 90. Chat Session History: Frontend
 
 **Date:** March 3, 2026  
 **Session:** Current (uncommitted)  
@@ -25706,7 +25752,7 @@ try {
 
 ---
 
-## Section 91  TypeScript Fix: ES2018 dotAll Regex Flag
+## 91. TypeScript Fix: ES2018 dotAll Regex Flag
 
 **Date:** March 3, 2026  
 **File:** `frontend/components/coin/AnalysisPanel.tsx`
@@ -25739,7 +25785,7 @@ const vd = result.visual_description
 
 ---
 
-## Section 92  Project State After March 3 Session
+## 92. Project State After March 3 Session
 
 **Date:** March 3, 2026
 
@@ -25852,7 +25898,7 @@ GET  /api/admin/analyses           All analyses cross-user (admin/curator)
 
 ---
 
-## Section 93  Prior Session Polish (commit d7f2052)
+## 93. Prior Session Polish (commit d7f2052)
 
 **Date:** March 34, 2026  
 **Commit:** `d7f2052`
@@ -25916,7 +25962,7 @@ All external Corpus Nummorum links now show a Radix UI `Tooltip` on hover with "
 
 ---
 
-## Section 94  Bug 31: PDF Download Broken in History Table (All Roles)
+## 94. Bug 31: PDF Download Broken in History Table (All Roles)
 
 **Date:** March 4, 2026  
 **Commit:** `3be7e42`  
@@ -25952,7 +25998,7 @@ window.open(pdfDownloadUrl(row.pdf_url!), "_blank", "noopener,noreferrer");
 
 ---
 
-## Section 95  Bug 32: /analyse Accessible Without Authentication
+## 95. Bug 32: /analyse Accessible Without Authentication
 
 **Date:** March 4, 2026  
 **Commit:** `3be7e42`  
@@ -26000,7 +26046,7 @@ Unauthenticated users are now redirected to `/login?callbackUrl=/analyse`. After
 
 ---
 
-## Section 96  Mobile Responsiveness: TutorialModal + AgentPipeline
+## 96. Mobile Responsiveness: TutorialModal + AgentPipeline
 
 **Date:** March 4, 2026  
 **Commit:** `3be7e42`  
@@ -26112,7 +26158,7 @@ All 5 agents are now visible on a 375px iPhone SE screen.
 
 ---
 
-## Section 97  Enterprise Email Subscription Confirmation System
+## 97. Enterprise Email Subscription Confirmation System
 
 **Date:** March 4, 2026  
 **Commit:** `3be7e42`  
@@ -26224,7 +26270,7 @@ The FastAPI `/confirm` endpoint returns a plain HTML page (works in email client
 
 ---
 
-## Section 98  Project State After March 4 Session
+## 98. Project State After March 4 Session
 
 **Date:** March 4, 2026  
 **Commit:** `3be7e42`
@@ -26330,7 +26376,7 @@ frontend/app/
 
 ---
 
-## Section 99  Bug 33: PDF Download 404 on Windows  Full Backslash Path in URL
+## 99. Bug 33: PDF Download 404 on Windows  Full Backslash Path in URL
 
 **Date:** March 4, 2026
 **Commits:** `5d03ccb`
@@ -26468,7 +26514,7 @@ During Layer 3 and 4 development the test pipeline (`scripts/test_pipeline.py`) 
 
 ---
 
-## Section 100  Bug 34: Stale PDF Download Button Persists Into New Analysis
+## 100. Bug 34: Stale PDF Download Button Persists Into New Analysis
 
 **Date:** March 4, 2026
 **Commit:** `5d03ccb`
@@ -26549,7 +26595,7 @@ But `handleAnalyse()` calls `setPhase("uploading")` directly (not `reset()`), so
 
 ---
 
-## Section 101  Admin Dashboard Enterprise Redesign v2
+## 101. Admin Dashboard Enterprise Redesign v2
 
 **Date:** March 4, 2026
 **Commit:** `5d03ccb`
@@ -26695,7 +26741,7 @@ This is intentional for a development environment  the admin is always the devel
 
 ---
 
-## Section 102  Bug 35: Admin Page 401 Race Condition (useQuery Before SessionSync)
+## 102. Bug 35: Admin Page 401 Race Condition (useQuery Before SessionSync)
 
 **Date:** March 4, 2026
 **Commit:** `77edb66`
@@ -26823,7 +26869,7 @@ Any future authenticated `useQuery` in the codebase should include the same guar
 
 ---
 
-## Section 103  Project State After March 4 Session (Bug Fix Batch)
+## 103. Project State After March 4 Session (Bug Fix Batch)
 
 **Date:** March 4, 2026
 **Commits:** `5d03ccb` (Bug 33/34 + admin redesign), `77edb66` (Bug 35  401 race)
@@ -26936,7 +26982,7 @@ Zustand's `set()` merges into existing state. Calling `set({ phase })` leaves al
 
 ---
 
-## Section 104  Bug 36: AI Chat Returns Empty / Useless Responses ("Added Nothing")
+## 104. Bug 36: AI Chat Returns Empty / Useless Responses ("Added Nothing")
 
 **Date:** March 4, 2026
 **Commit:** `1b3b84c`
@@ -27097,7 +27143,7 @@ Even without an LLM, the structured fallback now returns the complete CN record 
 
 ---
 
-## Section 105  Bug 37: Blob URL ERR_FILE_NOT_FOUND in Console (React Strict Mode)
+## 105. Bug 37: Blob URL ERR_FILE_NOT_FOUND in Console (React Strict Mode)
 
 **Date:** March 4, 2026
 **Commit:** `1b3b84c`
@@ -27205,7 +27251,7 @@ The original `useMemo` pattern was introduced to prevent blob URL leaks from inl
 
 ---
 
-## Section 106  Bug 38: "Mark as Wrong" Button Invisible and Non-Clickable-Looking
+## 106. Bug 38: "Mark as Wrong" Button Invisible and Non-Clickable-Looking
 
 **Date:** March 4, 2026
 **Commit:** `1b3b84c`
@@ -27264,7 +27310,7 @@ The open state was left as-is (`rgba(239,68,68,0.14)` / `#f87171`)  it already a
 
 ---
 
-## Section 107  Project State After March 4 Afternoon Session
+## 107. Project State After March 4 Afternoon Session
 
 **Date:** March 4, 2026
 **Commit:** `1b3b84c`  chat prompt re-engineering + blob URL fix + Mark-as-Wrong visibility
@@ -27344,7 +27390,7 @@ output: grounded analysis citing [CONTEXT N] for KB facts,
 
 ---
 
-## Section 108  Bugs 39 & 40 + AI Chat Context and CTA Enhancements
+## 108. Bugs 39 & 40 + AI Chat Context and CTA Enhancements
 
 **Date:** March 4, 2026
 **Commit:** `2e4d4f1`
@@ -27473,7 +27519,7 @@ This reframes low confidence as an invitation to explore rather than a failure s
 
 ---
 
-## Section 109  [CONTEXT N] Root-Fix, Web Search Fallback, KB Discovery Explore Page
+## 109. [CONTEXT N] Root-Fix, Web Search Fallback, KB Discovery Explore Page
 
 **Date:** March 4, 2026
 **Commit:** `bf25de3`
@@ -27694,7 +27740,7 @@ Users consistently misread low confidence scores as "the model is broken" or "th
 
 ---
 
-## Section 110  Bug 41 & Bug 42: Dead Server + LLM Section-Header Leakage
+## 110. Bug 41 & Bug 42: Dead Server + LLM Section-Header Leakage
 
 **Date:** March 4, 2026
 **Commit:** `d823ad0`
@@ -27826,7 +27872,7 @@ No `[CONTEXT N]`, no `=== ===`, no "based on the record" — clean expert prose.
 
 ---
 
-## Section 111  Project State After March 4 Evening Session
+## 111. Project State After March 4 Evening Session
 
 **Date:** March 4, 2026
 **Commits:** `2e4d4f1` → `bf25de3` → `d823ad0`
@@ -27950,7 +27996,7 @@ Target: **50+ total tests**, CI/CD gate on every push to `main`.
 
 ---
 
-## Section 112 — Bugs 43 & 44: Hallucination Guards
+## 112. Bugs 43 & 44: Hallucination Guards
 
 **Date:** March 4, 2026 (night session)
 **Commit:** `4d1b0de`
@@ -28162,7 +28208,7 @@ Generation history:
 
 ---
 
-## Section 113 — Project State: March 4, 2026 (End of Night Session)
+## 113. Project State: March 4, 2026 (End of Night Session)
 
 ### 113.1  Bug Catalogue — Complete Record (Bugs 1–44)
 
@@ -28323,7 +28369,7 @@ Target: **50+ total tests**, CI/CD gate on every push. Say: "Start Layer 7 — T
 
 ---
 
-## Section 114 — The JWT Authentication System: Complete First-Principles Reference
+## 114. The JWT Authentication System: Complete First-Principles Reference
 
 ### 114.1 — Why Authentication Exists at All
 
@@ -28634,7 +28680,7 @@ Role is stored in the `users` table in PostgreSQL and embedded in the JWT. On ev
 
 ---
 
-## Section 115 — The RAG Engine and AI Chat Pipeline: Complete Technical Reference
+## 115. The RAG Engine and AI Chat Pipeline: Complete Technical Reference
 
 ### 115.1 — What RAG Is and Why We Built It
 
@@ -28968,7 +29014,7 @@ return ChatResponse(
 
 ---
 
-## Section 116 — Security Architecture: Every Defence Layer Explained
+## 116. Security Architecture: Every Defence Layer Explained
 
 ### Overview
 
@@ -29209,7 +29255,7 @@ Docker containers run as root by default. If an attacker achieves remote code ex
 
 ---
 
-## Section 117 — Database Schema: Every Table, Column, and Constraint
+## 117. Database Schema: Every Table, Column, and Constraint
 
 DeepCoin uses **PostgreSQL** for production (managed via SQLAlchemy async + Alembic) and **SQLite** for the lightweight dev-mode store.
 
@@ -29413,7 +29459,7 @@ Alembic tracks the current migration state in the `alembic_version` table (one r
 
 ---
 
-## Section 118 — Configuration and Environment Variable Reference
+## 118. Configuration and Environment Variable Reference
 
 Every environment variable in DeepCoin, its purpose, security classification, and how it flows through the system.
 
@@ -29518,7 +29564,7 @@ python -c "import secrets; print(secrets.token_urlsafe(24))"
 
 ---
 
-## Section 119 — End-to-End Request Trace: Upload to PDF in One Journey
+## 119. End-to-End Request Trace: Upload to PDF in One Journey
 
 This section traces a single coin classification request from the browser's "Analyse" button click to the PDF download link appearing in the UI. Every hop, every transformation, every decision is documented.
 
@@ -29627,7 +29673,7 @@ The LLM call dominates. Every other component is under 500ms.
 
 ---
 
-## Section 120 — Bug Pattern Analysis: 44 Bugs, 44 Lessons
+## 120. Bug Pattern Analysis: 44 Bugs, 44 Lessons
 
 This section organises all 44 fixed bugs into taxonomic categories and extracts engineering principles to prevent each category.
 
@@ -29752,7 +29798,7 @@ The most expensive bugs (in debugging time) were B and H: they produced confusin
 
 ---
 
-## Section 121 — Complete Runbook: Running DeepCoin from Zero
+## 121. Complete Runbook: Running DeepCoin from Zero
 
 This section is a complete operational guide. Following these steps produces a running DeepCoin instance from a fresh machine.
 
@@ -29981,7 +30027,7 @@ python scripts/test_pipeline.py
 
 ---
 
-## Section 122 â€” Bug 45: Admin "All Analyses" Returns Empty (Missing `Path` Import)
+## 122. â€” Bug 45: Admin "All Analyses" Returns Empty (Missing `Path` Import)
 
 **Date:** March 4, 2026  
 **Commit:** `0aee7b9`  
@@ -30096,7 +30142,7 @@ GET /api/admin/analyses   (proxied Next.js â†’ FastAPI)
 
 ---
 
-## Section 123 â€” Chat State Persistence: Module-Level Cache Architecture
+## 123. â€” Chat State Persistence: Module-Level Cache Architecture
 
 **Date:** March 4, 2026  
 **Commit:** `0aee7b9`  
@@ -30279,7 +30325,7 @@ User presses F5 (hard refresh)
 
 ---
 
-## Section 124 â€” Conversation Memory: End-to-End Multi-Turn AI Chat
+## 124. â€” Conversation Memory: End-to-End Multi-Turn AI Chat
 
 **Date:** March 4, 2026  
 **Commit:** `0aee7b9`  
@@ -30543,7 +30589,7 @@ setMessages([...messages, { role: "assistant", content: "The standard denarius..
 
 ---
 
-## Section 125 â€” Admin Users CRUD: Complete Technical Reference
+## 125. â€” Admin Users CRUD: Complete Technical Reference
 
 **Date:** March 4, 2026  
 **Commit:** `0aee7b9`  
@@ -30923,7 +30969,7 @@ All self-protection guards are enforced server-side. A raw HTTP request bypassin
 
 ---
 
-## Section 126 â€” Navbar Active State: `usePathname` Pattern
+## 126. â€” Navbar Active State: `usePathname` Pattern
 
 **Date:** March 4, 2026  
 **Commit:** `0aee7b9`  
@@ -31099,7 +31145,7 @@ User navigates to /admin:
 
 ---
 
-## Section 127 â€” Project State After March 4 Evening Session
+## 127. â€” Project State After March 4 Evening Session
 
 **Commit:** `0aee7b9`  
 **Date:** March 4, 2026
@@ -31256,7 +31302,7 @@ ADMIN PAGE (admin/page.tsx)
 
 ---
 
-## Section 128 -- Prompt Injection Guard (ChatMessage Literal Role Validation)
+## 128. - Prompt Injection Guard (ChatMessage Literal Role Validation)
 
 ### What Changed
 
@@ -31356,7 +31402,7 @@ curl -s -X POST http://127.0.0.1:8000/api/chat \
 
 ---
 
-## Section 129 -- Stale Comment Cleanup (classify.py)
+## 129. - Stale Comment Cleanup (classify.py)
 
 ### What Changed
 
@@ -31396,7 +31442,7 @@ plumbing implementation that callers do not need to know.
 
 ---
 
-## Section 130 -- Explore Page date_range Empty String Bug (kb.py)
+## 130. - Explore Page date_range Empty String Bug (kb.py)
 
 ### What Changed
 
@@ -31456,7 +31502,7 @@ at database build time. Added to the Layer 7 backlog.
 
 ---
 
-## Section 131 -- Chat SSE Streaming (POST /api/chat/stream)
+## 131. - Chat SSE Streaming (POST /api/chat/stream)
 
 ### The Problem
 
@@ -31672,7 +31718,7 @@ curl -s -N -X POST http://127.0.0.1:8000/api/chat/stream \
 
 ---
 
-## Section 132 -- Project State After This Session
+## 132. - Project State After This Session
 
 ### Files Changed
 
@@ -31725,7 +31771,7 @@ curl -s -N -X POST http://127.0.0.1:8000/api/chat/stream \
 *Section 132: Project state -- 7 files changed, 46/46 tests, 0 TS errors, Layer 7 next.*
 ---
 
-## Section 133 -- The JWT Expiry Problem (What Was Broken)
+## 133. - The JWT Expiry Problem (What Was Broken)
 
 ### The Failed UX Scenario
 
@@ -31776,7 +31822,7 @@ refresh token rotation. The frontend had zero plumbing to use it.
 
 ---
 
-## Section 134 -- The Backend Was Already Complete (POST /auth/refresh)
+## 134. - The Backend Was Already Complete (POST /auth/refresh)
 
 ### What Was There
 
@@ -31826,7 +31872,7 @@ backend investment was unreachable from the client.
 
 ---
 
-## Section 135 -- JWT Refresh: Full Frontend Architecture
+## 135. - JWT Refresh: Full Frontend Architecture
 
 ### Architecture Diagram
 
@@ -31960,7 +32006,7 @@ outside React). The bridge is a simple function pointer set on mount.
 
 ---
 
-## Section 136 -- Confirm-Subscription UX Cleanup
+## 136. - Confirm-Subscription UX Cleanup
 
 ### What Was There
 
@@ -32040,7 +32086,7 @@ Simplified: one clear state > two states with one that is dead.
 
 ---
 
-## Section 137 -- Docker Base Image CVE Remediation
+## 137. - Docker Base Image CVE Remediation
 
 ### Threat Model
 
@@ -32114,7 +32160,7 @@ image bytes. Added to the Layer 7 CI checklist.
 
 ---
 
-## Section 138 -- Project State After This Session
+## 138. - Project State After This Session
 
 ### Files Changed or Created
 
@@ -32196,7 +32242,7 @@ A: _refreshing flag + _refreshQueue. The first 401 sets _refreshing=true and
 *Section 138: Project state -- 9 files changed, 46/46 tests, 0 TS errors, 10 CVEs eliminated.*
 ---
 
-## Section 139 -- Layer 7: Why Tests and CI Are Non-Negotiable
+## 139. - Layer 7: Why Tests and CI Are Non-Negotiable
 
 ### The Problem Being Solved
 
@@ -32252,7 +32298,7 @@ Playwright browser automation against a running Next.js + FastAPI stack. Not imp
 
 ---
 
-## Section 140 -- Integration Test Architecture: The Mock Stack
+## 140. - Integration Test Architecture: The Mock Stack
 
 ### The Core Problem
 
@@ -32378,7 +32424,7 @@ def _reset_rate_limiter():
 
 ---
 
-## Section 141 -- Three Bugs Found During Layer 7 Implementation
+## 141. - Three Bugs Found During Layer 7 Implementation
 
 ### Bug T1 -- pytest-asyncio Not Installed
 
@@ -32430,7 +32476,7 @@ SQLAlchemy 2.x made delete() an async coroutine. The mock must be async.
 
 ---
 
-## Section 142 -- GitHub Actions CI Pipeline
+## 142. - GitHub Actions CI Pipeline
 
 ### Why GitHub Actions (not CircleCI / Jenkins)
 
@@ -32510,7 +32556,7 @@ If two commits are pushed rapidly to the same branch, the first CI run is cancel
 
 ---
 
-## Section 143 -- Final Project State After Layer 7
+## 143. - Final Project State After Layer 7
 
 ### Test Coverage Summary
 
@@ -32574,7 +32620,7 @@ If two commits are pushed rapidly to the same branch, the first CI run is cancel
 
 ---
 
-## Section 144 — `tests/integration/conftest.py`: Complete Annotation, Every Line, Every Decision
+## 144. `tests/integration/conftest.py`: Complete Annotation, Every Line, Every Decision
 
 ### What This File Is
 
@@ -32931,7 +32977,7 @@ Without `pytest-asyncio` installed, this option is silently ignored (Bug T1 from
 
 ---
 
-## Section 145 — `tests/integration/test_health.py`: Every Test Explained In Full
+## 145. `tests/integration/test_health.py`: Every Test Explained In Full
 
 ### Overview
 
@@ -33124,7 +33170,7 @@ A future engineer changing the endpoint to return JSON (which would break all Pr
 
 ---
 
-## Section 146 — `tests/integration/test_classify.py`: Every Test, Every Defence Layer
+## 146. `tests/integration/test_classify.py`: Every Test, Every Defence Layer
 
 ### Overview
 
@@ -33357,7 +33403,7 @@ assert response.status_code != 500
 
 ---
 
-## Section 147 — `test_history.py`, `test_chat_security.py`, `test_auth_flow.py`: Full Deep Dive
+## 147. `test_history.py`, `test_chat_security.py`, `test_auth_flow.py`: Full Deep Dive
 
 ### `test_history.py` — 270 Lines, 5 Classes, 9 Tests
 
@@ -33626,7 +33672,7 @@ Returns 401, not 403 — the client is unauthenticated (no token presented), not
 
 ---
 
-## Section 148 — `.github/workflows/ci.yml`: Every YAML Key Explained
+## 148. `.github/workflows/ci.yml`: Every YAML Key Explained
 
 ### File: `.github/workflows/ci.yml` — 200 Lines
 
@@ -33834,7 +33880,7 @@ frontend-ci:
 
 ---
 
-## Section 149 — `pyproject.toml` Deep Dive + `asyncio_mode` + Complete Project State
+## 149. `pyproject.toml` Deep Dive + `asyncio_mode` + Complete Project State
 
 ### What `pyproject.toml` Is and Why It Replaced `setup.py`
 
@@ -34102,7 +34148,7 @@ pytest session starts
 
 ---
 
-## Section 150  A+++ Frontend Quality Audit: Methodology, Grading, and the Six Fixes
+## 150. A+++ Frontend Quality Audit: Methodology, Grading, and the Six Fixes
 
 *Added: March 5, 2026. Commit: `c6e3438`.*
 
@@ -34182,7 +34228,7 @@ frontend/components/home/EmailCapture.tsx   checked response handling
 
 ---
 
-## Section 151  Screenshot False-Positive Fix: Signal 2 Tightening + Signal 3 Removal
+## 151. Screenshot False-Positive Fix: Signal 2 Tightening + Signal 3 Removal
 
 *Added: March 5, 2026. Commit: `c6e3438`.*
 
@@ -34274,7 +34320,7 @@ After the fix, Signal 3 is gone and Signal 2 only fires on images within 3% of a
 
 ---
 
-## Section 152  RAG Engine Date Dual-Key Fallback (`rag_engine.py`)
+## 152. RAG Engine Date Dual-Key Fallback (`rag_engine.py`)
 
 *Added: March 5, 2026. Commit: `c6e3438`.*
 
@@ -34377,7 +34423,7 @@ Without a date, the LLM has no temporal anchor. It cannot write "this coin was s
 
 ---
 
-## Section 153  `classify.py` Step-8 Stale Comment: Audit Events Clarification
+## 153. `classify.py` Step-8 Stale Comment: Audit Events Clarification
 
 *Added: March 5, 2026. Commit: `c6e3438`.*
 
@@ -34449,7 +34495,7 @@ The separation exists because compliance requirements ("what happened, when, and
 
 ---
 
-## Section 154  `/docs` Page Replacement: From 433-Line Static Duplicate to One-Line Redirect
+## 154. `/docs` Page Replacement: From 433-Line Static Duplicate to One-Line Redirect
 
 *Added: March 5, 2026. Commit: `c6e3438`.*
 
@@ -34547,7 +34593,7 @@ Using `fallback` ensures that Next.js's own route handlers (`/api/auth/**` for N
 
 ---
 
-## Section 155  `/confirm-subscription` Dead Code Removal
+## 155. `/confirm-subscription` Dead Code Removal
 
 *Added: March 5, 2026. Commit: `c6e3438`.*
 
@@ -34622,7 +34668,7 @@ The comment `"To restore: see git history at commit 391e62e"` means a future dev
 
 ---
 
-## Section 156  `GET /api/admin/stats`: Live Route Distribution Analytics Endpoint
+## 156. `GET /api/admin/stats`: Live Route Distribution Analytics Endpoint
 
 *Added: March 5, 2026. Commit: `c6e3438`.*
 
@@ -34804,7 +34850,7 @@ async def get_admin_stats(
 
 ---
 
-## Section 157  `AdminStatsResponse` + `getAdminStats()` + OverviewTab Route Chart
+## 157. `AdminStatsResponse` + `getAdminStats()` + OverviewTab Route Chart
 
 *Added: March 5, 2026. Commit: `c6e3438`.*
 
@@ -34946,7 +34992,7 @@ These two numbers let an operator answer: "Is the system performing well on aver
 
 ---
 
-## Section 158 — Enterprise-Grade Project Critique: Honest Assessment and Identified Gaps
+## 158. Enterprise-Grade Project Critique: Honest Assessment and Identified Gaps
 
 *Added: March 5, 2026. Written as a senior engineer reviewing the project before production deployment.*
 
@@ -35045,7 +35091,7 @@ ollama pull qwen3-vl:4b
 
 ---
 
-## Section 159 — Project State After A+++ Audit Session (HEAD: `c6e3438`)
+## 159. Project State After A+++ Audit Session (HEAD: `c6e3438`)
 
 *Added: March 5, 2026.*
 
@@ -36418,7 +36464,7 @@ services:
 
 ---
 
-## Section 160 — Dashboard "Member Since" Fix (auth chain `created_at` propagation)
+## 160. Dashboard "Member Since" Fix (auth chain `created_at` propagation)
 
 **Date**: March 2026 | **Commit**: `8eb9b3c`
 
@@ -36522,7 +36568,7 @@ If you add a field to step 1 but not step 2, the session object never sees it. I
 
 ---
 
-## Section 161 — Chat Memory Fix (non-numismatic guard bypass for conversation history)
+## 161. Chat Memory Fix (non-numismatic guard bypass for conversation history)
 
 **Date**: March 2026 | **Commit**: `8eb9b3c`
 
@@ -36607,7 +36653,7 @@ This strictly respects the anti-spam intent of the guard while enabling coherent
 
 ---
 
-## Section 162 — Google/Scholar Always Visible (userQuery restoration on session reload)
+## 162. Google/Scholar Always Visible (userQuery restoration on session reload)
 
 **Date**: March 2026 | **Commit**: `8eb9b3c`
 
@@ -36684,7 +36730,7 @@ The correct approach:
 
 ---
 
-## Section 163 — Complete Auth Flow (resend verification, forgot password, reset password, verify email)
+## 163. Complete Auth Flow (resend verification, forgot password, reset password, verify email)
 
 **Date**: March 2026 | **Commit**: `8eb9b3c`
 
@@ -36937,7 +36983,7 @@ The auth router now exposes **9 endpoints**:
 
 ---
 
-## Section 164 — Status After Commit `8eb9b3c`
+## 164. Status After Commit `8eb9b3c`
 
 ### 67.1 Completed This Session
 
@@ -37009,7 +37055,7 @@ services:
 
 ---
 
-## Section 165  A+++ Production Roadmap: Six Gaps to Enterprise-Grade
+## 165. A+++ Production Roadmap: Six Gaps to Enterprise-Grade
 
 **Date**: March 5, 2026 | **Status**: ACTIVE TODO  pick items to implement in order
 
@@ -37189,7 +37235,7 @@ grafana:
 
 ---
 
-## Section 166  MLflow Experiment Tracking: Full Implementation
+## 166. MLflow Experiment Tracking: Full Implementation
 
 **Date**: March 5, 2026 | **Commit**: TBD | **Status**:  COMPLETE
 
@@ -37353,7 +37399,7 @@ No other PFE candidate has this. It turns your training results from a claim int
 
 ---
 
-## Section 167  Grad-CAM Explainability: Heatmaps in the PDF Report
+## 167. Grad-CAM Explainability: Heatmaps in the PDF Report
 
 **Date**: March 5, 2026 | **Commit**: TBD | **Status**:  COMPLETE
 
@@ -37743,7 +37789,7 @@ This is why explainability is not a cosmetic feature  it is an engineering tool 
 
 ---
 
-## Section 168  How to Test the Live App  MLflow, Grad-CAM, and Active Learning
+## 168. How to Test the Live App  MLflow, Grad-CAM, and Active Learning
 
 *Date: March 6, 2026 | Relates to commits: ce6c2f9 (MLflow + Grad-CAM), Active Learning (this session)*
 
@@ -37973,7 +38019,7 @@ No curl or Postman needed.
 
 ---
 
-## Section 169  Active Learning Loop  Engineering Design and Full Implementation
+## 169. Active Learning Loop  Engineering Design and Full Implementation
 
 *Date: March 6, 2026 | Status: COMPLETE (A+++ Gap 3)*
 
@@ -38326,7 +38372,7 @@ every other PFE at ESPRIT this year.
 
 ---
 
-## Section 170  `src/core/gradcam.py`  Complete Annotated Reference
+## 170. `src/core/gradcam.py`  Complete Annotated Reference
 
 *Date: March 6, 2026 | Relates to commit: ce6c2f9*
 
@@ -38519,7 +38565,7 @@ This means the system degrades GRACEFULLY  no crash, no error, just no heatmap.
 
 ---
 
-## Section 171  `scripts/train.py` MLflow Integration  Full Annotated Reference
+## 171. `scripts/train.py` MLflow Integration  Full Annotated Reference
 
 *Date: March 6, 2026 | Relates to commit: ce6c2f9*
 
@@ -38676,7 +38722,7 @@ This lets you see "deepcoin-cnn v3" in the registry and compare it to
 
 ---
 
-## Section 172  Complete File Communication Map — How Every File Talks to Every Other File
+## 172. Complete File Communication Map — How Every File Talks to Every Other File
 
 *This section is the "if a baby reads this they can rebuild everything" reference.*
 *Updated: March 6, 2026*
@@ -38931,7 +38977,7 @@ Browser → NGINX (TLS termination, max_body_size 5MB, rate limiting)
 
 ---
 
-## Section 173  Project State After March 6 Session
+## 173. Project State After March 6 Session
 
 *Date: March 6, 2026 | Git HEAD: `4376df3`*
 
@@ -39005,7 +39051,7 @@ samples vs 300 corrections).  The system is robust to occasional noise."
 
 ---
 
-## Section 174  Swagger 500 Fix — `response_class=None` in `active_learning.py`
+## 174. Swagger 500 Fix — `response_class=None` in `active_learning.py`
 
 *Date: March 6, 2026 | Commit: `a96e32e` | File: `src/api/routes/active_learning.py`*
 
@@ -39109,7 +39155,7 @@ invisible during development if you never open the docs page.
 
 ---
 
-## Section 175  Grad-CAM on the Web UI — End-to-End Engineering
+## 175. Grad-CAM on the Web UI — End-to-End Engineering
 
 *Date: March 6–7, 2026 | Commit: `a96e32e` | Files: 7*
 
@@ -39620,7 +39666,7 @@ to learn more (CN link)."
 
 ---
 
-## Section 176  Bug Fix — `inference_time_ms` Always Zero in the CNN Card
+## 176. Bug Fix — `inference_time_ms` Always Zero in the CNN Card
 
 *Date: March 7, 2026 | Commit: `f636759` | File: `src/agents/gatekeeper.py`*
 
@@ -39759,7 +39805,7 @@ onward will show correct timing values.
 
 ---
 
-## Section 177  A+++ Gaps Complete — Full Retrospective and Jury Preparation
+## 177. A+++ Gaps Complete — Full Retrospective and Jury Preparation
 
 *Date: March 7, 2026 | Commits: `ce6c2f9`, `2996a52`, `a96e32e`, `f636759`*
 
@@ -40005,7 +40051,7 @@ have for all 438 classes."
 
 ---
 
-## Section 178  CSP Bug — `img-src` Blocked Grad-CAM PNG from Loading
+## 178. CSP Bug — `img-src` Blocked Grad-CAM PNG from Loading
 
 *Date: March 7, 2026 | Commit: `fb9ad24` | File: `frontend/next.config.ts`*
 
@@ -40154,7 +40200,7 @@ rather than a runtime surprise.
 
 ---
 
-## Section 179  The 6 Production Gaps — "Good PFE" vs "Hire Immediately"
+## 179. The 6 Production Gaps — "Good PFE" vs "Hire Immediately"
 
 *Context: Senior-level analysis of what separates a strong internship project from
 an enterprise AI system.  These gaps were identified during a technical review
@@ -40512,7 +40558,7 @@ immediately, then watches the narrative generate token by token).
 
 ---
 
-## Section 180  The Gold Ticket Additions — Senior-Level Thinking
+## 180. The Gold Ticket Additions — Senior-Level Thinking
 
 *These are not bug fixes or requirement checlist items.  They are the additions
 that a technical reviewer stops on and says "this person thinks like an engineer,
@@ -40642,7 +40688,7 @@ RAG architecture at a measurable level.
 
 ---
 
-## Section 181  Production Standards Checklist — Where DeepCoin Stands
+## 181. Production Standards Checklist — Where DeepCoin Stands
 
 *An honest audit against the standards a senior ML engineer would apply.*
 
@@ -40777,7 +40823,7 @@ technical review of DeepCoin:*
 
 ---
 
-## Section 182  Project State After March 7 Session
+## 182. Project State After March 7 Session
 
 *Date: March 7, 2026 | Latest commit: `fb9ad24`*
 
@@ -40863,7 +40909,7 @@ async PostgreSQL with SQLAlchemy 2.x + Alembic migrations.
 
 ---
 
-## Section 183  Grad-CAM Border Attention — Root Cause, Diagnosis, and Fix
+## 183. Grad-CAM Border Attention — Root Cause, Diagnosis, and Fix
 
 *Date: March 6, 2026 | Commit: `b15c2b7` | Files: `src/core/gradcam.py`, `frontend/components/coin/AnalysisPanel.tsx`*
 
@@ -41123,7 +41169,7 @@ coarse 10×10 upsampling.
 
 ---
 
-## Section 184  Confidence Diagnosis: BNF Photograph Source Mismatch
+## 184. Confidence Diagnosis: BNF Photograph Source Mismatch
 
 *Date: March 2026 | Issue: In-distribution coins getting <30% confidence*
 
@@ -41352,7 +41398,7 @@ warning, which sets correct user expectations without misattributing the cause.
 
 ---
 
-## Section 185  Model Health Assessment: Should We Retrain?
+## 185. Model Health Assessment: Should We Retrain?
 
 *Date: March 7, 2026 | Triggered by: Gemini analysis of low-confidence predictions*
 
@@ -41547,7 +41593,7 @@ visually, which no amount of explanation communicates as clearly as the heatmap.
 
 ---
 
-## Section 186  PFE Strategy: Why We Stop Training at V3
+## 186. PFE Strategy: Why We Stop Training at V3
 
 *Date: March 7, 2026 | Source: Gemini recommendation + engineering audit*
 
@@ -41640,7 +41686,7 @@ statistical learning theory, (3) you have a clear path forward.
 
 ---
 
-## Section 187  Testing Guide: MLflow Experiment Tracking (Gap 1)
+## 187. Testing Guide: MLflow Experiment Tracking (Gap 1)
 
 *Date: March 7, 2026 | Gap: A+++ roadmap item 1 (complete but never demoed)*
 
@@ -41790,7 +41836,7 @@ The command `scripts/train.py --fast` is completely safe to run multiple times.
 
 ---
 
-## Section 188  Testing Guide: Active Learning Loop (Gap 3)
+## 188. Testing Guide: Active Learning Loop (Gap 3)
 
 *Date: March 7, 2026 | Gap: A+++ roadmap item 3 (complete but needs end-to-end test)*
 
@@ -42053,7 +42099,7 @@ see running) because it shows you understand the economics of production ML.
 
 ---
 
-## Section 189  Gap 4: Docker Compose Full Stack Wiring (7 Services)
+## 189. Gap 4: Docker Compose Full Stack Wiring (7 Services)
 
 **Date**: March 2026
 **Status**: COMPLETE
@@ -42258,7 +42304,7 @@ The api container has `start_period: 45s` because EfficientNet-B3 (350 MB) takes
 
 ---
 
-## Section 190  Enterprise README Overhaul: The Benchmark for Professional Documentation
+## 190. Enterprise README Overhaul: The Benchmark for Professional Documentation
 
 **Date**: March 7, 2026
 **Commit**: `9453067`
@@ -42341,7 +42387,7 @@ the *correct* framing (not "model failure").
 
 ---
 
-## Section 191  Gap 4 Explained Step By Step  What Is Docker and Why Does It Matter
+## 191. Gap 4 Explained Step By Step  What Is Docker and Why Does It Matter
 
 **Date**: March 7, 2026
 **Commits affecting this section**: `4fdb704` (docker-compose.yml, Dockerfile.mlflow, .env.example, Journal 189)
@@ -42724,7 +42770,7 @@ It is the nuclear reset. `docker compose down` (without `-v`) stops containers, 
 
 ---
 
-## Section 192  Dockerfile.api  Complete Annotated Engineering Reference
+## 192. Dockerfile.api  Complete Annotated Engineering Reference
 
 **File**: `Dockerfile.api` (134 lines)
 **Purpose**: Builds the production FastAPI + ML inference container.
@@ -42899,7 +42945,7 @@ with no added value.
 
 ---
 
-## Section 193  frontend/Dockerfile  Complete Annotated Engineering Reference
+## 193. frontend/Dockerfile  Complete Annotated Engineering Reference
 
 **File**: `frontend/Dockerfile` (128 lines)
 **Purpose**: Builds the production Next.js 15 container with a standalone node.js server.
@@ -42998,7 +43044,7 @@ team convention that makes audit logs and volume permissions predictable.
 
 ---
 
-## Section 194  Dockerfile.mlflow  Complete Annotated Engineering Reference
+## 194. Dockerfile.mlflow  Complete Annotated Engineering Reference
 
 **File**: `Dockerfile.mlflow` (77 lines)
 
@@ -43076,7 +43122,7 @@ to read artifacts back. Simpler client configuration.
 
 ---
 
-## Section 195  nginx/nginx.conf  Complete Annotated Engineering Reference
+## 195. nginx/nginx.conf  Complete Annotated Engineering Reference
 
 **File**: `nginx/nginx.conf` (231 lines)
 **Purpose**: Reverse proxy, TLS termination point, rate limiter, static cache.
@@ -43200,7 +43246,7 @@ files. Every Next.js page load after the first becomes instant (all JS already c
 
 ---
 
-## Section 196  How the 7 Services Communicate (Network Architecture)
+## 196. How the 7 Services Communicate (Network Architecture)
 
 ---
 
@@ -43291,7 +43337,7 @@ Docker network and CAN resolve `api` by service name. Bypassing Nginx here avoid
 
 ---
 
-## Section 197  MLflow Live Demo for the Encadrant  Step-by-Step with Real Proof
+## 197. MLflow Live Demo for the Encadrant  Step-by-Step with Real Proof
 
 **Goal**: Show the examiner a real, working ML experiment tracking system.
 **Time needed**: ~10 minutes (5 to run training, 5 to demo the UI)
@@ -43383,7 +43429,7 @@ same MLflow instance.
 
 ---
 
-## Section 198  Active Learning Live Demo for the Encadrant  Step-by-Step
+## 198. Active Learning Live Demo for the Encadrant  Step-by-Step
 
 **Goal**: Show that the system learns from its own mistakes  a core AI production feature.
 **Time needed**: ~5 minutes
@@ -43526,7 +43572,7 @@ agent  the pipeline is designed for it."
 
 ---
 
-## Section 199  Complete Project State After Gap 4 (March 7, 2026)
+## 199. Complete Project State After Gap 4 (March 7, 2026)
 
 ---
 
@@ -43649,7 +43695,7 @@ Everything is tested (122 tests), linted, and deployed on a CI/CD pipeline."
 
 ---
 
-## Section 200 — AI Leadership Handoff, Reality Audit & Enterprise P0 Critique (March 21, 2026)
+## 200. AI Leadership Handoff, Reality Audit & Enterprise P0 Critique (March 21, 2026)
 
 This section formally documents the transition of DeepCoin-Core's architectural leadership to a new AI session, and the execution of a Google/InstaDeep-tier "reality audit" identifying critical P0 architectural flaws overlooked in previous development phases.
 
@@ -43690,7 +43736,7 @@ An honest review of the codebase revealed that the documentation outpaced the ac
 
 ---
 
-## Section 201 — Forward Roadmap: Exact Unfinished Business & Unified Targets (March 21, 2026)
+## 201. Forward Roadmap: Exact Unfinished Business & Unified Targets (March 21, 2026)
 
 Based on a strict reality-check and cross-referencing with the `AI_LEAD_MEMORY.md` architectural audit, here is the combined, definitive list of unfinished business. 
 
@@ -43870,7 +43916,7 @@ When multiple developers or AI coding agents work on the same massive Enterprise
 
 
 
-## Section 200 — Gap 4 & 5: Enterprise Infrastructure, DevOps & Zero-Trust Observability (0-to-Hero)
+## 209. Gap 4 & 5: Enterprise Infrastructure, DevOps & Zero-Trust Observability (0-to-Hero)
 
 **Date:** March 2026
 **Author:** Senior AI Architect
@@ -43975,7 +44021,7 @@ We achieved full metrics streaming without ever lowering our security shields. T
 
 ---
 
-## 209. The Grand Architect's Masterclass: Complete Retrospective from Section 186 to 208 (0-to-Hero)
+## 210. The Grand Architect's Masterclass: Complete Retrospective from Section 186 to 208 (0-to-Hero)
 **Date:** March 25, 2026
 
 **Why This Section Exists**
