@@ -47,7 +47,7 @@ The backend's transactional email service has been completely refactored to use 
 - ✅ **Dashboard Unsubscribe Automation** — Real-time subscription state polling directly inside Next.js user dashboards.
 
 
-## Getting Started & Model Weights (For Reviewers & Recruiters)
+## Getting Started & Model Weights 
 
 > **MLOps Architectural Note:** Following enterprise repository best practices, the heavy `best_model.pth` (EfficientNet-B3 parameters ~40MB+) and ChromaDB `chroma_db_rag/` vector embeddings (~180MB+) are intentionally **not tracked in git**. A Git repository should host code and logic, not raw compiled weights.
 
