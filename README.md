@@ -56,7 +56,7 @@ If you are cloning this project to review the architecture, the entire pipeline 
 To run inference or spin up the web application locally for yourself:
 1. **Provide the Weights:** You will need to either:
    - Run the training pipeline locally via `python scripts/train.py` (requires raw dataset).
-   - **Reach out directly to Dhia Chaieb** for the pre-compiled `.pth` checkpoints and the raw `.json` knowledge-base corpus to inject into your `/models/` directory.
+   - **Reach out directly to me** for the pre-compiled `.pth` checkpoints and the raw `.json` knowledge-base corpus to inject into your `/models/` directory.
 2. **Environment:** Setup via `pip install -r requirements.txt` on a strict **Python 3.11** virtual environment (optimized heavily for PyTorch 2.6 + `asyncio` compatibility on Windows).
 3. **Boot:** Run `uvicorn src.api.main:app --port 8000` (FastAPI backend) and `npm run dev` in the `/frontend` directory (Next.js 15).
 
