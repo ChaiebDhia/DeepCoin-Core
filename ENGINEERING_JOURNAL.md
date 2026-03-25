@@ -62,7 +62,6 @@
 47. [Complete File Inventory: Every File, Every Function (2026)](#47-complete-file-inventory-every-file-every-function-2026)
 48. [End-to-End Data Flow: From Browser Click to PDF Download](#48-end-to-end-data-flow-from-browser-click-to-pdf-download)
 49. [Engineering Foundations: The "Why" Behind Every Technology](#49-engineering-foundations-the-why-behind-every-technology)
-50. [Enterprise DevOps, CI/CD, and Container Hardening (Layer 6 & Layer 7)](#209-enterprise-devops-cicd-and-container-hardening-layer-6--layer-7)
 
 50. [FastAPI Backend Architecture: Every File, Every Line, Every Decision](#50-fastapi-backend-architecture-every-file-every-line-every-decision)
 51. [Frontend Architecture Deep Dive: Every File, Every Pattern, Every Decision](#51-frontend-architecture-deep-dive-every-file-every-pattern-every-decision)
@@ -242,6 +241,8 @@
 208. [Project Memory Governance & Git Tracking (`AI_LEAD_MEMORY.md`)](#208-project-memory-governance-git-tracking-ai_lead_memorymd)
 209. [Gap 4 & 5: Enterprise Infrastructure, DevOps & Zero-Trust Observability (0-to-Hero)](#209-gap-4-5-enterprise-infrastructure-devops-zero-trust-observability-0-to-hero)
 210. [The Grand Architect's Masterclass: Complete Retrospective from Section 186 to 208 (0-to-Hero)](#210-the-grand-architects-masterclass-complete-retrospective-from-section-186-to-208-0-to-hero)
+211. [Enterprise DevOps, CI/CD, and Container Hardening (Layer 6 & Layer 7)](#211-enterprise-devops-cicd-and-container-hardening-layer-6--layer-7)
+
 
 ---
 
@@ -44085,7 +44086,7 @@ If you rebuild this project, remember the hierarchy:
 
 ---
 
-## 209. Enterprise DevOps, CI/CD, and Container Hardening (Layer 6 & Layer 7)
+## 211. Enterprise DevOps, CI/CD, and Container Hardening (Layer 6 & Layer 7)
 
 ### What We Did
 We successfully moved from a locally run application to a fully containerized, CI/CD-driven enterprise deployment architecture. This includes writing the complete Docker infrastructure (docker-compose.yml, Dockerfile.api, Dockerfile.mlflow, rontend/Dockerfile) and wiring GitHub Actions for Continuous Deployment (CD).
