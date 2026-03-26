@@ -54,7 +54,9 @@ When sections conflict, trust in this order: code/tests > this override block > 
 7. GitHub repo: `https://github.com/ChaiebDhia/DeepCoin-Core` | Branch: `main`
 8. Always assume the Python venv at `C:\Users\Administrator\deepcoin\venv\` is active.
 9. OS: Windows 11 | Shell: PowerShell 5.1 | Use `;` not `&&` to chain commands.
-10. GPU: NVIDIA RTX 3050 Ti, 4.3 GB VRAM | CUDA 12.4 | PyTorch 2.6.0+cu124
+10. GPU: NVIDIA RTX 3050 Ti, 4.3 GB VRAM | CUDA 12.4 | PyTorch 2.6.0+cu124\n
+11. **ENTERPRISE COMMIT STANDARDS**: All git commit messages must be strictly professional and adhere to Conventional Commits format (<type>(<scope>): <subject>). You MUST include a detailed body paragraph explaining the 'Why' (the engineering logic) and the 'How'. Never use basic one-liners. (e.g., eat(ops): harden container layers via alpine upgrade.\n\nMigrated Next.js from node:20 to node:22-alpine to resolve 9 HIGH CVEs...).
+ RTX 3050 Ti, 4.3 GB VRAM | CUDA 12.4 | PyTorch 2.6.0+cu124
 
 ---
 
