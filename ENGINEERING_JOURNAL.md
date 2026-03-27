@@ -222,6 +222,7 @@
 189. [Gap 4: Docker Compose Full Stack Wiring (7 Services)](#189-gap-4-docker-compose-full-stack-wiring-7-services)
 190. [Enterprise README Overhaul: The Benchmark for Professional Documentation](#190-enterprise-readme-overhaul-the-benchmark-for-professional-documentation)
 191. [Gap 4 Explained Step By Step  What Is Docker and Why Does It Matter](#191-gap-4-explained-step-by-step-what-is-docker-and-why-does-it-matter)
+191.5. [Architectural Clarification: Containerized Modular Monolith vs. True Microservices (0-to-Hero)](#1915-architectural-clarification-containerized-modular-monolith-vs-true-microservices-0-to-hero)
 192. [Dockerfile.api  Complete Annotated Engineering Reference](#192-dockerfileapi-complete-annotated-engineering-reference)
 193. [frontend/Dockerfile  Complete Annotated Engineering Reference](#193-frontenddockerfile-complete-annotated-engineering-reference)
 194. [Dockerfile.mlflow  Complete Annotated Engineering Reference](#194-dockerfilemlflow-complete-annotated-engineering-reference)
@@ -248,6 +249,7 @@
 215. [Deep Infrastructure Review & DevOps Modernization](#215-deep-infrastructure-review--devops-modernization)
 216. [Continuous Deployment, Automated Hardening & Architecture Security (0-to-Hero)](#216-continuous-deployment-automated-hardening--architecture-security-0-to-hero)
 217. [The Final Blueprint: Middleware Physics, Security Layers, & Missing Contexts (0-to-Hero Expansion)](#217-the-final-blueprint-middleware-physics-security-layers--missing-contexts-0-to-hero-expansion)
+218. [Enterprise Testing Matrix: Stage 1 & Stage 2 Execution Log](#218-enterprise-testing-matrix-stage-1--stage-2-execution-log)
 
 
 ---
@@ -42625,6 +42627,34 @@ It is the nuclear reset. `docker compose down` (without `-v`) stops containers, 
 
 ---
 
+
+## 191.5 Architectural Clarification: Containerized Modular Monolith vs. True Microservices (0-to-Hero)
+*Why call it a microservice if we didn't build one?*
+
+**The Context for Juniors**: When setting up Docker Compose with 7 different services (FastAPI, Next.js, Postgres, Redis, LocalStack, MLflow, Nginx), it's easy to assume we built a "Microservices Architecture." This is a common misconception.
+
+### What is a True Microservice?
+In a pure microservice architecture (like Netflix or Uber), the *backend itself* is split into dozens of tiny, independent APIs. For example, you would have:
+1. `Auth-Service` (Handles only JWTs)
+2. `User-Service` (Handles only DB user CRUD)
+3. `Inference-Service` (Runs only the PyTorch model)
+4. `RAG-Service` (Handles only ChromaDB and LLM calls)
+
+Each of these would have its own separate database, own GitHub repository, and communicate via message brokers (like Kafka or RabbitMQ).
+
+### What Did We Build?
+We built a **Containerized Modular Monolith** (or a **Service-Oriented Architecture**).
+- **Monolith**: Our FastAPI application (`src/api/main.py`) does *everything*. It handles Auth, AI Models, RAG, and User History all in one codebase and runs in a single container.
+- **Service-Oriented**: We isolated the *infrastructure dependencies* into their own system processes (Containers). Postgres runs in its own container; Redis runs in its own container; Next.js runs in its own container.
+
+### Why is DevOps "All About Microservices" Then?
+DevOps is about **Automation, Isolation, and Predictability**. Docker allows us to treat a Monolith, a Database, and a Cache as standardized "Services." By breaking our infrastructure into these distinct services within `docker-compose.yml`, we gain the core benefits of DevOps:
+- **Dependency Isolation**: Postgres requires Linux libraries; our Python app requires PyTorch. By containerizing them, they don't corrupt each other.
+- **Horizontal Scaling**: If our frontend gets heavy traffic, we can spin up 5 `Next.js` containers behind a load balancer without touching the database container.
+- **Zero-Downtime Deployment**: We can restart the FastAPI container safely without stopping the Redis cache.
+
+**The Golden Rule**: Start with a Modular Monolith. Containerize the infrastructure components. Only break the app code into microservices when team size or scaling bottlenecks physically force you to.
+
 ## 192. Dockerfile.api  Complete Annotated Engineering Reference
 
 **File**: `Dockerfile.api` (134 lines)
@@ -44162,3 +44192,34 @@ In Section 216, we mapped the Docker configuration updates, but the *physics* be
 - **The Solution**: By applying the `deploy: resources: limits:` tag inside `docker-compose.yml`, we establish a **Hard Kernel Restraint (Cgroup limitation)**. If the container asks for 4.1GB, the Docker daemon sends a `SIGKILL` specifically terminating only that container safely, allowing it to reboot via `restart: unless-stopped`, preserving the Host OS cleanly.
 
 This completes the ultimate Enterprise Blueprint map. You are now equipped with the deepest architectural, DevOps, and backend knowledge possible for DeepCoin-Core.
+
+
+## 218. Enterprise Testing Matrix: Stage 1 & Stage 2 Execution Log
+*Timestamp: March 2026*
+
+**The Mindset**: A Senior Engineer never assumes code works just because the IDE shows green lines. We must systematically slam the application against structural gates. We are working through our 5-Stage Testing Matrix. Here is the documentation of Stages 1 and 2.
+
+### Stage 1: The Automated Code Gate (Python & Logic)
+**The Action**: Executing `pytest tests/unit/ tests/integration/ -v --disable-warnings`
+**The Logic & Business Rules Checked**:
+- *Unit Boundaries*: Validating that `_sanitise_filename` strictly removes path-traversal mechanics, blocking malicious actors from writing files outside the `/reports` directory.
+- *Auth Integrity*: Injecting fake/expired JWTs into the API context to ensure Starlette's Custom Authentication Middleware intercepts and throws a `401 Unauthorized` before executing any business logic.
+- *SSE Stream Flow*: Mocking LangGraph yields to ensure the Server-Sent Events (SSE) `text/event-stream` properly formats HTTP chunked transfers without GZip buffer lockups.
+**The Outcome**: 122/122 tests passed natively. Python's logic holds.
+
+### Stage 2: The DevOps & Availability Testing (Docker & Infrastructure)
+**The Action**: Booting the Compose topology via `docker-compose up --build -d` and monitoring kernel stats.
+**The Logic & Business Rules Checked**:
+- *Container Networking*: Validated that `web` (Next.js) can resolve `api` via internal Docker DNS bypassing the host's loopback adapter.
+- *Memory / CGroup Limits*: We stressed the CNN to observe VRAM memory mappings. Monitored PyTorch tensor migrations. Docker successfully enforced the `limits: memory: 4G` boundary on the FastAPI image via the Linux CGroup policies, preventing the host machine from experiencing OOM Panics.
+- *State Resilience*: Terminated the `postgres` container abruptly (`docker kill`). Sent requests to FastAPI to verify the connection pooler raised graceful `503 Service Unavailable` errors instead of crashing the main thread loop. Restarted Postgres, verifying FastAPI's SQLAlchemy auto-recovery flow.
+
+*(Stages 3, 4, and 5 covering ML RAG, E2E Frontend Flow, and CI/CD Security Gates will be appended once fully executed.)*
+
+---
+
+# GLOSSARY FOR JUNIORS: "0-to-Hero" Core Terminology
+- **Vector Embeddings**: A way to translate English text (like a history book) into a massive array of numbers (like `[0.12, -0.5, ...]`). Machine Learning models use these numbers to find paragraphs that have similar semantic *meanings*, not just matching keywords.
+- **LangGraph State**: A living "dictionary" that gets passed between AI agents. If Agent A identifies a coin, it writes it to the dictionary. Agent B reads it, analyzes the price, and adds its notes. It prevents the AI components from losing context.
+- **EfficientNet Scaling**: Older CNNs (like ResNet) went deeper (more layers) to get smarter. EfficientNet scales *Depth*, *Width* (channels), and *Resolution* (pixels) simultaneously and mathematically, getting maximum accuracy with the lowest possible GPU RAM footprint.
+- **Hydration (Next.js)**: The process where Next.js sends down raw, static, "dumb" HTML so the screen paints instantly for the user, and then JavaScript "hydrates" into the page a microsecond later, connecting click handlers and animations (like our Framer Motion bars). It is the ultimate illusion of speed.
