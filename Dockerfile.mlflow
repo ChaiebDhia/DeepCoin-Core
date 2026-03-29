@@ -40,7 +40,7 @@ LABEL org.opencontainers.image.title="DeepCoin MLflow" \
 
 # Install MLflow + the S3 artifact store driver (boto3).
 # --no-cache-dir keeps the image layer lean (no pip wheel cache saved to disk).
-RUN pip install --no-cache-dir \
+RUN pip install --default-timeout=1000 --retries=5 --no-cache-dir \
         "mlflow>=2.21.0,<3.0" \
         "boto3>=1.35"
 
@@ -57,10 +57,10 @@ USER mlflow
 EXPOSE 5000
 
 # Container health check.
-# MLflow exposes GET /api/2.0/mlflow/experiments/list  →  HTTP 200 when ready.
+# MLflow exposes GET /  →  HTTP 200 when ready.
 # Python's urllib is used instead of curl so we don't need an extra apt install.
 HEALTHCHECK --interval=15s --timeout=10s --retries=5 --start-period=30s \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/2.0/mlflow/experiments/list')"
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/')"
 
 # Start the MLflow tracking server.
 #   --host 0.0.0.0          listen on all interfaces (required inside Docker)

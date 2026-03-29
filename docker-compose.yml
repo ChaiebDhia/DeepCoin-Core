@@ -63,6 +63,7 @@
 x-common-env: &common-env
   DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-deepcoin}:${POSTGRES_PASSWORD:-deepcoin}@postgres:5432/${POSTGRES_DB:-deepcoin}
   REDIS_URL:    redis://redis:6379/0
+  TORCH_HOME: /tmp/torch
   ENV:          production
 
 services:
@@ -190,7 +191,7 @@ services:
       S3_BUCKET:               deepcoin-reports
     volumes:
       - ./models:/app/models:ro
-      - ./data/metadata:/app/data/metadata
+      - ./data:/app/data
       - reports_data:/app/reports
       - uploads_tmp:/tmp/deepcoin_uploads
     depends_on:
@@ -312,7 +313,7 @@ services:
     ports:
       - "5000:5000"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/2.0/mlflow/experiments/list')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/')"]
       interval: 15s
       timeout: 10s
       retries: 5

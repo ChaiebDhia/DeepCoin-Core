@@ -37,12 +37,12 @@ FROM python:3.12-slim AS builder
 
 # System build deps:
 #   build-essential — gcc/g++ for Python C extensions (psycopg binary, pydantic)
-#   libgl1-mesa-glx — OpenCV's cv2.so links against libGL at compile time
+#   libgl1 — OpenCV's cv2.so links against libGL at compile time
 #   libglib2.0-0    — OpenCV also needs libglib (GLib2)
 #   libpq-dev       — libpq headers needed by asyncpg wheel builder
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
-        libgl1-mesa-glx \
+        libgl1 \
         libglib2.0-0 \
         libpq-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -57,7 +57,7 @@ RUN python -m venv /opt/venv \
 # Only changes to requirements.txt bust this layer (not source code changes).
 COPY requirements.txt .
 
-RUN /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
+RUN /opt/venv/bin/pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu && /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 2: runtime — lean image, no build tools
@@ -70,7 +70,7 @@ LABEL org.opencontainers.image.title="DeepCoin API" \
 
 # Runtime-only system libs (no compilers, no headers)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libgl1-mesa-glx \
+        libgl1 \
         libglib2.0-0 \
         libpq5 \
         curl \
@@ -106,7 +106,10 @@ RUN mkdir -p /app/reports /tmp/deepcoin_uploads
 # WHY uid 1001: avoids collision with common system UIDs (root=0, nobody=65534).
 RUN groupadd --gid 1001 appgroup \
  && useradd  --uid 1001 --gid appgroup --no-create-home --shell /bin/false appuser \
- && chown -R appuser:appgroup /app /tmp/deepcoin_uploads
+ && mkdir -p /tmp/.cache/huggingface \
+ && chown -R appuser:appgroup /app /tmp/deepcoin_uploads /tmp/.cache
+
+ENV HF_HOME=/tmp/.cache/huggingface
 
 USER appuser
 
