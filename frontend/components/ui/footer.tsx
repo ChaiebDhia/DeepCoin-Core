@@ -1,22 +1,11 @@
 /**
  * components/ui/footer.tsx
  * ==========================
- * Site-wide footer — Server Component (no "use client" needed).
- *
- * WHAT: Four-column footer with product links, resource links, tech stack,
- *       and an about section. Bottom bar has copyright and GitHub link.
- *
- * WHY Server Component:
- *   No client interactivity — all links are static. Keeping this as a Server
- *   Component avoids shipping unnecessary JS for purely static HTML.
- *
- * HOW it fits:
- *   Imported in app/layout.tsx to replace the previous inline <footer>.
- *   All columns are rendered in a responsive grid (2 cols on mobile → 4 on desktop).
+ * Site-wide footer — Server Component.
  */
 
-import Link    from "next/link";
-import { Github, ExternalLink } from "lucide-react";
+import Link from "next/link";
+import { Github, ExternalLink, Linkedin, Globe, Code2 } from "lucide-react";
 
 const COLUMNS = [
   {
@@ -32,19 +21,26 @@ const COLUMNS = [
     heading: "Resources",
     links: [
       { label: "Corpus Nummorum",  href: "https://www.corpus-nummorum.eu",  external: true },
-      { label: "API Documentation",href: "http://127.0.0.1:8000/docs",        external: true },
-      { label: "Engineering Docs", href: "/admin" },
+      { label: "Engineering Docs", href: "/docs" },
+      { label: "Contact Us",       href: "/contact" },
     ],
   },
 ];
 
-const TECH = [
-  "EfficientNet-B3 + PyTorch 2.6",
-  "LangGraph + ChromaDB",
-  "FastAPI + PostgreSQL",
-  "Next.js 15 + Tailwind v4",
-  "Framer Motion 12",
-  "Docker Compose",
+const ARCHITECTURE = [
+  "Deep Learning Pipeline",
+  "Multi-Agent Orchestration",
+  "Hybrid RAG Engine",
+  "Event-Driven Analytics",
+  "Next.js App Router Server",
+];
+
+const NETWORK_LINKS = [
+  { label: "Dhia Chaieb Portfolio", href: "https://dhiashayeb.vercel.app/", icon: Code2, external: true },
+  { label: "LinkedIn Profile", href: "https://www.linkedin.com/in/dhia-shayeb/", icon: Linkedin, external: true },
+  { label: "GitHub Repository", href: "https://github.com/ChaiebDhia/DeepCoin-Core", icon: Github, external: true },
+  { label: "ESPRIT Engineering", href: "https://www.esprit.tn/", icon: Globe, external: true },
+  { label: "YEBNI", href: "https://www.yebni.com/", icon: Globe, external: true },
 ];
 
 export function Footer() {
@@ -59,7 +55,7 @@ export function Footer() {
           {/* Product + Resources columns */}
           {COLUMNS.map(({ heading, links }) => (
             <div key={heading}>
-              <h3 className="text-xs font-black uppercase tracking-widest mb-4" style={{ color: "var(--text-muted)" }}>
+              <h3 className="text-sm font-black uppercase tracking-widest mb-4" style={{ color: "var(--brand-gold)" }}>
                 {heading}
               </h3>
               <ul className="space-y-2.5">
@@ -74,12 +70,12 @@ export function Footer() {
                         style={{ color: "var(--text-secondary)" }}
                       >
                         {label}
-                        <ExternalLink size={10} className="opacity-60" />
+                        <ExternalLink size={10} className="opacity-60" />       
                       </a>
                     ) : (
                       <Link
                         href={href}
-                        className="text-xs hover:text-white transition-colors"
+                        className="text-xs hover:text-white transition-colors"  
                         style={{ color: "var(--text-secondary)" }}
                       >
                         {label}
@@ -91,44 +87,41 @@ export function Footer() {
             </div>
           ))}
 
-          {/* Tech stack */}
+          {/* Core Architecture */}
           <div>
-            <h3 className="text-xs font-black uppercase tracking-widest mb-4" style={{ color: "var(--text-muted)" }}>
-              Tech Stack
+            <h3 className="text-sm font-black uppercase tracking-widest mb-4" style={{ color: "var(--brand-gold)" }}>
+              Core Architecture
             </h3>
             <ul className="space-y-2.5">
-              {TECH.map((t) => (
-                <li key={t} className="text-xs" style={{ color: "var(--text-secondary)" }}>
+              {ARCHITECTURE.map((t) => (
+                <li key={t} className="text-xs transition-colors" style={{ color: "var(--text-secondary)" }}>
                   {t}
                 </li>
               ))}
             </ul>
           </div>
 
-          {/* About */}
+          {/* Network & Partners */}
           <div>
-            <h3 className="text-xs font-black uppercase tracking-widest mb-4" style={{ color: "var(--text-muted)" }}>
-              About
+            <h3 className="text-sm font-black uppercase tracking-widest mb-4" style={{ color: "var(--brand-gold)" }}>
+              Network & Partners
             </h3>
-            <p className="text-xs leading-relaxed mb-4" style={{ color: "var(--text-secondary)" }}>
-              PFE 2026 — Final Year Engineering Internship.
-            </p>
-            <p className="text-xs leading-relaxed mb-4" style={{ color: "var(--text-secondary)" }}>
-              ESPRIT School of Engineering × YEBNI, Tunisia.
-            </p>
-            <p className="text-xs font-semibold" style={{ color: "var(--brand-gold)" }}>
-              Dhia Chaieb
-            </p>
-            <a
-              href="https://github.com/ChaiebDhia/DeepCoin-Core"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 mt-2 text-xs hover:text-white transition-colors"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              <Github size={12} />
-              GitHub — DeepCoin-Core
-            </a>
+            <ul className="space-y-2.5">
+              {NETWORK_LINKS.map(({ label, href, icon: Icon }) => (
+                <li key={label}>
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs inline-flex items-center gap-1.5 hover:text-white transition-colors"
+                    style={{ color: "var(--text-secondary)" }}
+                  >
+                    <Icon size={12} className="opacity-60" />
+                    {label}
+                  </a>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
 
@@ -140,16 +133,13 @@ export function Footer() {
             color:       "var(--text-muted)",
           }}
         >
-          <span>© 2026 DeepCoin · ESPRIT × YEBNI · Dhia Chaieb</span>
-          <a
-            href="https://github.com/ChaiebDhia/DeepCoin-Core"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 hover:text-white transition-colors"
-          >
-            <Github size={13} />
-            ChaiebDhia / DeepCoin-Core
-          </a>
+          <span>© 2026 DeepCoin · PFE Internship</span>       
+          <div className="flex items-center gap-1.5">
+            <span>Architected By</span>
+            <span className="font-semibold tracking-wide text-sm" style={{ color: "var(--brand-gold)", textShadow: "0 0 10px rgba(255, 215, 0, 0.15)" }}>
+              Dhia Chaieb
+            </span>
+          </div>
         </div>
       </div>
     </footer>
