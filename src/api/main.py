@@ -231,7 +231,18 @@ app.add_middleware(
 # P7 — GZip compress responses ≥ 500 bytes.
 # JSON responses from /api/history (lists of records) compress ~8× savings.
 # minimum_size=500 avoids overhead on tiny payloads (health, root).
-app.add_middleware(GZipMiddleware, minimum_size=500)
+from starlette.types import ASGIApp, Receive, Scope, Send
+class ConditionalGZipMiddleware:
+    def __init__(self, app: ASGIApp, minimum_size: int = 500):
+        self.app_to_wrap = app
+        self.gzip = GZipMiddleware(app, minimum_size=minimum_size)
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and scope.get("path", "").startswith("/api/chat/stream"):
+            await self.app_to_wrap(scope, receive, send)
+            return
+        await self.gzip(scope, receive, send)
+
+app.add_middleware(ConditionalGZipMiddleware, minimum_size=500)
 
 # P15 — X-Request-ID middleware.
 # WHAT: Reads the incoming X-Request-ID header (set by load balancer or client);
