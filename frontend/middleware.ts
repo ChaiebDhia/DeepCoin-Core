@@ -58,9 +58,11 @@ export const config = {
    *   them. The negative lookahead syntax is the recommended Next.js pattern.
    */
   matcher: [
+    "/analyse",
+    "/analyse/:path*",
     "/history",
     "/history/:path*",
-    "/analyse",               // Analyse page requires an account (tracks usage + stores history)
+    
     "/admin",
     "/admin/:path*",
     "/collections",
