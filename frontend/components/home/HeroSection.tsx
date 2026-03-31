@@ -59,7 +59,7 @@ export function HeroSection() {
    * callbackUrl so NextAuth brings them back to /analyse after sign-in.
    * WHY: /analyse + the classification pipeline are post-auth features.
    */
-  const analyseHref = session ? "/analyse" : "/login?callbackUrl=/analyse";
+  const analyseHref = "/analyse"; // Anonymous allowed
 
   return (
     <section

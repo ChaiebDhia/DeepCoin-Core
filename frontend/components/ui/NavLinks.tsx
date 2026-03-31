@@ -39,12 +39,10 @@ const activeCls =
   "text-white font-semibold bg-[var(--surface-2)]";
 
 export const NAV_LINKS = [
-  { href: "/#features", label: "Features" },
+  { href: "/",          label: "Home"     },
   { href: "/explore",   label: "Explore"  },
   { href: "/chat",      label: "AI Chat"  },
   { href: "/about",     label: "About"    },
-  { href: "/docs",      label: "Docs"     },
-  { href: "/contact",   label: "Contact"  },
 ];
 
 export function NavLinks() {

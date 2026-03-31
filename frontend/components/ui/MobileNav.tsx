@@ -26,17 +26,15 @@
 import { useState, useEffect, useRef } from "react";
 import Link                             from "next/link";
 import { usePathname }                  from "next/navigation";
-import { Menu, X, Cpu, BookOpen, MessageSquare, FlaskConical, Globe, FileText, Mail } from "lucide-react";
+import { Menu, X, Cpu, BookOpen, MessageSquare, FlaskConical, Globe, FileText, Mail, Home } from "lucide-react";
 import { useSession }                   from "next-auth/react";
 import { NAV_LINKS }                    from "@/components/ui/NavLinks";
 
 const ICON_MAP: Record<string, React.ReactNode> = {
-  "/#features": <Cpu size={14} />,
+  "/":          <Home size={14} />,
   "/explore":   <Globe size={14} />,
   "/chat":      <MessageSquare size={14} />,
   "/about":     <FlaskConical size={14} />,
-  "/docs":      <FileText size={14} />,
-  "/contact":   <Mail size={14} />,
 };
 
 export function MobileNav() {
