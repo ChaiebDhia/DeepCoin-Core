@@ -33,10 +33,11 @@ interface Stat {
 
 const STATS: Stat[] = [
   { value: 80.03, label: "TTA Accuracy",      suffix: "%",  decimal: 2, color: "#3b82f6" },
+  { value: 438,   label: "CNN Classes",       suffix: "",   decimal: 0, color: "#ec4899" },
   { value: 9716,  label: "Coin Types in KB",  suffix: "",   decimal: 0, color: "#8b5cf6" },
   { value: 47705, label: "RAG Chunks",        suffix: "",   decimal: 0, color: "#d4a853" },
-  { value: 20,    label: "Max Latency (sec)", suffix: "s",  decimal: 0, color: "#10b981" },
-  { value: 46,    label: "Unit Tests",        suffix: "",   decimal: 0, color: "#f97316" },
+  { value: 5,     label: "Specialist AI Agents",suffix: "",   decimal: 0, color: "#10b981" },
+  { value: 122,   label: "Unit Tests",        suffix: "",   decimal: 0, color: "#f97316" },
 ];
 
 /** Single animated counter. */
@@ -99,7 +100,7 @@ export function StatsBar() {
         initial={{ opacity: 0 }}
         animate={inView ? { opacity: 1 } : {}}
         transition={{ duration: 0.5 }}
-        className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"
+        className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6"
         style={{ gap: "1px", backgroundColor: "var(--border)" }}
       >
         {STATS.map((s, i) => (
