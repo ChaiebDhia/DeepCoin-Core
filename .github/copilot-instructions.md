@@ -2065,3 +2065,9 @@ esponse_class=Response manually across all Route DELETE requests.
 * (March 23, 2026) Solidified a multi-arch boundary. The Pytest test runners natively execute on a strict win32 Python 3.11.8 pipeline locally preventing stringified syncio PEP 695 loops, while Docker utilizes linux 3.12-slim strictly for path traversal defense. 
 * (March 23, 2026) Unlocked Pytest configurations...
 * (March 2026) Architected and audited the entire DevOps pipeline. Validated Python 3.12-slim dependencies over Alpine for glibc compliances on the ML models. Analyzed the Next.js Dockerfile standalone outputs limits. Built global Resource Arbitrage Limits and Zombie Process isolation (init: true) inside docker-compose.yml to prevent Host OS/CUDA locking. Written all rules down to Section 215 of the Engineering Journal. from a rigid UnicodeDecodeError created by Starlette misreading .env variables containing standard UTF-8 characters under the Windows implicit cp1252 charmap. Force-casted the configurations directly to pure ASCII.
+
+## 🚨 ENTERPRISE GIT COMMIT STANDARDS (March 2026 Directive) 🚨
+1. **Atomic Commits:** NEVER bundle unrelated frontend, backend, and documentation changes into one massive git commit -am. Each distinct logical change must have its own commit to keep the GitHub contribution graph accurate and the git history revertible.
+2. **Conventional Commits:** Use <type>(<scope>): <subject> format. Types include eat, ix, efactor, docs, chore.
+3. **Deep Context:** Always append a  -m "..." paragraph explicitly explaining the 'Why' and the 'How' associated with the code.
+
