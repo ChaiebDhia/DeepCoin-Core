@@ -2,7 +2,7 @@
 PyTorch Dataset class for DeepCoin coin classification.
 Handles loading preprocessed images and applies data augmentation.
 
-This is the "librarian" that teaches the AI how to read your processed images.
+This is the "librarian" that teaches the AI how to read processed images.
 """
 
 import logging
@@ -24,7 +24,7 @@ class DeepCoinDataset(Dataset):
     """
     Custom Dataset for DeepCoin Archaeological Coin Classification.
     
-    🎓 WHAT THIS CLASS DOES:
+     WHAT THIS CLASS DOES:
     -----------------------
     1. Scans the data/processed folder and discovers all coin type folders (1015, 1017, etc.)
     2. Maps folder names to numerical indices (AI only understands numbers!)
@@ -32,7 +32,7 @@ class DeepCoinDataset(Dataset):
     4. Loads images ON-DEMAND during training (saves RAM - only loads what's needed)
     5. Applies transformations (augmentation for training, normalization for validation)
     
-    📚 ENGINEERING ANALOGY:
+     ENGINEERING ANALOGY:
     ----------------------
     Think of this as a LIBRARY SYSTEM:
     - __init__: The librarian catalogs all books (images) and assigns them shelf numbers (labels)
@@ -172,10 +172,10 @@ class DeepCoinDataset(Dataset):
 
 def get_train_transforms():
     """
-    🎨 TRAINING DATA AUGMENTATION PIPELINE
+     TRAINING DATA AUGMENTATION PIPELINE
     ======================================
     
-    🎓 THE PROBLEM:
+     THE PROBLEM:
     In the real world, users will take photos of coins under different conditions:
     - Different lighting (bright sunlight vs indoor lamp)
     - Different angles (slightly rotated)
@@ -183,7 +183,7 @@ def get_train_transforms():
     
     If we train ONLY on your perfect preprocessed images, the AI will FAIL in production!
     
-    🛡️ THE SOLUTION: DATA AUGMENTATION
+     THE SOLUTION: DATA AUGMENTATION
     We artificially create "variations" of each image during training:
     - Rotate the coin slightly (±15 degrees)
     - Change brightness/contrast (simulate different lighting)
@@ -192,7 +192,7 @@ def get_train_transforms():
     
     This makes the AI ROBUST - it learns to recognize coins even in imperfect conditions.
     
-    🔬 EACH AUGMENTATION EXPLAINED:
+     EACH AUGMENTATION EXPLAINED:
     """
     return A.Compose([
         # 1. HORIZONTAL FLIP (50% probability)
@@ -262,10 +262,10 @@ def get_train_transforms():
 
 def get_val_transforms():
     """
-    🧪 VALIDATION/TEST TRANSFORMS (NO AUGMENTATION!)
+     VALIDATION/TEST TRANSFORMS (NO AUGMENTATION!)
     ================================================
     
-    🎓 WHY NO AUGMENTATION HERE?
+     WHY NO AUGMENTATION HERE?
     During validation/testing, we want to measure the AI's REAL performance.
     If we augment validation data, we're "cheating" - the AI might get lucky
     with a rotation that makes recognition easier.
@@ -287,7 +287,7 @@ def get_val_transforms():
     ])
 
 
-# 🎯 PROFESSIONAL TIP: Why Albumentations over torchvision.transforms?
+#  PROFESSIONAL TIP: Why Albumentations over torchvision.transforms?
 # ====================================================================
 # 1. FASTER: Albumentations is built on OpenCV (C++ backend) vs PIL (Python)
 # 2. MORE AUGMENTATIONS: 70+ transforms vs torchvision's 30+

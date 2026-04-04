@@ -12,7 +12,6 @@ const COLUMNS = [
     heading: "Product",
     links: [
       { label: "Analyse a coin",   href: "/#analyse" },
-      { label: "Analysis history", href: "/history" },
       { label: "How it works",     href: "/#how-it-works" },
       { label: "Features",         href: "/#features" },
     ],
