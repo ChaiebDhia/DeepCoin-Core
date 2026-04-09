@@ -1,4 +1,4 @@
-﻿/**
+/**
  * app/docs/page.tsx
  * ==================
  * Permanent redirect to the FastAPI interactive API documentation.
@@ -8,7 +8,7 @@
  *   (enabled in dev; can be enabled in production by setting DOCS_URL).
  *   A hand-written static JSX page would:
  *     1. Diverge from the actual API the moment any endpoint changes.
- *     2. Add maintenance overhead for zero benefit — the live spec is
+ *     2. Add maintenance overhead for zero benefit � the live spec is
  *        always up-to-date by definition.
  *     3. Duplicate information that Swagger already presents in a richer,
  *        try-it-live format.
@@ -30,7 +30,7 @@ import { redirect } from "next/navigation";
 /**
  * Redirect to the FastAPI interactive Swagger UI.
  *
- * This page intentionally contains no content — it is a permanent redirect.
+ * This page intentionally contains no content � it is a permanent redirect.
  * The `/api/docs` path is proxied by next.config.ts to the FastAPI server,
  * so the browser ultimately lands on the live Swagger UI at
  * http://127.0.0.1:8000/docs (dev) or the production FastAPI host.

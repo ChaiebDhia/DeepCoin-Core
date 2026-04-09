@@ -207,7 +207,7 @@ export default function ContactPage() {
                 disabled={loading || !name || !email || !message}
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg
                            text-sm font-bold transition-opacity disabled:opacity-40"
-                style={{ backgroundColor: "var(--brand-gold)", color: "#0a1628" }}
+                style={{ backgroundColor: "var(--brand-gold)", color: "var(--surface-0)" }}
               >
                 {loading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                 {loading ? "Sending…" : "Send Message"}

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 /**
  * app/admin/page.tsx  Enterprise Admin Dashboard v2
@@ -134,7 +134,7 @@ function Pagination({
 }: {
   page: number; pages: number; onChange: (p: number) => void;
 }) {
-  // Always render the pagination bar — even on a single page.
+  // Always render the pagination bar � even on a single page.
   // Hidden would leave users confused about whether data is loading or truly empty.
   const total = Math.max(1, pages);
   return (
@@ -201,14 +201,14 @@ function OverviewTab({
     queryKey:        ["health"],
     queryFn:         getHealth,
     refetchInterval: 30_000,
-    // health endpoint is public — no auth needed; always enabled
+    // health endpoint is public � no auth needed; always enabled
   });
 
   const { data: historyData } = useQuery({
     queryKey: ["history", 0, 5],
     queryFn:  () => getHistory(0, 5),
     // WHY enabled: JWT isn't in _authToken until SessionSync's useEffect runs.
-    // Without this guard the query fires before the token arrives → 401.
+    // Without this guard the query fires before the token arrives ? 401.
     enabled:  authed,
   });
 
@@ -225,28 +225,28 @@ function OverviewTab({
 
   return (
     <div className="space-y-6">
-      {/* KPI row — live user + activity counters, polls every 30 s */}
+      {/* KPI row � live user + activity counters, polls every 30�s */}
       {isPrivileged && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[
             {
               icon: Users,
               label: "Total Users",
-              value: stats?.users_total?.toLocaleString() ?? "—",
+              value: stats?.users_total?.toLocaleString() ?? "�",
               sub:   "registered accounts",
               color: "#8b5cf6",
             },
             {
               icon: Calendar,
               label: "New Today",
-              value: stats?.users_today?.toLocaleString() ?? "—",
+              value: stats?.users_today?.toLocaleString() ?? "�",
               sub:   "registered today (UTC)",
               color: "#10b981",
             },
             {
               icon: TrendingUp,
               label: "Analyses Today",
-              value: stats?.analyses_today?.toLocaleString() ?? "—",
+              value: stats?.analyses_today?.toLocaleString() ?? "�",
               sub:   "coins analysed today (UTC)",
               color: "#3b82f6",
             },
@@ -329,7 +329,7 @@ function OverviewTab({
           </div>
         </div>
 
-        {/* Route Distribution — live data from GET /api/admin/stats */}
+        {/* Route Distribution � live data from GET /api/admin/stats */}
         {isPrivileged && (
           <div
             className="rounded-xl border p-5"
@@ -394,7 +394,7 @@ function OverviewTab({
                         {stats.top_labels[0].label}
                       </p>
                       <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>
-                        top coin ({stats.top_labels[0].count}×)
+                        top coin ({stats.top_labels[0].count}�)
                       </p>
                     </div>
                   )}
@@ -412,7 +412,7 @@ function OverviewTab({
                 </button>
               </div>
             ) : (
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>Loading stats…</p>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>Loading stats�</p>
             )}
           </div>
         )}
@@ -472,7 +472,7 @@ function OverviewTab({
         )}
       </div>
 
-      {/* Live Activity Feed — last 5 analyses across all users, polls every 30 s */}
+      {/* Live Activity Feed � last 5 analyses across all users, polls every 30 s */}
       {isPrivileged && (
         <div
           className="rounded-xl border"
@@ -493,7 +493,7 @@ function OverviewTab({
               LIVE
             </span>
             <span className="ml-auto text-[10px]" style={{ color: "var(--text-muted)" }}>
-              refreshes every 30 s
+              refreshes every 30�s
             </span>
           </div>
           {stats?.recent_activity?.length ? (
@@ -521,7 +521,7 @@ function OverviewTab({
                       <span className="tabular-nums" style={{ color: "var(--text-muted)" }}>
                         {item.confidence !== null
                           ? `${Math.round(item.confidence * 100)}%`
-                          : "—"}
+                          : "�"}
                       </span>
                       <span style={{ color: "var(--text-muted)" }}>{item.user_email}</span>
                       <span style={{ color: "var(--text-muted)" }}>
@@ -537,7 +537,7 @@ function OverviewTab({
             </div>
           ) : (
             <p className="px-5 py-8 text-xs text-center" style={{ color: "var(--text-muted)" }}>
-              {stats ? "No analyses yet." : "Loading…"}
+              {stats ? "No analyses yet." : "Loading�"}
             </p>
           )}
         </div>
@@ -1172,7 +1172,7 @@ function UsersTab({ sessionStatus }: { sessionStatus: string }) {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search by email…"
+            placeholder="Search by email�"
             className="bg-transparent text-xs outline-none w-full"
             style={{ color: "var(--text-primary)" }}
           />
@@ -1212,7 +1212,7 @@ function UsersTab({ sessionStatus }: { sessionStatus: string }) {
 
                   {/* Display name */}
                   <td className="px-4 py-3" style={{ color: "var(--text-muted)" }}>
-                    {u.display_name ?? "—"}
+                    {u.display_name ?? "�"}
                   </td>
 
                   {/* Role badge + change select */}
@@ -1251,7 +1251,7 @@ function UsersTab({ sessionStatus }: { sessionStatus: string }) {
                   <td className="px-4 py-3 whitespace-nowrap tabular-nums" style={{ color: "var(--text-muted)" }}>
                     {u.created_at
                       ? new Date(u.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
-                      : "—"}
+                      : "�"}
                   </td>
 
                   {/* Analyses count */}
@@ -1392,7 +1392,7 @@ function ContactsTab({ sessionStatus }: { sessionStatus: string }) {
                       })}
                     </span>
                     <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
-                      {isOpen ? "▲" : "▼"}
+                      {isOpen ? "?" : "?"}
                     </span>
                   </div>
                 </button>
@@ -1410,7 +1410,7 @@ function ContactsTab({ sessionStatus }: { sessionStatus: string }) {
                       <a
                         href={`mailto:${msg.email}?subject=Re: [DeepCoin] ${encodeURIComponent(msg.subject)}`}
                         className="text-xs px-3 py-1.5 rounded-lg font-semibold hover:opacity-80 transition-opacity"
-                        style={{ backgroundColor: "var(--brand-gold)", color: "#0a1628" }}
+                        style={{ backgroundColor: "var(--brand-gold)", color: "var(--surface-0)" }}
                       >
                         Reply via email
                       </a>
@@ -1526,7 +1526,7 @@ export default function AdminPage() {
             className="rounded-lg p-4 font-mono text-xs overflow-x-auto"
             style={{
               background: "rgba(0,0,0,0.35)",
-              border: "1px solid rgba(255,255,255,0.06)",
+              border: "1px solid var(--surface-1)",
               color: "#86efac",
             }}
           >

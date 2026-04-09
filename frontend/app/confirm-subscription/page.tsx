@@ -1,25 +1,25 @@
-﻿/**
+/**
  * app/confirm-subscription/page.tsx
  * =====================================
  * Subscription confirmation landing page.
  *
  * FLOW:
- *   1. User submits email on the homepage → POST /api/subscribers
+ *   1. User submits email on the homepage ? POST /api/subscribers
  *      Backend generates a UUID confirm_token and (if RESEND_API_KEY is set)
  *      fires a transactional email with a link to this page:
  *        https://<APP_BASE_URL>/confirm-subscription?token=<uuid>
- *   2. User clicks the link → lands here
+ *   2. User clicks the link ? lands here
  *   3. This page calls GET /api/subscribers/confirm?token=<uuid>  (server-side)
  *      Backend sets status="confirmed" and returns HTTPStatus.
  *   4. Show a branded success or error card based on the HTTP status.
  *
  * WHY Server Component (not client-side fetch):
- *   The confirmation is a one-shot action — no interactivity needed after load.
+ *   The confirmation is a one-shot action � no interactivity needed after load.
  *   Doing it server-side avoids a client-side loading spinner, works without JS,
  *   and makes the page fully SSR'd (better SEO and security).
  *
  * WHY fetch to host directly (not through Next.js proxy):
- *   Server Components run on the Node.js process — CORS doesn't apply.
+ *   Server Components run on the Node.js process � CORS doesn't apply.
  *   Calling 127.0.0.1:8000 directly is faster than going through the proxy.
  *   NEXT_PUBLIC vars are not available server-side without the NEXT_PUBLIC prefix;
  *   use process.env.DEEPCOIN_INTERNAL_API_URL (defaults to http://127.0.0.1:8000).
@@ -28,11 +28,11 @@
 import Link         from "next/link";
 import { CheckCircle, XCircle, AlertCircle, ArrowLeft } from "lucide-react";
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// -- Types --------------------------------------------------------------------
 
 type ConfirmStatus = "success" | "not_found" | "no_token" | "error";
 
-// ── Server-side confirmation call ────────────────────────────────────────────
+// -- Server-side confirmation call --------------------------------------------
 
 async function confirmToken(token: string): Promise<ConfirmStatus> {
   const base = process.env.DEEPCOIN_INTERNAL_API_URL ?? "http://127.0.0.1:8000";
@@ -43,7 +43,7 @@ async function confirmToken(token: string): Promise<ConfirmStatus> {
       { cache: "no-store" },
     );
     // Backend returns 200 for both "new confirmation" AND "already confirmed"
-    // — both are positive outcomes, show the same success card.
+    // � both are positive outcomes, show the same success card.
     if (res.status === 200) return "success";
     // 400 = invalid token (not found / already used)
     if (res.status === 400) return "not_found";
@@ -53,7 +53,7 @@ async function confirmToken(token: string): Promise<ConfirmStatus> {
   }
 }
 
-// ── UI sub-components ────────────────────────────────────────────────────────
+// -- UI sub-components --------------------------------------------------------
 
 function Card({
   icon,
@@ -89,7 +89,7 @@ function Card({
   );
 }
 
-// ── Page ─────────────────────────────────────────────────────────────────────
+// -- Page ---------------------------------------------------------------------
 
 export default async function ConfirmSubscriptionPage({
   searchParams,
@@ -121,7 +121,7 @@ export default async function ConfirmSubscriptionPage({
           <Link
             href="/"
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold"
-            style={{ backgroundColor: "var(--brand-gold)", color: "#0a1628" }}
+            style={{ backgroundColor: "var(--brand-gold)", color: "var(--surface-0)" }}
           >
             Explore DeepCoin
           </Link>
