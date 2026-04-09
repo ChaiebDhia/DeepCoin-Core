@@ -9,23 +9,73 @@
  */
 
 :root {
-  /* DeepCoin brand palette — mirrors the PDF navy/blue scheme */
+  /* --- 1. Refined Brand Palette (Enterprise Scale) --- */
+  --brand-navy:      #020617; /* Deeper, richer navy */
+  --brand-dark:      #0f172a; /* Slate 900 */
+  --brand-mid:       #3b82f6; /* Blue 500 - Matches scrollbar/accents */
+  --brand-light:     #60a5fa; /* Blue 400 */
+  --brand-primary:   #2563eb; /* Vibrant but professional blue */
+  --brand-gold:      #a37e2c; /* Muted antique gold (better for text contrast) */
+  --brand-gold-soft: #fefce8; /* For subtle highlights/badges */
+
+  /* --- 2. Surface & Background (The "Depth" Layers) --- */
+  /* Using a subtle top-to-bottom wash for the main background */
+  --bg-gradient: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%);
+  
+  --surface-0: #f1f5f9; /* Main background layer */
+  --surface-1: #ffffff; /* Card/Elevated surface */
+  --surface-2: #f1f5f9; /* Subtle secondary sections */
+  --surface-3: #e2e8f0; /* Deepest layer/Dividers */
+
+  /* --- 3. Typography (High Readability) --- */
+  /* Using Slate tones prevents the "harsh" look of pure black */
+  --text-primary:   #0f172a; /* Main headings - high contrast */
+  --text-secondary: #334155; /* Body text */
+  --text-muted:     #64748b; /* Captions and labels */
+  --text-on-navy:   #f8fafc;
+
+  /* --- 4. Interactive & Borders --- */
+  --border-subtle:  #e2e8f0;
+  --border-strong:  #cbd5e1;
+  --ring-focus:     rgba(37, 99, 235, 0.2); /* Soft blue glow for focus states */
+
+  /* --- 5. Anchor Surfaces (Navbar & Footer) --- */
+  /* Option A: The "Classy Navy" (Keeps brand identity strong) */
+  --nav-bg:         #020617;
+  --nav-text:       #f8fafc;
+  --footer-bg:      #020617;
+  --footer-text:    #f8fafc;
+  
+  /* Option B: The "Clean White" (Uncomment if you want a pure light look) */
+  /* --nav-bg:      #ffffff; */
+  /* --nav-text:    #0f172a; */
+  /* --footer-bg:   #ffffff; */
+  /* --footer-text: #0f172a; */
+}
+.dark {
+  /* DeepCoin brand palette */
   --brand-navy:     #0a1628;
   --brand-dark:     #0f2040;
   --brand-mid:      #1e5fa8;
   --brand-light:    #3b82f6;
   --brand-gold:     #d4a853;
 
-  /* Surface colours */
+  /* Surface colours - DARK MODE */
   --surface-0:      #080e1a;   /* page background */
   --surface-1:      #0f1d2e;   /* card background */
   --surface-2:      #162436;   /* elevated card */
   --surface-3:      #1e2f42;   /* input / table row */
 
+  /* Anchor Surfaces (NavBar & Footer) - DARK MODE */
+  --nav-bg:         #0a1628;   /* Default deep brand navy */
+  --nav-text:       #E2E8F0;
+  --footer-bg:      #0a1628;
+  --footer-text:    #94A3B8;
+
   /* Border */
   --border:         #243447;
 
-  /* Text */
+  /* Text - DARK MODE */
   --text-primary:   #e2e8f0;
   --text-secondary: #94a3b8;
   --text-muted:     #64748b;
@@ -59,7 +109,6 @@
 }
 
 html {
-  color-scheme: dark;
   scroll-behavior: smooth;
 }
 
@@ -211,3 +260,7 @@ body {
 .animate-orbit {
   animation: orbit-ring 9s linear infinite;
 }
+
+
+
+

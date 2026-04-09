@@ -1,14 +1,14 @@
-﻿"use client";
+"use client";
 
 /**
- * app/explore/page.tsx â€” Numismatic Discovery
+ * app/explore/page.tsx — Numismatic Discovery
  * =============================================
  * WHAT: A public browser for all 9,541 coin types in the Corpus Nummorum
  *       knowledge base.  Anyone can search "silver tetradrachm Athens" and
  *       get real scholarly records with AI chat and external CN links.
  *
  * WHY THIS REPLACES THE OLD COMMUNITY GALLERY:
- *   The old explore page showed a list of user analyses â€” essentially the
+ *   The old explore page showed a list of user analyses — essentially the
  *   same data as the history page but stripped of PII. It provided little
  *   value to anonymous visitors who wanted to *learn* about ancient coins.
  *
@@ -19,8 +19,8 @@
  *
  * DATA SOURCE:
  *   GET /api/kb/types  (no auth required)
- *   â€” hybrid BM25 + vector search when a query is typed
- *   â€” paginated identity-chunk browse when no query
+ *   — hybrid BM25 + vector search when a query is typed
+ *   — paginated identity-chunk browse when no query
  *
  * WHY "use client":
  *   Uses useQuery (TanStack Query) + useState for search/pagination state.
@@ -34,40 +34,39 @@ import { Search, ExternalLink, Sparkles, BookOpen, ChevronLeft, ChevronRight, X 
 import { browseKb }                        from "@/lib/api";
 import { KbTypeItem }                      from "@/types/api";
 
-// â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 20;
 
-// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Colour classes for the material pill. */
 function materialPillClass(material: string): string {
   const m = material.toLowerCase();
-  if (m.includes("gold") || m.includes("aurum"))       return "bg-yellow-500/15 text-yellow-300 border-yellow-500/30";
-  if (m.includes("silver") || m.includes("argentum"))  return "bg-slate-400/15 text-slate-300 border-slate-400/30";
-  if (m.includes("bronze") || m.includes("aes")
-    || m.includes("copper"))                            return "bg-orange-700/15 text-orange-300 border-orange-700/30";
-  if (m.includes("electrum"))                           return "bg-yellow-700/15 text-yellow-400 border-yellow-700/30";
-  return "bg-white/[0.06] text-[var(--text-secondary)] border-white/10";
+    if (m.includes("gold") || m.includes("aurum"))       return "bg-yellow-500/10 text-yellow-700 border-yellow-500/20 dark:text-yellow-400";
+    if (m.includes("silver") || m.includes("argentum"))  return "bg-slate-200 text-slate-950 font-bold border-slate-400 dark:bg-slate-500/10 dark:text-slate-300 dark:border-slate-500/20";
+    if (m.includes("bronze") || m.includes("aes") 
+      || m.includes("copper"))                            return "bg-orange-600/10 text-orange-800 border-orange-600/20 dark:text-orange-400";
+    if (m.includes("electrum"))                           return "bg-amber-600/10 text-amber-800 border-amber-600/20 dark:text-amber-400";
+    return "bg-[var(--surface-2)] text-[var(--text-secondary)] border-[var(--border)]";
 }
-
-/** Build the "Ask AI" chat URL with the CN type pre-loaded as context. */
+  /** Build the "Ask AI" chat URL with the CN type pre-loaded as context. */
 function chatUrl(item: KbTypeItem): string {
   const label = item.denomination
     ? `${item.denomination}${item.authority ? " of " + item.authority : ""} (CN ${item.type_id})`
     : `CN ${item.type_id}`;
-  return `/chat?q=${encodeURIComponent("Tell me about " + label + " â€” " + item.date_range)}`;
+  return `/chat?q=${encodeURIComponent("Tell me about " + label + " — " + item.date_range)}`;
 }
 
-// â”€â”€ KbTypeCard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── KbTypeCard ────────────────────────────────────────────────────────────────
 
 function KbTypeCard({ item }: { item: KbTypeItem }) {
-  const mat = item.material || "â€”";
+  const mat = item.material || "—";
   return (
     <div
       className="group relative rounded-xl border transition-all duration-200
                  hover:border-[var(--accent-primary)]/40 hover:shadow-lg hover:shadow-[var(--accent-primary)]/5"
-      style={{ background: "var(--card-bg, rgba(255,255,255,0.04))", borderColor: "rgba(255,255,255,0.08)" }}
+      style={{ background: "var(--surface-1)", borderColor: "var(--border)" }}
     >
       {/* CNN badge */}
       {item.in_training_set && (
@@ -84,29 +83,29 @@ function KbTypeCard({ item }: { item: KbTypeItem }) {
       <div className="p-4 pb-3">
         {/* Type number */}
         <p className="font-mono text-xs font-bold tracking-widest mb-1"
-           style={{ color: "var(--accent-primary, #6366f1)" }}>
+           style={{ color: "var(--brand-mid)" }}>
           CN {item.type_id}
         </p>
 
         {/* Denomination + authority */}
         <h3 className="text-sm font-semibold leading-snug mb-0.5"
-            style={{ color: "var(--text-primary, #f1f5f9)" }}>
+            style={{ color: "var(--text-primary)" }}>
           {item.denomination || "Unknown denomination"}
           {item.authority && (
-            <span className="font-normal" style={{ color: "var(--text-secondary, #94a3b8)" }}>
-              {" Â· "}{item.authority}
+            <span className="font-normal" style={{ color: "var(--text-secondary)" }}>
+              {" · "}{item.authority}
             </span>
           )}
         </h3>
 
         {/* Region + date */}
         <p className="text-xs leading-relaxed mb-2.5"
-           style={{ color: "var(--text-secondary, #94a3b8)" }}>
-          {[item.region, item.date_range, item.mint].filter(Boolean).join(" Â· ") || "â€”"}
+           style={{ color: "var(--text-secondary)" }}>
+          {[item.region, item.date_range, item.mint].filter(Boolean).join(" · ") || "—"}
         </p>
 
         {/* Material pill */}
-        {mat !== "â€”" && (
+        {mat !== "—" && (
           <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium border mb-3 ${materialPillClass(mat)}`}>
             {mat}
           </span>
@@ -115,7 +114,7 @@ function KbTypeCard({ item }: { item: KbTypeItem }) {
         {/* Text snippet */}
         {item.text_snippet && (
           <p className="text-[11px] leading-relaxed line-clamp-2"
-             style={{ color: "var(--text-secondary, #94a3b8)", opacity: 0.75 }}>
+             style={{ color: "var(--text-secondary)", opacity: 0.75 }}>
             {item.text_snippet}
           </p>
         )}
@@ -139,7 +138,7 @@ function KbTypeCard({ item }: { item: KbTypeItem }) {
           rel="noopener noreferrer"
           className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium
                      transition-all hover:brightness-110 active:scale-95"
-          style={{ background: "rgba(255,255,255,0.04)", color: "var(--text-secondary, #94a3b8)",
+          style={{ background: "var(--surface-2)", color: "var(--text-secondary)",
                    border: "1px solid rgba(255,255,255,0.10)" }}
         >
           <ExternalLink className="w-3 h-3" />
@@ -150,7 +149,7 @@ function KbTypeCard({ item }: { item: KbTypeItem }) {
   );
 }
 
-// â”€â”€ Main page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ExplorePage() {
   const [query, setQuery]              = useState("");
@@ -184,9 +183,9 @@ export default function ExplorePage() {
   const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0;
 
   return (
-    <main className="min-h-screen" style={{ background: "var(--bg-primary, #0f172a)" }}>
+    <main className="min-h-screen" style={{ background: "var(--surface-0)" }}>
 
-      {/* â”€â”€ Hero â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Hero ────────────────────────────────────────────────────────── */}
       <section className="px-4 pt-16 pb-10 text-center">
         <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium mb-5"
              style={{ background: "rgba(99,102,241,0.12)", color: "#a5b4fc",
@@ -196,43 +195,43 @@ export default function ExplorePage() {
         </div>
 
         <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-3"
-            style={{ color: "var(--text-primary, #f1f5f9)" }}>
+            style={{ color: "var(--text-primary)" }}>
           Numismatic Discovery
         </h1>
 
         <p className="text-base max-w-xl mx-auto mb-2"
-           style={{ color: "var(--text-secondary, #94a3b8)" }}>
+           style={{ color: "var(--text-secondary)" }}>
           Browse{" "}
-          <span className="font-semibold" style={{ color: "var(--accent-primary, #6366f1)" }}>
+          <span className="font-semibold" style={{ color: "var(--brand-mid)" }}>
             9,541 ancient coin types
           </span>{" "}
-          from the Corpus Nummorum â€” the scholarly reference behind every DeepCoin analysis.
+          from the Corpus Nummorum — the scholarly reference behind every DeepCoin analysis.
         </p>
 
         {data && !isLoading && (
-          <p className="text-xs mb-8" style={{ color: "var(--text-secondary, #94a3b8)", opacity: 0.6 }}>
+          <p className="text-xs mb-8" style={{ color: "var(--text-secondary)", opacity: 0.6 }}>
             {data.total.toLocaleString()} types{" "}
             {debouncedQuery ? `match "${debouncedQuery}"` : "in database"}
-            {data.search_used ? " Â· hybrid keyword + semantic search" : " Â· browsing all types"}
+            {data.search_used ? " · hybrid keyword + semantic search" : " · browsing all types"}
           </p>
         )}
         {!data && !isLoading && <div className="mb-8" />}
 
-        {/* â”€â”€ Search bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {/* ── Search bar ────────────────────────────────────────────────── */}
         <div className="relative max-w-lg mx-auto mb-6">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none"
-                  style={{ color: "var(--text-secondary, #94a3b8)" }} />
+                  style={{ color: "var(--text-secondary)" }} />
           <input
             type="text"
             value={query}
             onChange={(e) => handleSearch(e.target.value)}
-            placeholder="Search denominations, dynasties, regions, legendsâ€¦"
+            placeholder="Search denominations, dynasties, regions, legends…"
             className="w-full rounded-xl py-3 pl-10 pr-10 text-sm outline-none transition-all
                        focus:ring-2 focus:ring-[var(--accent-primary)]/40"
             style={{
-              background: "rgba(255,255,255,0.05)",
+              background: "var(--surface-2)",
               border:     "1px solid rgba(255,255,255,0.12)",
-              color:      "var(--text-primary, #f1f5f9)",
+              color:      "var(--text-primary)",
             }}
           />
           {query && (
@@ -240,21 +239,21 @@ export default function ExplorePage() {
               onClick={clearSearch}
               className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-0.5
                          transition-colors hover:bg-white/10"
-              style={{ color: "var(--text-secondary, #94a3b8)" }}
+              style={{ color: "var(--text-secondary)" }}
             >
               <X className="w-4 h-4" />
             </button>
           )}
         </div>
 
-        {/* â”€â”€ Toggle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {/* ── Toggle ────────────────────────────────────────────────────── */}
         <div className="flex items-center justify-center gap-3">
           <button
             onClick={() => { setCnnOnly(false); setPage(0); }}
             className={`rounded-full px-4 py-1.5 text-xs font-medium transition-all border
                         ${!cnnOnly
                           ? "border-[var(--accent-primary)]/50 text-[var(--accent-primary)]"
-                          : "border-white/10 text-[var(--text-secondary)] hover:border-white/20"}`}
+                          : "border-[var(--border)] text-[var(--text-primary)] text-[var(--text-secondary)] hover:border-[var(--brand-mid)]/40"}`}
             style={{ background: !cnnOnly ? "rgba(99,102,241,0.12)" : "rgba(255,255,255,0.03)" }}
           >
             All 9,541 types
@@ -264,7 +263,7 @@ export default function ExplorePage() {
             className={`rounded-full px-4 py-1.5 text-xs font-medium transition-all border
                         ${cnnOnly
                           ? "border-emerald-500/50 text-emerald-400"
-                          : "border-white/10 text-[var(--text-secondary)] hover:border-white/20"}`}
+                          : "border-[var(--border)] text-[var(--text-primary)] text-[var(--text-secondary)] hover:border-[var(--brand-mid)]/40"}`}
             style={{ background: cnnOnly ? "rgba(16,185,129,0.10)" : "rgba(255,255,255,0.03)" }}
           >
             CNN-trained only (438)
@@ -272,7 +271,7 @@ export default function ExplorePage() {
         </div>
       </section>
 
-      {/* â”€â”€ Results â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Results ───────────────────────────────────────────────────────── */}
       <section className="max-w-6xl mx-auto px-4 pb-16">
 
         {/* Loading skeleton */}
@@ -280,7 +279,7 @@ export default function ExplorePage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {Array.from({ length: PAGE_SIZE }).map((_, i) => (
               <div key={i} className="rounded-xl h-52 animate-pulse"
-                   style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }} />
+                   style={{ background: "var(--surface-2)", border: "1px solid rgba(255,255,255,0.06)" }} />
             ))}
           </div>
         )}
@@ -298,7 +297,7 @@ export default function ExplorePage() {
         {/* Empty */}
         {data && data.items.length === 0 && !isLoading && (
           <div className="text-center py-20">
-            <p className="text-4xl mb-4">ðŸª™</p>
+            <p className="text-4xl mb-4">🪙</p>
             <p className="text-base font-semibold mb-2" style={{ color: "var(--text-primary)" }}>
               No types match &ldquo;{debouncedQuery}&rdquo;
             </p>
@@ -332,7 +331,7 @@ export default function ExplorePage() {
                   disabled={page === 0}
                   className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium
                              transition-all disabled:opacity-30 hover:enabled:brightness-110"
-                  style={{ background: "rgba(255,255,255,0.05)", color: "var(--text-secondary)",
+                  style={{ background: "var(--surface-2)", color: "var(--text-secondary)",
                            border: "1px solid rgba(255,255,255,0.10)" }}
                 >
                   <ChevronLeft className="w-4 h-4" />
@@ -346,7 +345,7 @@ export default function ExplorePage() {
                   disabled={page >= totalPages - 1}
                   className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium
                              transition-all disabled:opacity-30 hover:enabled:brightness-110"
-                  style={{ background: "rgba(255,255,255,0.05)", color: "var(--text-secondary)",
+                  style={{ background: "var(--surface-2)", color: "var(--text-secondary)",
                            border: "1px solid rgba(255,255,255,0.10)" }}
                 >
                   Next
@@ -358,17 +357,17 @@ export default function ExplorePage() {
         )}
       </section>
 
-      {/* â”€â”€ Footer CTA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Footer CTA ───────────────────────────────────────────────────────── */}
       <section className="border-t px-4 py-10 text-center"
                style={{ borderColor: "rgba(255,255,255,0.07)" }}>
         <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
-          Have a coin photo? Run a full AI analysis â€” CNN classification + historical research + PDF report.
+          Have a coin photo? Run a full AI analysis — CNN classification + historical research + PDF report.
         </p>
         <Link
           href="/analyse"
           className="inline-flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-medium
                      transition-all hover:brightness-110 active:scale-95"
-          style={{ background: "var(--accent-primary, #6366f1)", color: "#fff" }}
+          style={{ background: "var(--brand-mid)", color: "#fff" }}
         >
           <Sparkles className="w-4 h-4" />
           Analyse a coin
@@ -377,4 +376,7 @@ export default function ExplorePage() {
     </main>
   );
 }
+
+
+
 

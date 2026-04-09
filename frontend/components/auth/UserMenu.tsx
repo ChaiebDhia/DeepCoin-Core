@@ -103,8 +103,7 @@ export function UserMenu() {
         </Link>
         <Link
           href="/register"
-          className="px-3 py-1.5 rounded-lg text-sm transition-colors"
-          style={{ color: "var(--text-secondary)", border: "1px solid var(--border)" }}
+          className="px-3 py-1.5 rounded-lg text-sm transition-colors text-slate-100 border border-slate-600 hover:bg-slate-800"
         >
           Register
         </Link>
@@ -124,7 +123,7 @@ export function UserMenu() {
       {/* Trigger button */}
       <button
         onClick={() => setOpen(v => !v)}
-        className="flex items-center gap-2 px-2 py-1 rounded-lg transition-colors hover:bg-[var(--surface-2)]"
+        className="flex items-center gap-2 px-2 py-1 rounded-lg transition-colors hover:bg-slate-100 bg-white shadow-sm ring-1 ring-slate-200"
       >
         {/* Avatar circle */}
         <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
@@ -134,12 +133,12 @@ export function UserMenu() {
 
         {/* Name + role — hidden on small screens */}
         <div className="hidden sm:flex flex-col items-start leading-tight">
-          <span className="text-sm font-medium truncate max-w-[120px]" style={{ color: "var(--text-primary)" }}>
+          <span className="text-sm font-medium truncate max-w-[120px] text-slate-900">
             {label}
           </span>
           <span
-            className="text-xs px-1.5 py-0 rounded-full cursor-default"
-            style={{ background: ROLE_COLOURS[role], color: ROLE_TEXT[role] }}
+            className="text-xs px-1.5 py-0 rounded-full cursor-default text-slate-700"
+            style={{ background: ROLE_COLOURS[role] }}
             title={role === "analyst" ? "All new accounts start as Analyst. Contact an admin to upgrade." : undefined}
           >
             {ROLE_LABELS[role] ?? role}
@@ -148,8 +147,8 @@ export function UserMenu() {
 
         <ChevronDown
           size={14}
-          className="transition-transform"
-          style={{ color: "var(--text-muted)", transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
+          className="transition-transform text-slate-500"
+          style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
         />
       </button>
 
@@ -169,7 +168,7 @@ export function UserMenu() {
               <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>
                 {label}
               </p>
-              <p className="text-xs truncate" style={{ color: "var(--text-muted)" }}>
+              <p className="text-xs truncate" style={{ color: "var(--text-primary)" }}>
                 {user.email}
               </p>
             </div>

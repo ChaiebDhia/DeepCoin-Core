@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 /**
  * app/chat/page.tsx  DeepCoin AI Numismatic Chat v3
@@ -126,7 +126,7 @@ function CopyButton({ text }: { text: string }) {
     <button
       onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
       className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md transition-all"
-      style={{ color: copied ? "#10b981" : "var(--text-muted)", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
+      style={{ color: copied ? "#10b981" : "var(--text-muted)", background: "var(--surface-1)", border: "1px solid var(--surface-1)" }}
     >
       {copied ? <Check size={9} /> : <Copy size={9} />}
       {copied ? "Copied" : "Copy"}
@@ -168,8 +168,8 @@ function SourceChip({ source, idx }: { source: ChatSource; idx: number }) {
             <a href={cnUrl} target="_blank" rel="noopener noreferrer"
                title={`View CN ${source.type_id} on corpus-nummorum.eu (opens in new tab)`}
                className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-md font-medium transition-colors hover:text-blue-300 hover:bg-blue-400/10"
-               style={{ color: "#60a5fa", border: "1px solid rgba(96,165,250,0.20)" }}>
-              CN ↗
+               >
+              CN ?
             </a>
           )}
         </div>
@@ -191,7 +191,7 @@ function GoogleSearchCTA({ query }: { query: string }) {
         href={`https://www.google.com/search?q=${encodeURIComponent(query + " ancient coin numismatics")}`}
         target="_blank" rel="noopener noreferrer"
         className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md transition-all hover:border-blue-400/50"
-        style={{ color: "#60a5fa", background: "rgba(59,130,246,0.07)", border: "1px solid rgba(59,130,246,0.20)" }}
+        
       >
         <Globe size={9} /> Google
       </a>
@@ -199,7 +199,7 @@ function GoogleSearchCTA({ query }: { query: string }) {
         href={`https://scholar.google.com/scholar?q=${encodeURIComponent(query + " ancient coin")}`}
         target="_blank" rel="noopener noreferrer"
         className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md transition-all hover:border-emerald-400/50"
-        style={{ color: "#34d399", background: "rgba(16,185,129,0.07)", border: "1px solid rgba(16,185,129,0.20)" }}
+        
       >
         <BookOpen size={9} /> Scholar
       </a>
@@ -257,7 +257,7 @@ function MessageBubble({ msg }: { msg: Message }) {
                   /* Blinking cursor — visible while SSE token stream is open */
                   <span
                     className="inline-block w-[2px] h-[1em] align-middle ml-[2px] rounded-full animate-pulse"
-                    style={{ background: "rgba(167,139,250,0.85)" }}
+                    
                   />
                 )}
               </>
@@ -322,7 +322,7 @@ function TypingIndicator() {
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3">
       <div className="shrink-0 w-8 h-8 rounded-2xl flex items-center justify-center"
-           style={{ background: "linear-gradient(135deg, rgba(139,92,246,0.30) 0%, rgba(99,102,241,0.15) 100%)", border: "1px solid rgba(139,92,246,0.35)" }}>
+           >
         <Bot size={13} style={{ color: "#a78bfa" }} />
       </div>
       <div className="rounded-2xl px-4 py-3 flex items-center gap-1"
@@ -352,7 +352,7 @@ function EmptyState({ onSelect }: { onSelect: (q: string) => void }) {
           <div className="absolute inset-0 rounded-3xl blur-2xl opacity-40"
                style={{ background: "radial-gradient(circle, #8b5cf6, transparent 70%)", transform: "scale(1.5)" }} />
           <div className="relative w-20 h-20 rounded-3xl flex items-center justify-center"
-               style={{ background: "linear-gradient(135deg, rgba(139,92,246,0.25) 0%, rgba(99,102,241,0.12) 100%)", border: "1px solid rgba(139,92,246,0.35)", boxShadow: "0 8px 32px rgba(139,92,246,0.20)" }}>
+               >
             <Sparkles size={36} style={{ color: "#a78bfa" }} />
           </div>
         </div>
@@ -370,7 +370,7 @@ function EmptyState({ onSelect }: { onSelect: (q: string) => void }) {
             { icon: <Zap       size={11} />, label: "Source-cited answers" },
           ].map(({ icon, label }) => (
             <span key={label} className="flex items-center gap-1.5 text-[10px] font-medium px-3 py-1 rounded-full"
-                  style={{ background: "rgba(139,92,246,0.10)", color: "#c4b5fd", border: "1px solid rgba(139,92,246,0.20)" }}>
+                  >
               {icon} {label}
             </span>
           ))}
@@ -431,7 +431,7 @@ function HistorySidebar({
           onClick={onNewChat}
           title="New chat"
           className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg transition-all hover:bg-white/5"
-          style={{ color: "#a78bfa", border: "1px solid rgba(139,92,246,0.25)" }}
+          
         >
           <MessageSquarePlus size={11} />
         </button>
@@ -509,7 +509,7 @@ function ChatPageInner() {
   const messagesRef  = useRef<Message[]>([]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
 
-  // Write-through to the navigation cache so state survives unmount ↔ remount
+  // Write-through to the navigation cache so state survives unmount ? remount
   // (e.g. user navigates to /history then comes back).
   useEffect(() => { _chatCache.messages = messages; }, [messages]);
   useEffect(() => { _chatCache.input    = input;    }, [input]);
@@ -822,7 +822,7 @@ function ChatPageInner() {
       </AnimatePresence>
 
       {/* Main chat area */}
-      <div className="flex flex-col flex-1 min-w-0 max-w-3xl mx-auto w-full px-4">
+      <div className="flex flex-col flex-1 min-w-0 w-full max-w-5xl mx-auto px-4 lg:px-8">
 
         {/* Header */}
         <div className="flex items-center justify-between py-4 shrink-0 border-b" style={{ borderColor: "var(--border)" }}>
@@ -834,8 +834,8 @@ function ChatPageInner() {
                 title={sidebarOpen ? "Close history panel" : "Open saved conversations"}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[11px] font-semibold transition-all"
                 style={{
-                  background: sidebarOpen ? "rgba(139,92,246,0.22)" : "rgba(139,92,246,0.10)",
-                  color:      "#c4b5fd",
+                    background: sidebarOpen ? "rgba(139,92,246,0.15)" : "var(--surface-2)",
+                    color:      sidebarOpen ? "var(--brand-light)" : "var(--text-secondary)",
                   border:     "1px solid rgba(139,92,246,0.35)",
                   boxShadow:  sidebarOpen ? "0 0 10px rgba(139,92,246,0.18)" : "none",
                 }}
@@ -845,7 +845,7 @@ function ChatPageInner() {
               </button>
             )}
             <div className="w-9 h-9 rounded-xl flex items-center justify-center"
-                 style={{ background: "linear-gradient(135deg, rgba(139,92,246,0.25) 0%, rgba(99,102,241,0.10) 100%)", border: "1px solid rgba(139,92,246,0.30)", boxShadow: "0 2px 12px rgba(139,92,246,0.15)" }}>
+                 >
               <Sparkles size={16} style={{ color: "#a78bfa" }} />
             </div>
             <div>
@@ -871,16 +871,16 @@ function ChatPageInner() {
 
         {/* RAG scope notice — persistent amber banner */}
         <div
-          className="shrink-0 flex items-start gap-2 px-3 py-2 mx-0 my-0 text-[10px] leading-relaxed"
+          className="shrink-0 flex items-start gap-2 px-3 py-2 mx-0 my-0 text-[10px] leading-relaxed bg-emerald-50 dark:bg-emerald-950/20 border-b border-emerald-200 dark:border-emerald-900/30"
           style={{
-            background:   "rgba(251,191,36,0.05)",
-            borderBottom: "1px solid rgba(251,191,36,0.14)",
+            /* bg-amber-50 */
+            /* border-amber-200 */
             color:        "var(--text-muted)",
           }}
         >
-          <AlertCircle size={11} className="shrink-0 mt-0.5" style={{ color: "#fbbf24" }} />
+          <AlertCircle size={11} className="shrink-0 mt-0.5 text-red-600 dark:text-red-500" />
           <span>
-            <span className="font-semibold" style={{ color: "#fde68a" }}>Domain-specific RAG assistant —</span>
+            <span className="font-semibold text-red-600 dark:text-red-500">Domain-specific RAG assistant —</span>
             {" "}answers are grounded in the{" "}
             <span className="font-medium" style={{ color: "var(--text-secondary)" }}>Corpus Nummorum knowledge base</span>
             {" "}(9,541 coin types, 47,705 semantic chunks). This assistant handles{" "}
@@ -920,7 +920,7 @@ function ChatPageInner() {
                   background: "var(--surface-1)",
                   border:     `1px solid ${input ? "rgba(139,92,246,0.50)" : "var(--border)"}`,
                   color:      "var(--text-primary)",
-                  boxShadow:  input ? "0 0 0 3px rgba(139,92,246,0.10)" : "none",
+                  boxShadow:  input ? "0 0 0 3px var(--surface-2)" : "none",
                 }}
               />
               {input.length > 200 && (
@@ -932,8 +932,8 @@ function ChatPageInner() {
             </div>
             <motion.button type="submit" disabled={!input.trim() || loading} whileTap={{ scale: 0.95 }}
               className="shrink-0 w-11 h-11 rounded-xl flex items-center justify-center transition-all disabled:opacity-30"
-              style={{ background: "linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)", boxShadow: input.trim() && !loading ? "0 4px 14px rgba(139,92,246,0.40)" : "none" }}>
-              {loading ? <Loader2 size={16} className="animate-spin text-white" /> : <Send size={15} className="text-white ml-0.5" />}
+              >
+              {loading ? <Loader2 size={16} className="animate-spin text-[var(--text-primary)] dark:text-white" /> : <Send size={15} className="text-[var(--text-primary)] dark:text-white ml-0.5" />}
             </motion.button>
           </form>
           <p className="text-center text-[9px] mt-2" style={{ color: "var(--text-muted)" }}>
@@ -958,4 +958,11 @@ export default function ChatPage() {
     </Suspense>
   );
 }
+
+
+
+
+
+
+
 

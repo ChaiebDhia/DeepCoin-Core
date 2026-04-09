@@ -63,17 +63,16 @@ export function HeroSection() {
 
   return (
     <section
-      className="relative min-h-[94vh] flex flex-col items-center justify-center overflow-hidden"
-      style={{ marginLeft: "-1.25rem", marginRight: "-1.25rem", padding: "0 1.25rem" }}
+      className="relative min-h-[94vh] flex flex-col items-center justify-center w-full"
     >
       {/* ── Decorative background ── */}
-      <div className="absolute inset-0 pointer-events-none select-none" aria-hidden>
+      <div className="absolute inset-0 pointer-events-none select-none overflow-hidden" aria-hidden>
         {/* Radial glow centred behind the headline */}
         <div
           className="absolute inset-0"
           style={{
             background:
-              "radial-gradient(ellipse 85% 65% at 50% 48%, rgba(30,95,168,0.14) 0%, transparent 70%)",
+              "radial-gradient(ellipse 85% 65% at 50% 48%, rgba(59,130,246,0.06) 0%, transparent 70%)",
           }}
         />
         {/* Subtle grid */}
@@ -138,7 +137,7 @@ export function HeroSection() {
           transition={{ duration: 0.65, delay: 0.15 }}
           className="text-5xl sm:text-6xl lg:text-7xl font-black tracking-tight leading-[1.08] mb-6"
         >
-          <span className="animate-shimmer-text">Identify any</span>
+          <span style={{ color: "var(--text-primary)" }}>Identify any</span>
           <br />
           <span style={{ color: "var(--text-primary)" }}>ancient coin</span>
           <br />
@@ -154,8 +153,8 @@ export function HeroSection() {
           style={{ color: "var(--text-secondary)" }}
         >
           DeepCoin combines an{" "}
-          <strong className="text-white">EfficientNet-B3 CNN</strong> with a{" "}
-          <strong className="text-white">5-agent RAG system</strong> to classify coins
+          <strong className="text-[var(--text-primary)]">EfficientNet-B3 CNN</strong> with a{" "}
+          <strong className="text-[var(--text-primary)]">5-agent RAG system</strong> to classify coins
           against 9,716 Corpus Nummorum types, validate material forensically, and
           generate a professional PDF report — typically in 15–60 seconds.
         </motion.p>
@@ -215,16 +214,6 @@ export function HeroSection() {
           ))}
         </motion.div>
       </div>
-
-      {/* Scroll indicator */}
-      <motion.div
-        className="absolute bottom-8 left-1/2 -translate-x-1/2"
-        animate={{ y: [0, 9, 0] }}
-        transition={{ duration: 2.2, repeat: Infinity }}
-        aria-hidden
-      >
-        <ChevronDown size={20} style={{ color: "var(--text-muted)" }} />
-      </motion.div>
     </section>
   );
 }
