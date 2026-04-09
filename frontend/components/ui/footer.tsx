@@ -46,7 +46,7 @@ export function Footer() {
   return (
     <footer
       className="border-t mt-8"
-      style={{ borderColor: "var(--border)" }}
+      style={{ backgroundColor: "var(--footer-bg)", color: "var(--footer-text)", borderColor: "rgba(255,255,255,0.1)" }}
     >
       <div className="mx-auto max-w-6xl px-5 pt-12 pb-8">
         {/* Columns */}
@@ -66,7 +66,7 @@ export function Footer() {
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-xs inline-flex items-center gap-1 hover:text-white transition-colors"
-                        style={{ color: "var(--text-secondary)" }}
+                        style={{ color: "var(--footer-text)" }}
                       >
                         {label}
                         <ExternalLink size={10} className="opacity-60" />       
@@ -75,7 +75,7 @@ export function Footer() {
                       <Link
                         href={href}
                         className="text-xs hover:text-white transition-colors"  
-                        style={{ color: "var(--text-secondary)" }}
+                        style={{ color: "var(--footer-text)" }}
                       >
                         {label}
                       </Link>
@@ -93,7 +93,7 @@ export function Footer() {
             </h3>
             <ul className="space-y-2.5">
               {ARCHITECTURE.map((t) => (
-                <li key={t} className="text-xs transition-colors" style={{ color: "var(--text-secondary)" }}>
+                <li key={t} className="text-xs transition-colors" style={{ color: "var(--footer-text)" }}>
                   {t}
                 </li>
               ))}
@@ -113,7 +113,7 @@ export function Footer() {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-xs inline-flex items-center gap-1.5 hover:text-white transition-colors"
-                    style={{ color: "var(--text-secondary)" }}
+                    style={{ color: "var(--footer-text)" }}
                   >
                     <Icon size={12} className="opacity-60" />
                     {label}
@@ -128,7 +128,7 @@ export function Footer() {
         <div
           className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-6 border-t text-xs"
           style={{
-            borderColor: "var(--border)",
+            borderColor: "rgba(255,255,255,0.1)",
             color:       "var(--text-muted)",
           }}
         >
@@ -144,3 +144,6 @@ export function Footer() {
     </footer>
   );
 }
+
+
+

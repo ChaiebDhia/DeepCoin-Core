@@ -99,7 +99,7 @@ export function RegisterForm() {
         className="w-full max-w-sm mx-auto text-center"
       >
         <div className="inline-flex items-center justify-center w-14 h-14 rounded-full mb-4"
-             style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.3)" }}>
+             style={{ background: "var(--surface-1)", border: "1px solid var(--surface-1)" }}>
           <CheckCircle2 size={28} style={{ color: "#22c55e" }} />
         </div>
         <h2 className="text-xl font-bold mb-2" style={{ color: "var(--text-primary)" }}>
@@ -136,7 +136,7 @@ export function RegisterForm() {
       {/* Brand mark */}
       <div className="text-center mb-8">
         <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4"
-             style={{ background: "linear-gradient(135deg, rgba(212,175,55,0.15) 0%, rgba(212,175,55,0.05) 100%)", border: "1px solid rgba(212,175,55,0.3)" }}>
+             style={{ background: "linear-gradient(135deg, var(--surface-1) 0%, var(--surface-1) 100%)", border: "1px solid var(--surface-1)" }}>
           <Coins size={28} style={{ color: "var(--brand-gold)" }} />
         </div>
         <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
@@ -159,7 +159,7 @@ export function RegisterForm() {
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
                 className="flex items-start gap-2 text-sm px-3 py-2.5 rounded-lg"
-                style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#fca5a5" }}
+                style={{ background: "var(--surface-1)", border: "1px solid var(--surface-1)", color: "#fca5a5" }}
               >
                 <AlertCircle size={16} className="mt-0.5 shrink-0" />
                 <span>{error}</span>

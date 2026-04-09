@@ -46,9 +46,9 @@ export function AnalyseSection() {
         <span
           className="inline-block text-xs font-semibold uppercase tracking-widest px-3 py-1 rounded-full border mb-4"
           style={{
-            borderColor:     "rgba(212,168,83,0.35)",
+            borderColor:     "var(--brand-gold-30)",
             color:           "var(--brand-gold)",
-            backgroundColor: "rgba(212,168,83,0.07)",
+            backgroundColor: "var(--brand-gold-10)",
           }}
         >
           Try it now

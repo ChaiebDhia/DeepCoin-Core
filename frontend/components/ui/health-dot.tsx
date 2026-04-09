@@ -42,7 +42,7 @@ export function HealthDot() {
 
   return (
     <div
-      className="flex items-center gap-2 text-xs text-[var(--text-muted)] cursor-default"
+      className="flex items-center gap-2 text-xs text-[var(--nav-text)] opacity-80 cursor-default"
       title={label}
       aria-label={label}
     >

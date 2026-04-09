@@ -21,22 +21,23 @@
 
 import Link           from "next/link";
 import { Coins }      from "lucide-react";
-import { HealthDot }  from "@/components/ui/health-dot";
-import { UserMenu }   from "@/components/auth/UserMenu";
-import { NavLinks }   from "@/components/ui/NavLinks";
-import { MobileNav }  from "@/components/ui/MobileNav";
+import { HealthDot }   from "@/components/ui/health-dot";
+import { UserMenu }    from "@/components/auth/UserMenu";
+import { NavLinks }    from "@/components/ui/NavLinks";
+import { MobileNav }   from "@/components/ui/MobileNav";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 export function Header() {
   return (
     <header
-      className="sticky top-0 z-50 w-full border-b border-[var(--border)]"
-      style={{ backgroundColor: "var(--surface-1)" }}
+      className="sticky top-0 z-50 w-full border-b border-[var(--nav-bg)]"
+      style={{ backgroundColor: "var(--nav-bg)", color: "var(--nav-text)" }}
     >
       <div className="mx-auto max-w-6xl px-5 h-14 flex items-center justify-between gap-4">
         {/* Brand */}
         <Link
           href="/"
-          className="flex items-center gap-2 text-[var(--text-primary)] hover:text-white transition-colors"
+          className="flex items-center gap-2 text-[var(--nav-text)] hover:text-[#fbbf24] transition-colors"
         >
           <Coins size={22} className="text-[var(--brand-gold)]" />
           <span className="font-bold tracking-tight text-base">
@@ -51,7 +52,8 @@ export function Header() {
         <div className="flex items-center gap-2">
           {/* Health indicator — left of the auth buttons */}
           <HealthDot />
-
+          {/* Theme Toggle */}
+          <ThemeToggle />
           {/* Auth: avatar dropdown when logged in, Sign In / Register otherwise */}
           <UserMenu />
 

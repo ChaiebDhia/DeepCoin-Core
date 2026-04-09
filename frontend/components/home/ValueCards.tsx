@@ -93,9 +93,9 @@ export function ValueCards() {
         <span
           className="inline-block text-xs font-semibold uppercase tracking-widest px-3 py-1 rounded-full border mb-4"
           style={{
-            borderColor:     "rgba(212,168,83,0.35)",
+            borderColor:     "var(--brand-gold-30)",
             color:           "var(--brand-gold)",
-            backgroundColor: "rgba(212,168,83,0.07)",
+            backgroundColor: "var(--brand-gold-10)",
           }}
         >
           Why DeepCoin
@@ -119,7 +119,7 @@ export function ValueCards() {
               initial={initial}
               animate={inView ? { x: 0, y: 0, opacity: 1 } : {}}
               transition={{ duration: 0.55, delay: i * 0.12 }}
-              className="relative rounded-2xl border p-7 flex flex-col gap-5"
+              className="relative rounded-2xl border p-7 flex flex-col gap-5 transition-shadow hover:shadow-lg dark:hover:shadow-none hover:shadow-indigo-500/10"
               style={{
                 borderColor:     featured ? `${color}60` : "var(--border)",
                 backgroundColor: featured ? `${color}06` : "var(--surface-1)",
@@ -130,7 +130,7 @@ export function ValueCards() {
               {featured && (
                 <span
                   className="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full"
-                  style={{ backgroundColor: color, color: "#0a1628" }}
+                  style={{ backgroundColor: color, color: "var(--brand-navy)" }}
                 >
                   Core innovation
                 </span>
@@ -187,3 +187,4 @@ export function ValueCards() {
     </section>
   );
 }
+

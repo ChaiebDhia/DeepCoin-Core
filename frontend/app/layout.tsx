@@ -4,6 +4,7 @@ import "./globals.css";
 import Providers      from "@/providers";
 import { Header }    from "@/components/ui/header";
 import { Footer }    from "@/components/ui/footer";
+import { MainLayout } from "@/components/ui/MainLayout";
 import TutorialModal from "@/components/ui/TutorialModal";
 
 const geistSans = Geist({
@@ -26,16 +27,15 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className="dark" data-scroll-behavior="smooth">
+    <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}
-        style={{ backgroundColor: "var(--surface-0)" }}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col transition-colors duration-200`}
       >
         <Providers>
           <Header />
-          <main className="flex-1 mx-auto w-full max-w-6xl px-5">
+          <MainLayout>
             {children}
-          </main>
+          </MainLayout>
           <Footer />
           <TutorialModal />
         </Providers>
@@ -43,3 +43,4 @@ export default function RootLayout({
     </html>
   );
 }
+

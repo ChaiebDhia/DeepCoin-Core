@@ -227,7 +227,7 @@ export function AgentPipeline({ onCancel }: AgentPipelineProps) {
       className="rounded-2xl w-full max-w-2xl"
       style={{
         border:     "1px solid rgba(255,255,255,0.07)",
-        background: "linear-gradient(145deg, #0d1a2e 0%, #080e1a 100%)",
+        background: "linear-gradient(145deg, var(--surface-1) 0%, var(--surface-0) 100%)",
         overflow:   "hidden",
       }}
     >

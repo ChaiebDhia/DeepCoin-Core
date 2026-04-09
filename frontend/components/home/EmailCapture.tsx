@@ -100,8 +100,7 @@ export function EmailCapture() {
       >
         {/* Inner surface */}
         <div
-          className="relative rounded-3xl px-8 py-16 text-center overflow-hidden"
-          style={{ backgroundColor: "var(--surface-1)" }}
+          className="relative rounded-3xl px-8 py-16 text-center overflow-hidden bg-white shadow-xl dark:bg-[var(--surface-1)] dark:shadow-none"
         >
           {/* Radial gold glow background accent */}
           <div
@@ -109,7 +108,7 @@ export function EmailCapture() {
             aria-hidden
             style={{
               background:
-                "radial-gradient(ellipse 70% 60% at 50% 50%, rgba(212,168,83,0.07) 0%, transparent 70%)",
+                "radial-gradient(ellipse 70% 60% at 50% 50%, var(--brand-gold-10) 0%, transparent 70%)",
             }}
           />
 
@@ -179,7 +178,7 @@ export function EmailCapture() {
                   type="submit"
                   disabled={state === "loading"}
                   className={`inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 hover:brightness-110 disabled:opacity-60 flex-shrink-0 ${isAuthed ? 'w-full max-w-xs' : ''}`}
-                  style={{ backgroundColor: "var(--brand-gold)", color: "#0a1628" }}
+                  style={{ backgroundColor: "var(--brand-gold)", color: "var(--brand-navy)" }}
                 >
                   {state === "loading" ? (
                     <Loader2 size={16} className="animate-spin" />

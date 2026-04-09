@@ -1,9 +1,9 @@
-﻿"use client";
+"use client";
 
 /**
  * components/home/TechStack.tsx
  * ================================
- * Real technology & research credits â€” bento-grid redesign.
+ * Real technology & research credits — bento-grid redesign.
  *
  * WHAT: Four tech pillar cards + accuracy hero tile + dataset credit.
  *       Every fact is verifiable (requirements.txt, training logs, CN website).
@@ -21,7 +21,7 @@ import { motion, useInView } from "framer-motion";
 import { Brain, Bot, ServerIcon, Monitor, ExternalLink, Layers } from "lucide-react";
 
 
-// â”€â”€ Data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Data ──────────────────────────────────────────────────────────────────────
 
 interface Tech {
   name:    string;
@@ -84,18 +84,18 @@ const PILLARS: Pillar[] = [
       { name: "Next.js",       version: "15",   href: "https://nextjs.org",             note: "App Router" },
       { name: "Framer Motion", version: "12",   href: "https://motion.dev",             note: "animations" },
       { name: "TanStack Q",    version: "v5",   href: "https://tanstack.com/query",     note: "caching" },
-      { name: "NextAuth",      version: "v5Î²",  href: "https://authjs.dev",             note: "JWT sessions" },
+      { name: "NextAuth",      version: "v5β",  href: "https://authjs.dev",             note: "JWT sessions" },
     ],
   },
 ];
 
 const HERO_STATS = [
-  { value: "80.03%",  label: "TTA accuracy",  sub: "EfficientNet-B3 Ã— 438 classes" },
-  { value: "47,705",  label: "RAG vectors",    sub: "5 chunks Ã— 9,541 coin types"  },
-  { value: "<20 s",   label: "Full pipeline",  sub: "CNN â†’ agents â†’ PDF"           },
+  { value: "80.03%",  label: "TTA accuracy",  sub: "EfficientNet-B3 × 438 classes" },
+  { value: "47,705",  label: "RAG vectors",    sub: "5 chunks × 9,541 coin types"  },
+  { value: "<20 s",   label: "Full pipeline",  sub: "CNN → agents → PDF"           },
 ];
 
-// â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export function TechStack() {
   const ref    = useRef<HTMLElement>(null);
@@ -104,7 +104,7 @@ export function TechStack() {
   return (
     <section ref={ref} className="py-24">
 
-      {/* â”€â”€ Section header â”€â”€ */}
+      {/* ── Section header ── */}
       <motion.div
         initial={{ opacity: 0, y: 18 }}
         animate={inView ? { opacity: 1, y: 0 } : {}}
@@ -128,10 +128,10 @@ export function TechStack() {
         </p>
       </motion.div>
 
-      {/* â”€â”€ Main bento grid â”€â”€ */}
+      {/* ── Main bento grid ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
 
-        {/* â”€â”€ Hero metrics tile (left, spans 1 col) â”€â”€ */}
+        {/* ── Hero metrics tile (left, spans 1 col) ── */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={inView ? { opacity: 1, x: 0 } : {}}
@@ -159,7 +159,7 @@ export function TechStack() {
               Top-1 accuracy
             </p>
             <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-              TTA Ã—8 Â· 438 ancient coin classes
+              TTA ×8 · 438 ancient coin classes
             </p>
           </div>
 
@@ -178,7 +178,7 @@ export function TechStack() {
           </div>
         </motion.div>
 
-        {/* â”€â”€ Four pillar cards (right, 2Ã—2 grid) â”€â”€ */}
+        {/* ── Four pillar cards (right, 2×2 grid) ── */}
         <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
           {PILLARS.map(({ label, icon: Icon, color, glow, tech }, i) => (
             <motion.div
@@ -264,7 +264,7 @@ export function TechStack() {
         </div>
       </div>
 
-      {/* â”€â”€ Dataset credit banner â”€â”€ */}
+      {/* ── Dataset credit banner ── */}
       <motion.a
         href="https://www.corpus-nummorum.eu"
         target="_blank"
@@ -299,7 +299,7 @@ export function TechStack() {
             />
           </div>
           <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-            DFG-funded Â· Freie UniversitÃ¤t Berlin Â· CC BY-SA 4.0
+            DFG-funded · Freie Universität Berlin · CC BY-SA 4.0
           </p>
         </div>
 
