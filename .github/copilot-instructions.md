@@ -2071,3 +2071,12 @@ esponse_class=Response manually across all Route DELETE requests.
 2. **Conventional Commits:** Use <type>(<scope>): <subject> format. Types include eat, ix, efactor, docs, chore.
 3. **Deep Context:** Always append a  -m "..." paragraph explicitly explaining the 'Why' and the 'How' associated with the code.
 
+
+
+## ?? CURRENT ACTIVE GOAL: ENTERPRISE V2 SAAS ROADMAP
+See AI_LEAD_MEMORY.md for the prioritized 4-Phase execution plan.
+1. Core UX Scalability & Security (RBAC, Theming, i18n)
+2. Data Layer Overhaul (Map & Media)
+3. AI Translation & Localization Pipeline
+4. HITL Admin Curation Engine
+**Strict Directive:** Build these top-to-bottom. NEVER invent a new separate DB for admins; use 'Single Source of Truth' with metadata flags.
