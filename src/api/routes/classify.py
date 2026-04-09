@@ -288,28 +288,30 @@ async def classify(
     # WHY async INSERT here:
     #   The pipeline has finished; the event loop is free. We write directly
     #   to the classifications table using the async SQLAlchemy session that
-    #   FastAPI already opened for this request. No thread spawning needed.
-    #   user_id is NULL for guest (unauthenticated) requests — allowed by the
-    #   schema. Guests can classify but their records are not accessible via
-    #   /api/history (which requires authentication).
-    try:
-        cls_row = Classification(
-            id             = record_id,
-            user_id        = current_user.id if current_user else None,
-            label          = cnn.label,
-            confidence     = cnn.confidence,
-            route_taken    = route,
-            image_filename = safe_name,
-            pdf_path       = str(pdf_path) if pdf_path else None,
-            payload        = response.model_dump(),
-        )
-        db.add(cls_row)
-        await db.commit()
-        logger.debug("Persisted classification %s to PostgreSQL (user=%s)",
-                     record_id, current_user.id if current_user else "guest")
-    except Exception as hist_exc:
-        await db.rollback()
-        logger.error("classification persist failed (non-fatal): %s", hist_exc, exc_info=True)
+    #   FastAPI already opened for this request.
+    #   *RBAC Ephemeral Storage:* Guest outputs are generated but skipped
+    #   during database insert (ephemeral PDF/UI generation only) as per Priority 1.
+    if current_user is not None:
+        try:
+            cls_row = Classification(
+                id             = record_id,
+                user_id        = current_user.id,
+                label          = cnn.label,
+                confidence     = cnn.confidence,
+                route_taken    = route,
+                image_filename = safe_name,
+                pdf_path       = str(pdf_path) if pdf_path else None,
+                payload        = response.model_dump(),
+            )
+            db.add(cls_row)
+            await db.commit()
+            logger.debug("Persisted classification %s to PostgreSQL (user=%s)",
+                         record_id, current_user.id)
+        except Exception as hist_exc:
+            await db.rollback()
+            logger.error("Database insert failed: %s", hist_exc, exc_info=True)
+    else:
+        logger.info("Guest request: skipping database insert (Ephemeral Storage pattern).")
 
     # ── 8. Write audit row (PostgreSQL, non-fatal) ────────────────────────────
     # WHY async INSERT here:

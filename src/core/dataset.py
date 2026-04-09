@@ -97,7 +97,7 @@ class DeepCoinDataset(Dataset):
     
     def __len__(self):
         """
-        🎓 REQUIRED PyTorch METHOD #1
+         REQUIRED PyTorch METHOD #1
         Returns the total number of samples in the dataset.
         
         WHY? The training loop needs to know "how many images do I have?"
@@ -107,7 +107,7 @@ class DeepCoinDataset(Dataset):
     
     def __getitem__(self, idx):
         """
-        🎓 REQUIRED PyTorch METHOD #2
+         REQUIRED PyTorch METHOD #2
         Loads and returns a single image-label pair at the given index.
         
         WHY? During training, PyTorch's DataLoader calls this method repeatedly:

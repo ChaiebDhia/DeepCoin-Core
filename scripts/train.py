@@ -188,7 +188,7 @@ def split_dataset(dataset, val_size=0.15, test_size=0.15, random_seed=42):
 # ─────────────────────────────────────────────────────────────────────────────
 def get_weighted_sampler(train_dataset):
     """
-    🎓 WHAT THIS DOES:
+     WHAT THIS DOES:
     Fixes the 40:1 class imbalance problem.
 
     The Problem:
@@ -317,7 +317,7 @@ def get_dataloaders(train_dataset, val_dataset, test_dataset, sampler, batch_siz
 # ─────────────────────────────────────────────────────────────────────────────
 def mixup_batch(images, labels, num_classes, alpha=0.4):
     """
-    🎓 WHAT IS MIXUP?
+     WHAT IS MIXUP?
     Mixup blends TWO training images together with a random ratio (lambda):
 
         mixed_image = λ × image_A + (1-λ) × image_B
