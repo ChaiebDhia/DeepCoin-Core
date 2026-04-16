@@ -1,3 +1,7 @@
+"use client";
+
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { LanguageToggle } from "@/components/ui/LanguageToggle";
 /**
  * components/auth/UserMenu.tsx
  * =============================
@@ -20,13 +24,13 @@
  *   Initials avatars are generated from display_name or email prefix.
  */
 
-"use client";
 
 import { useState, useRef, useEffect } from "react";
 import { useSession, signOut }         from "next-auth/react";
 import Link                            from "next/link";
 import { motion, AnimatePresence }     from "framer-motion";
 import { LogOut, ChevronDown, ShieldCheck, Coins, History, LayoutDashboard, Settings } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -65,6 +69,7 @@ const ROLE_TEXT: Record<string, string> = {
 // ── component ─────────────────────────────────────────────────────────────────
 
 export function UserMenu() {
+  const t = useTranslations("AuthMenu");
   const { data: session, status } = useSession();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -93,19 +98,22 @@ export function UserMenu() {
   // ── unauthenticated ────────────────────────────────────────────────────────
   if (!session) {
     return (
-      <div className="flex items-center gap-2">
+      <div className="hidden md:flex items-center gap-3">
+        <LanguageToggle />
+        <ThemeToggle />
         <Link
           href="/login"
-          className="px-4 py-1.5 rounded-lg text-sm font-semibold transition-opacity hover:opacity-80"
+          className="px-4 py-1.5 rounded-xl whitespace-nowrap text-sm font-semibold transition-opacity hover:opacity-80"
           style={{ background: "var(--brand-gold)", color: "#0d1520" }}
         >
-          Sign In
+          {t("sign_in")}
         </Link>
         <Link
           href="/register"
-          className="px-3 py-1.5 rounded-lg text-sm transition-colors text-slate-100 border border-slate-600 hover:bg-slate-800"
+          className="px-4 py-1.5 rounded-xl whitespace-nowrap text-sm font-medium transition-colors border"
+          style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}
         >
-          Register
+          {t("create_account")}
         </Link>
       </div>
     );
@@ -183,7 +191,7 @@ export function UserMenu() {
                   style={{ color: role === "admin" ? "#fca5a5" : "var(--brand-gold)" }}
                 >
                   <ShieldCheck size={15} />
-                  Admin Dashboard
+                  {t("admin_dashboard")}
                 </Link>
               )}
               <Link
@@ -193,7 +201,7 @@ export function UserMenu() {
                 style={{ color: "var(--brand-gold)" }}
               >
                 <Coins size={15} />
-                Analyse a Coin
+                {t("analyse_coin")}
               </Link>
               <Link
                 href="/history"
@@ -202,9 +210,9 @@ export function UserMenu() {
                 style={{ color: "var(--text-secondary)" }}
               >
                 <History size={15} />
-                My History
+                {t("my_history")}
               </Link>
-              {/* My Dashboard — for analysts only; admins/curators use /admin */}
+              {/* {t("my_dashboard")} — for analysts only; admins/curators use /admin */}
               {role !== "admin" && role !== "curator" && (
                 <Link
                   href="/dashboard"
@@ -213,7 +221,7 @@ export function UserMenu() {
                   style={{ color: "var(--text-secondary)" }}
                 >
                   <LayoutDashboard size={15} />
-                  My Dashboard
+                  {t("my_dashboard")}
                 </Link>
               )}
               <Link
@@ -223,11 +231,11 @@ export function UserMenu() {
                 style={{ color: "var(--text-secondary)" }}
               >
                 <Settings size={15} />
-                Settings
+                {t("settings")}
               </Link>
             </div>
 
-            {/* Sign out */}
+            {/* {t("sign_out")} */}
             <div className="py-1 border-t" style={{ borderColor: "var(--border)" }}>
               <button
                 onClick={() => { setOpen(false); signOut({ callbackUrl: "/" }); }}
@@ -235,8 +243,13 @@ export function UserMenu() {
                 style={{ color: "var(--text-muted)" }}
               >
                 <LogOut size={15} />
-                Sign out
+                {t("sign_out")}
               </button>
+            </div>
+            
+            <div className="py-2 border-t flex justify-center gap-4" style={{ borderColor: 'var(--border)' }}>
+              <LanguageToggle />
+              <ThemeToggle />
             </div>
           </motion.div>
         )}
