@@ -15,6 +15,8 @@
 
 import Link        from "next/link";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { Home, Globe, MessageSquare, Info } from "lucide-react";
 
 /**
  * Returns true when the nav link should be highlighted.
@@ -30,7 +32,7 @@ function isActive(href: string, pathname: string): boolean {
 }
 
 const baseCls =
-  "px-3 py-1.5 rounded-md text-sm transition-all relative";
+  "flex items-center gap-1 px-2 py-1.5 sm:px-1.5 md:px-2 lg:px-3 rounded-md text-sm transition-all relative";
 const inactiveCls =
   "text-[var(--nav-text)] opacity-70 hover:opacity-100 hover:bg-white/10";
 /** Active: white bold text + subtle surface background so it's visually
@@ -39,17 +41,18 @@ const activeCls =
   "text-white font-semibold bg-white/15";
 
 export const NAV_LINKS = [
-  { href: "/",          label: "Home"     },
-  { href: "/explore",   label: "Explore"  },
-  { href: "/chat",      label: "AI Chat"  },
-  { href: "/about",     label: "About"    },
+  { href: "/",          labelKey: "home", icon: Home },
+  { href: "/explore",   labelKey: "explore", icon: Globe },
+  { href: "/chat",      labelKey: "chat", icon: MessageSquare },
+  { href: "/about",     labelKey: "about", icon: Info },
 ];
 
 export function NavLinks() {
+  const t = useTranslations("Navbar");
   const pathname = usePathname();
 
   return (
-    <nav className="hidden md:flex items-center gap-1">
+    <nav className="hidden lg:flex items-center gap-1">
       {NAV_LINKS.map(l => {
         const active = isActive(l.href, pathname);
         return (
@@ -58,7 +61,8 @@ export function NavLinks() {
             href={l.href}
             className={`${baseCls} ${active ? activeCls : inactiveCls}`}
           >
-            {l.label}
+            {l.icon && <l.icon size={16} />}
+            <span>{t(l.labelKey)}</span>
             {/* Gold underline bar for active page */}
             {active && (
               <span

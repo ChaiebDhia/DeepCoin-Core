@@ -36,7 +36,7 @@ export function HealthDot() {
                    "bg-slate-600";   // no data yet — neutral
 
   const label =  isError      ? "Backend unreachable" :
-                 isHealthy   ? `API v${data?.version} — all systems OK` :
+                 isHealthy   ? `ll systems OK` :
                  data?.status === "degraded" ? `API degraded — check components` :
                  "Connecting…";
 
@@ -53,7 +53,7 @@ export function HealthDot() {
           isHealthy && "animate-pulse",
         )}
       />
-      <span className="hidden sm:block">{label}</span>
+      <span className="hidden lg:block">{label}</span>
     </div>
   );
 }
