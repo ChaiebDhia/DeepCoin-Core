@@ -13,13 +13,16 @@
  *   - This page shell is a Server Component — zero extra JS cost
  */
 
-import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 import { AnalyseSection } from "@/components/home/AnalyseSection";
 
-export const metadata: Metadata = {
-  title:       "Analyse a Coin · DeepCoin",
-  description: "Upload a photograph of an ancient coin. DeepCoin classifies it against 9,716 Corpus Nummorum types and generates a professional PDF report.",
-};
+export async function generateMetadata() {
+  const t = await getTranslations("AnalysePage");
+  return {
+    title: t("title"),
+    description: t("description"),
+  };
+}
 
 export default function AnalysePage() {
   return (

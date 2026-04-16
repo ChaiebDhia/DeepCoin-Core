@@ -22,6 +22,7 @@
 
 import { useRef }                from "react";
 import { motion, useInView }     from "framer-motion";
+import { useTranslations }           from "next-intl";
 import { Building2, GraduationCap, Search } from "lucide-react";
 
 interface AudienceCard {
@@ -33,36 +34,37 @@ interface AudienceCard {
   initial: { x?: number; y?: number };
 }
 
-const CARDS: AudienceCard[] = [
-  {
-    icon:    Building2,
-    title:   "Museums & Curators",
-    desc:    "Professional cataloguing in seconds. Attach the full-PDF report directly to collection management systems. Material validation prevents misattribution.",
-    tags:    ["Cataloguing", "PDF reports", "Material check", "Batch analysis"],
-    color:   "#3b82f6",
-    initial: { x: -20 },
-  },
-  {
-    icon:    GraduationCap,
-    title:   "Researchers & Academics",
-    desc:    "Query 9,716 Corpus Nummorum types through hybrid BM25 + vector search. Full citation trail — every fact is linked to a [CONTEXT N] source block.",
-    tags:    ["Corpus Nummorum", "RAG citations", "9,716 types", "Batch export"],
-    color:   "#8b5cf6",
-    initial: { y: 20 },
-  },
-  {
-    icon:    Search,
-    title:   "Collectors & Dealers",
-    desc:    "Upload a photo from your phone. Get an instant estimate: denomination, mint, period, and metal — even for degraded specimens no algorithm has seen before.",
-    tags:    ["Mobile photo", "Instant estimate", "Unknown coins", "Graceful fallback"],
-    color:   "#10b981",
-    initial: { x: 20 },
-  },
-];
-
 export function ForWhoCards() {
+  const t = useTranslations("ForWhoCards");
   const ref    = useRef<HTMLElement>(null);
   const inView = useInView(ref, { once: true, margin: "-80px" });
+
+  const CARDS: AudienceCard[] = [
+    {
+      icon:    Building2,
+      title:   t("c1_title"),
+      desc:    t("c1_desc"),
+      tags:    [t("c1_tags.0"), t("c1_tags.1"), t("c1_tags.2"), t("c1_tags.3")],
+      color:   "#3b82f6",
+      initial: { x: -20 },
+    },
+    {
+      icon:    GraduationCap,
+      title:   t("c2_title"),
+      desc:    t("c2_desc"),
+      tags:    [t("c2_tags.0"), t("c2_tags.1"), t("c2_tags.2"), t("c2_tags.3")],
+      color:   "#8b5cf6",
+      initial: { y: 20 },
+    },
+    {
+      icon:    Search,
+      title:   t("c3_title"),
+      desc:    t("c3_desc"),
+      tags:    [t("c3_tags.0"), t("c3_tags.1"), t("c3_tags.2"), t("c3_tags.3")],
+      color:   "#10b981",
+      initial: { x: 20 },
+    },
+  ];
 
   return (
     <section ref={ref} className="py-24">
@@ -82,14 +84,13 @@ export function ForWhoCards() {
             backgroundColor: "var(--brand-gold-10)",
           }}
         >
-          Audience
+          {t("audience")}
         </span>
         <h2 className="text-3xl sm:text-4xl font-black mb-4" style={{ color: "var(--text-primary)" }}>
-          Who uses DeepCoin?
+          {t("title")}
         </h2>
         <p className="max-w-xl mx-auto text-sm" style={{ color: "var(--text-secondary)" }}>
-          Designed for everyone who works with ancient coins — from institutional conservators
-          to weekend collectors.
+          {t("desc")}
         </p>
       </motion.div>
 

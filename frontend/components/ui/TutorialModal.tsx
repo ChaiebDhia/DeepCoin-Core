@@ -34,7 +34,7 @@
 
  *   - Framer Motion slide transitions on step change
 
- *   - "Skip tour" available from every step
+ *   - "{t('skip')}" available from every step
 
  *   - Floating trigger button shows pulse beacon ONLY on first visit
 
@@ -61,10 +61,15 @@ import {
   Keyboard,
 
 } from "lucide-react";
+import { useTranslations } from "next-intl";
+
+
 
 
 
 /* --- localStorage key ----------------------------------------------------- */
+
+
 
 const STORAGE_KEY = "deepcoin_guide_seen_v2";
 
@@ -94,173 +99,6 @@ interface Step {
 
 
 
-const STEPS: Step[] = [
-
-  {
-
-    icon:  <Upload   size={32} />,
-
-    color: "#3b82f6",
-
-    tag:   "Step 1 — Upload",
-
-    title: "Upload a coin photo",
-
-    body:  "Navigate to the Analyse page and drag-and-drop any photo of an ancient coin onto the upload zone, or click to open the file picker.",
-
-    bullets: [
-
-      "Accepted formats: JPEG · PNG · WebP",
-
-      "Large images are auto-downsized to 1024 px before upload",
-
-      "Enable TTA (Test-Time Augmentation) for +0.78 % accuracy — takes ~5 s extra",
-
-      "Auto-crop detects the coin boundary and removes background noise",      "Requires a free account — sign up in seconds",    ],
-
-    cta:   { label: "Go to Analyse ?", href: "/analyse" },
-
-  },
-
-  {
-
-    icon:  <Cpu      size={32} />,
-
-    color: "#8b5cf6",
-
-    tag:   "Step 2 — AI Classification",
-
-    title: "Understand the CNN result",
-
-    body:  "DeepCoin's EfficientNet-B3 model classifies your coin against 438 trained Corpus Nummorum types and routes it through a specialist agent.",
-
-    bullets: [
-
-      "?? Identified — confidence = 70 % — Historian agent writes a full narrative",
-
-      "?? Consistent Match — 7 of 8 TTA passes agree — high visual consensus",
-
-      "?? Deep Search — low confidence — Investigator searches all 9,541 KB types",
-
-      "Top-5 candidates link directly to corpus-nummorum.eu records",
-
-    ],
-
-    cta:   null,
-
-  },
-
-  {
-
-    icon:  <BookOpen size={32} />,
-
-    color: "#10b981",
-
-    tag:   "Step 3 — Explore",
-
-    title: "Browse the public gallery",
-
-    body:  "The Explore page shows all past analyses from every user. Filter by AI route to find specific confidence tiers or coin families.",
-
-    bullets: [
-
-      "Filter by Historian / Validator / Investigator route",
-
-      "Click any card to view the full analysis with PDF download",
-
-      "CN type links open the official Corpus Nummorum record",
-
-      "No sign-in required — the gallery is fully public",
-
-    ],
-
-    cta:   { label: "Open Explore ?", href: "/explore" },
-
-  },
-
-  {
-
-    icon:  <MessageSquare size={32} />,
-
-    color: "#a78bfa",
-
-    tag:   "Step 4 — AI Chat",
-
-    title: "Ask the numismatic AI",
-
-    body:  "DeepCoin AI answers ancient coin questions grounded in 47,705 knowledge-base chunks covering 9,541 Corpus Nummorum types — not the open internet.",
-
-    bullets: [
-
-      "Ask about dynasties, mint cities, iconography, denominations, or dating",
-
-      "Every answer cites CN record IDs — all facts are verifiable",
-
-      "Paste a CN type ID from an analysis result for instant context",      "Google Search \u2197 and Google Scholar \u2197 buttons appear next to each answer for deeper academic research",      "Domain-specific only — it will not respond to off-topic questions",
-
-    ],
-
-    cta:   { label: "Open AI Chat ?", href: "/chat" },
-
-  },
-
-  {
-
-    icon:  <Download size={32} />,
-
-    color: "#f59e0b",
-
-    tag:   "Step 5 — PDF Report",
-
-    title: "Download your PDF report",
-
-    body:  "Every analysis produces a professional PDF with a full historical narrative, forensic material check, visual attributes table, and a top-5 candidate matrix.",
-
-    bullets: [
-
-      "PDF links remain active for 30 days after analysis",
-
-      "Includes Corpus Nummorum references and mint/date attribution",
-
-      "Access past PDFs from the History page at any time",
-
-      "Reports are stored privately — only visible to you",
-
-    ],
-
-    cta:   { label: "View History ?", href: "/history" },
-
-  },
-
-  {
-
-    icon:  <ThumbsDown size={32} />,
-
-    color: "#ef4444",
-
-    tag:   "Step 6 — Improve the Model",
-
-    title: "Mark wrong results",
-
-    body:  "If the CNN misidentified a coin, use the 'Mark as wrong' button on the analysis panel to submit the correct CN type ID.",
-
-    bullets: [
-
-      "Your correction is logged in the active-learning feedback store",
-
-      "Admins review corrections in the admin panel",
-
-      "Repeated corrections on the same type trigger a retraining signal",
-
-      "Every expert correction makes the model better for everyone",
-
-    ],
-
-    cta:   null,
-
-  },
-
-];
 
 
 
@@ -270,7 +108,99 @@ const STEPS: Step[] = [
 
 export default function TutorialModal() {
 
-  const [open, setOpen]               = useState(false);
+    const t = useTranslations("Guide");
+
+  const STEPS: Step[] = [
+    {
+      icon:  <Upload   size={32} />,
+      color: "#3b82f6",
+      tag:   t("step1_tag"),
+      title: t("step1_title"),
+      body:  t("step1_body"),
+      bullets: [
+        t("step1_b1"),
+        t("step1_b2"),
+        t("step1_b3"),
+        t("step1_b4"),
+        t("step1_b5"),
+      ],
+      cta:   { label: t("step1_cta") + " ↗", href: "/analyse" },
+    },
+    {
+      icon:  <Cpu      size={32} />,
+      color: "#8b5cf6",
+      tag:   t("step2_tag"),
+      title: t("step2_title"),
+      body:  t("step2_body"),
+      bullets: [
+        t("step2_b1"),
+        t("step2_b2"),
+        t("step2_b3"),
+        t("step2_b4"),
+      ],
+      cta:   null,
+    },
+    {
+      icon:  <BookOpen size={32} />,
+      color: "#10b981",
+      tag:   t("step3_tag"),
+      title: t("step3_title"),
+      body:  t("step3_body"),
+      bullets: [
+        t("step3_b1"),
+        t("step3_b2"),
+        t("step3_b3"),
+        t("step3_b4"),
+      ],
+      cta:   { label: t("step3_cta") + " ↗", href: "/explore" },
+    },
+    {
+      icon:  <MessageSquare size={32} />,
+      color: "#a78bfa",
+      tag:   t("step4_tag"),
+      title: t("step4_title"),
+      body:  t("step4_body"),
+      bullets: [
+        t("step4_b1"),
+        t("step4_b2"),
+        t("step4_b3"),
+        t("step4_b4"),
+        t("step4_b5"),
+      ],
+      cta:   { label: t("step4_cta") + " ↗", href: "/chat" },
+    },
+    {
+      icon:  <Download size={32} />,
+      color: "#f59e0b",
+      tag:   t("step5_tag"),
+      title: t("step5_title"),
+      body:  t("step5_body"),
+      bullets: [
+        t("step5_b1"),
+        t("step5_b2"),
+        t("step5_b3"),
+        t("step5_b4"),
+      ],
+      cta:   { label: t("step5_cta") + " ↗", href: "/history" },
+    },
+    {
+      icon:  <ThumbsDown size={32} />,
+      color: "#ef4444",
+      tag:   t("step6_tag"),
+      title: t("step6_title"),
+      body:  t("step6_body"),
+      bullets: [
+        t("step6_b1"),
+        t("step6_b2"),
+        t("step6_b3"),
+        t("step6_b4"),
+      ],
+      cta:   null,
+    },
+  ];
+
+
+const [open, setOpen]               = useState(false);
 
   const [step, setStep]               = useState(0);
 
@@ -784,7 +714,7 @@ export default function TutorialModal() {
 
                       >
 
-                        Skip tour
+                        {t('skip')}
 
                       </button>
 

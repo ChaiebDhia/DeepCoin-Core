@@ -26,6 +26,7 @@ import { useEffect }              from "react";
 import { useSession }             from "next-auth/react";
 import { useQuery }               from "@tanstack/react-query";
 import { useRouter }              from "next/navigation";
+import { useTranslations } from "next-intl";
 import Link                       from "next/link";
 import {
   User, ShieldCheck, Coins, History, MessageSquare,
@@ -123,6 +124,7 @@ function StatCard({
 // ── Page component ────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const t = useTranslations("Dashboard");
   const { data: session, status } = useSession();
   const router = useRouter();
 

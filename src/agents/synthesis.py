@@ -40,10 +40,68 @@ _C_ORANGE      = (200, 100,  20)   # forensic warning
 _C_RULE        = (200, 210, 225)   # light border lines
 
 # ── Route display labels ───────────────────────────────────────────────────────
-_ROUTE_LABELS = {
+_LABELS_EN = {
     "historian":    "Historical Analysis",
     "validator":    "Forensic Validation",
     "investigator": "Visual Investigation",
+    "report_title": "NUMISMATIC ANALYSIS REPORT",
+    "cnn_result":   "CNN CLASSIFICATION RESULT",
+    "expert_nar":   "EXPERT NARRATIVE",
+    "unclassified": "UNCLASSIFIED SPECIMEN",
+    "best_candidate": "BEST VISUAL CANDIDATE: CN {label}",
+    "confidence_lbl": "Confidence",
+    "top5_title":   "Top-5 Model Candidates",
+    "hist_record_title": "Corpus Nummorum Record",
+    "gradcam_title": "Visual Explanation (Grad-CAM)",
+    "prepared_by":  "Prepared by: DeepCoin AI",
+    "source":       "Source: ",
+    "field":        "Field",
+    "value":        "Value",
+    "rank":         "Rank",
+    "cn_type":      "CN Type",
+    "coin_desc":    "Coin Description",
+    "conf_col":     "Confidence",
+    "region":       "Region",
+    "date":         "Date",
+    "mint":         "Mint",
+    "denom":        "Denomination",
+    "material":     "Material",
+    "obv":          "Obverse",
+    "rev":          "Reverse",
+    "period":       "Period",
+    "cn_ref":       "CN Reference"
+}
+
+_LABELS_FR = {
+    "historian":    "Analyse Historique",
+    "validator":    "Validation Forensic",
+    "investigator": "Investigation Visuelle",
+    "report_title": "RAPPORT D'ANALYSE NUMISMATIQUE",
+    "cnn_result":   "RÉSULTAT DE CLASSIFICATION CNN",
+    "expert_nar":   "RÉCIT D'EXPERT",
+    "unclassified": "SPÉCIMEN NON CLASSIFIÉ",
+    "best_candidate": "MEILLEUR CANDIDAT VISUEL: CN {label}",
+    "confidence_lbl": "Confiance",
+    "top5_title":   "Top-5 Candidats du Modèle",
+    "hist_record_title": "Dossier Corpus Nummorum",
+    "gradcam_title": "Explication Visuelle (Grad-CAM)",
+    "prepared_by":  "Préparé par: DeepCoin AI",
+    "source":       "Source: ",
+    "field":        "Champ",
+    "value":        "Valeur",
+    "rank":         "Rang",
+    "cn_type":      "Type CN",
+    "coin_desc":    "Description de la Monnaie",
+    "conf_col":     "Confiance",
+    "region":       "Région",
+    "date":         "Date",
+    "mint":         "Atelier",
+    "denom":        "Dénomination",
+    "material":     "Matériau",
+    "obv":          "Avers",
+    "rev":          "Revers",
+    "period":       "Période",
+    "cn_ref":       "Référence CN"
 }
 
 
@@ -369,12 +427,27 @@ class Synthesis:
         Build an enterprise-grade PDF directly from the LangGraph state dict.
         All drawing is explicit — zero Markdown parsing.
         """
+        lang = state.get("language", "en")
+        labels = _LABELS_FR if lang == "fr" else _LABELS_EN
+
+        lang = state.get("language", "en")
+        labels = _LABELS_FR if lang == "fr" else _LABELS_EN
+
         from fpdf import FPDF
         from fpdf.enums import XPos, YPos
 
         cnn   = state.get("cnn_prediction", {})
         route = state.get("route_taken", "unknown")
         h     = state.get("historian_result", {})
+        language = state.get("language", "en")
+
+        # Basic translations dictionary
+        t = {
+            "Analysis Report": "Rapport d'Analyse" if language == "fr" else "Analysis Report",
+            "Identified Type": "Type Identifié" if language == "fr" else "Identified Type",
+            "Route": "Voie" if language == "fr" else "Route",
+            "Confidence": "Confiance" if language == "fr" else "Confidence",
+        }
         v     = state.get("validator_result", {})
         inv   = state.get("investigator_result", {})
         img   = _basename(state.get("image_path", ""))
@@ -389,55 +462,55 @@ class Synthesis:
         f.add_page()
 
         # ── header band ───────────────────────────────────────────────────────
-        _draw_header_band(f, ts, img)
+        _draw_header_band(f, ts, img, lang=language)
 
         # ── result summary stripe ─────────────────────────────────────────────
-        _draw_result_stripe(f, cnn, route)
+        _draw_result_stripe(f, cnn, route, state.get("language", "en"))
         f.ln(6)
 
         # ── CNN classification ────────────────────────────────────────────────
-        _section_title(f, "CNN Classification")
+        _section_title(f, "Classification CNN" if language=="fr" else "CNN Classification", lang=language)
         _kv_table(f, [
-            ("Best Match",      _s(_enrich_label(str(cnn.get("label", "N/A"))))),
-            ("Confidence",      f"{cnn.get('confidence', 0):.1%}"),
-            ("Model",           "EfficientNet-B3  (438 classes)"),
-            ("Analysis Route",  _ROUTE_LABELS.get(route, route.upper())),
-            ("TTA Applied",     "Yes" if cnn.get("tta_used") else "No"),
+            ("Meilleure Correspondance" if state.get("language", "en") == "fr" else "Best Match",      _s(_enrich_label(str(cnn.get("label", "N/A"))))),
+            ("Confiance" if state.get("language", "en") == "fr" else "Confidence",      f"{cnn.get('confidence', 0):.1%}"),
+            ("Modèle" if state.get("language", "en") == "fr" else "Model",           "EfficientNet-B3  (438 classes)"),
+            ("Voie d'Analyse" if state.get("language", "en") == "fr" else "Analysis Route",  {"historian": "Historian", "validator": "Validator", "investigator": "Investigator"}.get(route, route.upper()) if state.get("language", "en") != "fr" else {"historian": "Historien", "validator": "Validateur", "investigator": "Enquêteur Visuel"}.get(route, route.upper())),
+            ("Application TTA" if state.get("language", "en") == "fr" else "TTA Applied", "Oui" if cnn.get("tta_used") else "Non" if state.get("language", "en") == "fr" else "Yes" if cnn.get("tta_used") else "No"),
         ])
 
         top5 = cnn.get("top5", [])
         if top5:
             f.ln(4)
-            _subsection_title(f, "Top-5 Predictions")
-            _confidence_table(f, top5)
+            _subsection_title(f, labels["top5_title"], lang=language)
+            _confidence_table(f, top5, lang=language)
         f.ln(7)
 
         # ── Grad-CAM heatmap (visual explanation) ─────────────────────────────
         gradcam_path = cnn.get("gradcam_path")
         if gradcam_path and os.path.exists(gradcam_path):
-            _draw_gradcam_section(f, gradcam_path)
+            _draw_gradcam_section(f, gradcam_path, lang=language)
             f.ln(7)
 
         # ── historical record ─────────────────────────────────────────────────
         if h:
-            _section_title(f, "Historical Record")
+            _section_title(f, labels["hist_record_title"], lang=language)
             rows = [
-                ("Mint",          h.get("mint",           "")),
-                ("Region",        h.get("region",         "")),
-                ("Date",          h.get("date",           "")),
-                ("Period",        h.get("period",         "")),
-                ("Material",      h.get("material",       "")),
-                ("Denomination",  h.get("denomination",   "")),
-                ("Obverse",       h.get("obverse",        "")),
-                ("Reverse",       h.get("reverse",        "")),
-                ("Persons",       h.get("persons",        "")),
-                ("CN Reference",  str(h.get("type_id",    ""))),
+                (labels.get("mint", "Atelier"),         h.get("mint",           "")),
+                (labels.get("region", "Région"),       h.get("region",         "")),
+                (labels.get("date", "Date"),         h.get("date",           "")),
+                (labels.get("period", "Period"),       h.get("period",         "")),
+                (labels.get("material", "Material"),     h.get("material",       "")),
+                (labels.get("denom", "Denomination"),    h.get("denomination",   "")),
+                (labels.get("obv", "Obverse"),       h.get("obverse",        "")),
+                (labels.get("rev", "Reverse"),       h.get("reverse",        "")),
+                ("Personnes" if language=="fr" else "Persons", h.get("persons",        "")),
+                (labels.get("cn_ref", "CN Reference"),  str(h.get("type_id",    ""))),
             ]
             _kv_table(f, [(k, _s(val)) for k, val in rows if val])
 
             if h.get("narrative"):
                 f.ln(4)
-                _subsection_title(f, "Expert Commentary")
+                _subsection_title(f, "Commentaire d\'Expert" if language=="fr" else "Expert Commentary", lang=language)
                 _body_paragraph(f, h["narrative"])
 
             if h.get("source_url"):
@@ -447,12 +520,12 @@ class Synthesis:
 
         # ── forensic validation ───────────────────────────────────────────────
         if v:
-            _section_title(f, "Forensic Validation")
+            _section_title(f, "Validation Forensique" if language == "fr" else "Forensic Validation", lang=language)
             _status_badge(f, v.get("match", True))
             _kv_table(f, [
-                ("Status",            _s(v.get("status", "").upper())),
-                ("Detected Material", _s(v.get("detected_material", ""))),
-                ("Expected Material", _s(v.get("expected_material", ""))),
+                ("Statut" if language=="fr" else "Statut" if language=="fr" else "Status",            _s(v.get("status", "").upper())),
+                ("Matériau Détecté" if language=="fr" else "Matériau Détecté" if language=="fr" else "Detected Material", _s(v.get("detected_material", ""))),
+                ("Matériau Attendu" if language=="fr" else "Matériau Attendu" if language=="fr" else "Expected Material", _s(v.get("expected_material", ""))),
             ])
             if v.get("warning"):
                 f.ln(3)
@@ -461,7 +534,7 @@ class Synthesis:
 
         # ── visual investigation ──────────────────────────────────────────────
         if inv:
-            _section_title(f, "Visual Investigation")
+            _section_title(f, "Investigation Visuelle" if language=="fr" else "Visual Investigation", lang=language)
             if inv.get("visual_description"):
                 # Trim verbose pre-analysis preamble: show only the structured
                 # section text (METAL: / OBVERSE: / etc.) without the LLM's
@@ -472,7 +545,7 @@ class Synthesis:
             feats = inv.get("detected_features", {})
             if feats:
                 f.ln(3)
-                _subsection_title(f, "Detected Attributes")
+                _subsection_title(f, "Attributs Détectés" if language=="fr" else "Detected Attributes", lang=language)
                 _kv_table(f, [
                     (k.replace("_", " ").title(), _s(str(val)))
                     for k, val in feats.items()
@@ -482,14 +555,14 @@ class Synthesis:
             kb = inv.get("kb_matches", [])
             if kb:
                 f.ln(3)
-                _subsection_title(f, "Closest Knowledge Base Matches")
+                _subsection_title(f, "Recherches Associées Base de Connaissances" if language=="fr" else "Closest Knowledge Base Matches", lang=language)
                 _kb_table(f, kb[:3])
 
             if inv.get("suggested_type_id"):
                 f.ln(3)
                 tid  = inv['suggested_type_id']
                 name = _s(_enrich_label(tid))
-                _info_box(f, f"Best visual match: {name}  (CN {tid})")
+                _info_box(f, f"Meilleure correspondance visuelle: {name}  (CN {tid})" if language=="fr" else f"Best visual match: {name}  (CN {tid})")
             f.ln(5)
 
         # ── save ──────────────────────────────────────────────────────────────
@@ -554,7 +627,7 @@ def _ew(f) -> float:
     return f.w - f.l_margin - f.r_margin
 
 
-def _draw_header_band(f, ts: str, img: str) -> None:
+def _draw_header_band(f, ts: str, img: str, lang: str = "en") -> None:
     from fpdf.enums import XPos, YPos
     # Navy band
     f.set_fill_color(*_C_BRAND_DARK)
@@ -575,7 +648,8 @@ def _draw_header_band(f, ts: str, img: str) -> None:
     f.set_xy(20, 23)
     f.set_font("Helvetica", "I", 7)
     f.set_text_color(150, 175, 215)
-    f.cell(80, 5, "Prepared by: Dhia Chaieb")
+    labels = _LABELS_FR if lang == "fr" else _LABELS_EN
+    f.cell(80, 5, labels["prepared_by"])
 
     # Right: timestamp + filename
     # WHY _safe() not _s() here:
@@ -593,7 +667,7 @@ def _draw_header_band(f, ts: str, img: str) -> None:
     f.set_xy(f.l_margin, 36)
 
 
-def _draw_result_stripe(f, cnn: dict, route: str) -> None:
+def _draw_result_stripe(f, cnn: dict, route: str, lang: str = "en") -> None:
     """
     Horizontal summary stripe beneath the header band.
 
@@ -610,7 +684,7 @@ def _draw_result_stripe(f, cnn: dict, route: str) -> None:
     label      = str(cnn.get("label", "N/A"))
     conf       = cnn.get("confidence", 0.0)
     conf_color = _conf_color(conf)
-    route_lbl  = _safe(_ROUTE_LABELS.get(route, route.upper()))
+    route_lbl  = _safe({"historian": "Historian", "validator": "Validator", "investigator": "Investigator"}.get(route, route.upper()) if  lang  != "fr" else {"historian": "Historien", "validator": "Validateur", "investigator": "Enquêteur Visuel"}.get(route, route.upper()))
 
     # Human-readable coin identity from KB  (e.g. "Silver Drachm — Maroneia")
     human_name = _safe(_enrich_label(label))
@@ -628,7 +702,7 @@ def _draw_result_stripe(f, cnn: dict, route: str) -> None:
     f.set_font("Helvetica", "B", 11)
     f.set_text_color(*_C_BRAND_DARK)
     if conf < 0.40:
-        f.cell(86, 8, "Unclassified Specimen")
+        f.cell(86, 8, _LABELS_FR["unclassified"] if lang=="fr" else _LABELS_EN["unclassified"])
     else:
         name = human_name[:50] + ("..." if len(human_name) > 50 else "")
         f.cell(86, 8, name)
@@ -638,7 +712,7 @@ def _draw_result_stripe(f, cnn: dict, route: str) -> None:
     f.set_font("Helvetica", "", 8)
     f.set_text_color(*_C_MUTED)
     if conf < 0.40:
-        f.cell(86, 6, f"Best candidate: CN {label}")
+        f.cell(86, 6, (_LABELS_FR["best_candidate"] if lang=="fr" else _LABELS_EN["best_candidate"]).format(label=label))
     else:
         f.cell(86, 6, f"Corpus Nummorum \xb7 CN {label}")
 
@@ -652,7 +726,8 @@ def _draw_result_stripe(f, cnn: dict, route: str) -> None:
     f.set_xy(pill_x, pill_y)
     f.set_font("Helvetica", "B", 9)
     f.set_text_color(*_C_WHITE)
-    f.cell(pill_w, pill_h, f"  Confidence: {conf:.1%}", align="L")
+    conf_lbl = _LABELS_FR['confidence_lbl'] if lang=='fr' else _LABELS_EN['confidence_lbl']
+    f.cell(pill_w, pill_h, f"  {conf_lbl}: {conf:.1%}", align="L")
 
     # Route label — right aligned
     f.set_xy(f.l_margin + 147, y + 8)
@@ -665,7 +740,7 @@ def _draw_result_stripe(f, cnn: dict, route: str) -> None:
     f.set_xy(f.l_margin, y + 22)
 
 
-def _section_title(f, title: str) -> None:
+def _section_title(f, title: str, lang: str = "en") -> None:
     """
     Render a section heading with a blue rule underneath.
 
@@ -700,7 +775,7 @@ def _section_title(f, title: str) -> None:
     f.ln(3)
 
 
-def _subsection_title(f, title: str) -> None:
+def _subsection_title(f, title: str, lang: str = "en") -> None:
     from fpdf.enums import XPos, YPos
     f.set_x(f.l_margin)
     f.set_font("Helvetica", "B", 9)
@@ -710,7 +785,7 @@ def _subsection_title(f, title: str) -> None:
     f.ln(1)
 
 
-def _kv_table(f, rows: list) -> None:
+def _kv_table(f, rows: list, lang: str = "en") -> None:
     """
     Two-column key/value table with borders and alternating row shading.
 
@@ -749,9 +824,10 @@ def _kv_table(f, rows: list) -> None:
     f.set_font("Helvetica", "B", 9)
     f.set_text_color(*_C_BRAND_DARK)
     f.set_x(f.l_margin)
-    f.cell(col_k, hdr_h, "  Field",  border=1, fill=True,
+    labels = _LABELS_FR if lang=="fr" else _LABELS_EN
+    f.cell(col_k, hdr_h, f"  {labels['field']}", border=1, fill=True,
            new_x=XPos.RIGHT, new_y=YPos.TOP)
-    f.cell(col_v, hdr_h, "  Value",  border=1, fill=True,
+    f.cell(col_v, hdr_h, f"  {labels['value']}", border=1, fill=True,
            new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
     # ── Data rows ─────────────────────────────────────────────────────────────
@@ -805,7 +881,7 @@ def _kv_table(f, rows: list) -> None:
     f.set_draw_color(*_C_RULE)
 
 
-def _confidence_table(f, top5: list) -> None:
+def _confidence_table(f, top5: list, lang: str = "en") -> None:
     """
     Rank / CN Type / Coin Description / Confidence four-column table.
 
@@ -833,7 +909,8 @@ def _confidence_table(f, top5: list) -> None:
     f.set_font("Helvetica", "B", 9)
     f.set_text_color(*_C_BRAND_DARK)
     f.set_x(f.l_margin)
-    for lbl, w in [("Rank", c1), ("CN Type", c2), ("Coin Description", c3), ("Confidence", c4)]:
+    labels = _LABELS_FR if lang=="fr" else _LABELS_EN
+    for lbl, w in [(labels["rank"], c1), (labels["cn_type"], c2), (labels["coin_desc"], c3), (labels["conf_col"], c4)]:
         f.cell(w, row_h, f"  {lbl}", border=1, fill=True,
                new_x=XPos.RIGHT, new_y=YPos.TOP)
     f.set_xy(f.l_margin, f.get_y() + row_h)
@@ -880,7 +957,7 @@ def _clean_kb_date(raw: str) -> str:
     return _s(cleaned)
 
 
-def _kb_table(f, matches: list) -> None:
+def _kb_table(f, matches: list, lang: str = "en") -> None:
     """
     Match% / Coin Identity / Date three-column table for KB closest matches.
 
@@ -980,12 +1057,13 @@ def _body_paragraph(f, text: str) -> None:
             f.ln(3)   # small gap between paragraphs
 
 
-def _source_line(f, url: str) -> None:
+def _source_line(f, url: str, lang: str = "en") -> None:
     from fpdf.enums import XPos, YPos
     f.set_font("Helvetica", "I", 8)
     f.set_text_color(*_C_MUTED)
     f.set_x(f.l_margin)
-    f.cell(0, 5, f"Source: {_s(url)}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    labels = _LABELS_FR if lang=="fr" else _LABELS_EN
+    f.cell(0, 5, f"{labels['source']}{_s(url)}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     f.set_text_color(*_C_TEXT)
 
 
@@ -1051,7 +1129,7 @@ def _trim_to_sections(text: str) -> str:
     return text[m.start():].strip() if m else text
 
 
-def _draw_gradcam_section(f, gradcam_path: str) -> None:
+def _draw_gradcam_section(f, gradcam_path: str, lang: str = "en") -> None:
     """
     Embed the Grad-CAM heatmap in the PDF report.
 
@@ -1083,7 +1161,7 @@ def _draw_gradcam_section(f, gradcam_path: str) -> None:
     """
     from fpdf.enums import XPos, YPos
 
-    _section_title(f, "Visual Explanation (Grad-CAM)")
+    _section_title(f, "Explication Visuelle (Grad-CAM)" if lang=="fr" else "Visual Explanation (Grad-CAM)", lang=lang)
 
     page_break_guard = f.h - f.b_margin - 90  # need ~90 mm: image height + caption
     if f.get_y() > page_break_guard:
@@ -1104,12 +1182,36 @@ def _draw_gradcam_section(f, gradcam_path: str) -> None:
     f.set_xy(x_caption, y_start)
     f.set_font("Helvetica", "B", 9)
     f.set_text_color(*_C_BRAND_MID)
-    f.cell(0, 6, "GRAD-CAM HEAT MAP", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    labels = _LABELS_FR if lang=="fr" else _LABELS_EN
+    f.cell(0, 6, _s(labels["gradcam_title"].upper()), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     f.set_xy(x_caption, y_start + 8)
     f.set_font("Helvetica", "", 8)
     f.set_text_color(80, 90, 110)
 
-    caption_lines = [
+    if lang == "fr":
+        caption_lines = [
+            "Chaque pixel est coloré selon",
+            "sa contribution à la classification.",
+            "",
+            "ROUGE / JAUNE — haute importance.",
+            "Le modèle s'est concentré ici.",
+            "",
+            "BLEU — faible importance.",
+            "Ces régions ont eu peu d'influence",
+            "sur la prédiction.",
+            "",
+            "Un CNN bien calibre met en évidence",
+            "le portrait, la legende ou le revers",
+            "— pas le fond.",
+            "",
+            "Si les elements du fond sont rouges,",
+            "le modèle peut mémoriser",
+            "des artefacts photographiques",
+            "plutot que des caracteristiques",
+            "numismatiques."
+        ]
+    else:
+        caption_lines = [
         "Each pixel is coloured by how much",
         "it contributed to the classification.",
         "",

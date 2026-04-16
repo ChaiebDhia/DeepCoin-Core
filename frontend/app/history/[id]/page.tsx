@@ -1,4 +1,5 @@
 "use client";
+import { useTranslations } from "next-intl";
 
 /**
  * app/history/[id]/page.tsx — History detail page
@@ -6,7 +7,7 @@
  * Fetches GET /api/history/{id} and renders a rich record view:
  *   1. Page header  — CN type, denomination, filename, date
  *   2. Action bar   — external CN link + PDF download
- *   3. Quick Facts  — denomination / region / mint / period / material in a grid
+ *   3. {tCoin("quickFacts")}  — denomination / region / mint / period / material in a grid
  *   4. Analysis badge — which agent route handled this coin + confidence tier
  *   5. AnalysisPanel — full deep-dive (same as home page)
  *
@@ -61,6 +62,7 @@ function confidenceTier(conf: number, vote: number | null) {
 // ── Record detail view ────────────────────────────────────────────────────────
 
 function RecordDetail({ data }: { data: ClassifyResponse }) {
+  const tCoin = useTranslations("Coin");
   const { label: routeLabel, color: routeColor } = routeStyle(data.route_taken);
   const tier = confidenceTier(data.cnn.confidence, data.cnn.vote_fraction ?? null);
   const hasQuickFacts = data.denomination || data.region || data.mint || data.date_range || data.material;
@@ -113,7 +115,7 @@ function RecordDetail({ data }: { data: ClassifyResponse }) {
               }}
             >
               <ExternalLink size={12} />
-              View on Corpus Nummorum
+              {tCoin("viewOnCn")}
             </a>
             {data.pdf_url && (
               <a
@@ -127,7 +129,7 @@ function RecordDetail({ data }: { data: ClassifyResponse }) {
                 }}
               >
                 <FileDown size={12} />
-                Download PDF Report
+                {tCoin("downloadPdf")}
               </a>
             )}
             {/* Copy link — copies window.location.href to clipboard.
@@ -143,7 +145,7 @@ function RecordDetail({ data }: { data: ClassifyResponse }) {
               title="Copy link to this record"
             >
               {copied ? <Check size={12} /> : <Link2 size={12} />}
-              {copied ? "Copied!" : "Copy link"}
+              {copied ? "Copied!" : tCoin("copyLink")}
             </button>
           </div>
         </div>
@@ -235,7 +237,10 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-export default function HistoryDetailPage({ params }: PageProps) {
+export default function HistoryDetailPage({
+  params
+}: PageProps) {
+  const tCoin = useTranslations("Coin");
   const { id } = use(params);
   const { status } = useSession();
 

@@ -23,6 +23,7 @@
 "use client";
 
 import { useState, FormEvent } from "react";
+import { useTranslations } from "next-intl";
 import Link                    from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mail, Lock, User, Coins, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
@@ -31,6 +32,7 @@ import { Mail, Lock, User, Coins, AlertCircle, CheckCircle2, Loader2 } from "luc
 const API_BASE = process.env.NEXT_PUBLIC_CLASSIFY_URL ?? "http://127.0.0.1:8000";
 
 export function RegisterForm() {
+  const t = useTranslations("AuthForms");
   const [displayName,      setDisplayName]      = useState("");
   const [email,            setEmail]            = useState("");
   const [password,         setPassword]         = useState("");
@@ -139,11 +141,9 @@ export function RegisterForm() {
              style={{ background: "linear-gradient(135deg, var(--surface-1) 0%, var(--surface-1) 100%)", border: "1px solid var(--surface-1)" }}>
           <Coins size={28} style={{ color: "var(--brand-gold)" }} />
         </div>
-        <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
-          Create account
-        </h1>
+        <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>{t("create_account_title")}</h1>
         <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-          Join DeepCoin — free to get started
+          {t("join_deepcoin_subtitle")} — free to get started
         </p>
       </div>
 
@@ -180,7 +180,7 @@ export function RegisterForm() {
                 value={displayName}
                 onChange={e => setDisplayName(e.target.value)}
                 autoComplete="name"
-                placeholder="Dr. Ahmed Chaieb"
+                placeholder={t("password_placeholder")}
                 className="w-full pl-9 pr-4 py-2.5 rounded-lg text-sm outline-none transition-colors"
                 style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
                 onFocus={e => (e.target.style.borderColor = "var(--brand-gold)")}
@@ -203,7 +203,7 @@ export function RegisterForm() {
                 onChange={e => setEmail(e.target.value)}
                 required
                 autoComplete="email"
-                placeholder="you@example.com"
+                placeholder={t("email_placeholder")}
                 className="w-full pl-9 pr-4 py-2.5 rounded-lg text-sm outline-none transition-colors"
                 style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
                 onFocus={e => (e.target.style.borderColor = "var(--brand-gold)")}
@@ -214,9 +214,7 @@ export function RegisterForm() {
 
           {/* Password */}
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
-              Password
-            </label>
+            <label className="block text-sm font-medium" style={{ color: "var(--text-secondary)" }}>{t("password_label")}</label>
             <div className="relative">
               <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
                    style={{ color: "var(--text-muted)" }} />
@@ -227,7 +225,7 @@ export function RegisterForm() {
                 required
                 minLength={8}
                 autoComplete="new-password"
-                placeholder="Minimum 8 characters"
+                placeholder={t("password_placeholder")}
                 className="w-full pl-9 pr-4 py-2.5 rounded-lg text-sm outline-none transition-colors"
                 style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
                 onFocus={e => (e.target.style.borderColor = "var(--brand-gold)")}
@@ -250,7 +248,7 @@ export function RegisterForm() {
                 onChange={e => setConfirmPassword(e.target.value)}
                 required
                 autoComplete="new-password"
-                placeholder="••••••••"
+                placeholder={t("password_placeholder")}
                 className="w-full pl-9 pr-4 py-2.5 rounded-lg text-sm outline-none transition-colors"
                 style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
                 onFocus={e => (e.target.style.borderColor = "var(--brand-gold)")}
@@ -277,9 +275,7 @@ export function RegisterForm() {
       {/* Footer link */}
       <p className="text-center text-sm mt-4" style={{ color: "var(--text-muted)" }}>
         Already have an account?{" "}
-        <Link href="/login" className="font-medium hover:underline" style={{ color: "var(--brand-gold)" }}>
-          Sign in
-        </Link>
+        <Link href="/login" className="font-medium hover:underline" style={{ color: "var(--brand-gold)" }}>{t("sign_in_link")}</Link>
       </p>
     </motion.div>
   );

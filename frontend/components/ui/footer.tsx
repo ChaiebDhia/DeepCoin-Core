@@ -6,43 +6,52 @@
 
 import Link from "next/link";
 import { Github, ExternalLink, Linkedin, Globe, Code2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 
-const COLUMNS = [
-  {
-    heading: "Product",
-    links: [
-      { label: "Analyse a coin",   href: "/#analyse" },
-      { label: "How it works",     href: "/#how-it-works" },
-      { label: "Features",         href: "/#features" },
-    ],
-  },
-  {
-    heading: "Resources",
-    links: [
-      { label: "Corpus Nummorum",  href: "https://www.corpus-nummorum.eu",  external: true },
-      { label: "Engineering Docs", href: "/docs" },
-      { label: "Contact Us",       href: "/contact" },
-    ],
-  },
-];
 
-const ARCHITECTURE = [
-  "Deep Learning Pipeline",
-  "Multi-Agent Orchestration",
-  "Hybrid RAG Engine",
-  "Event-Driven Analytics",
-  "Next.js App Router Server",
-];
 
-const NETWORK_LINKS = [
-  { label: "Dhia Chaieb Portfolio", href: "https://dhiashayeb.vercel.app/", icon: Code2, external: true },
-  { label: "LinkedIn Profile", href: "https://www.linkedin.com/in/dhia-shayeb/", icon: Linkedin, external: true },
-  { label: "GitHub Repository", href: "https://github.com/ChaiebDhia/DeepCoin-Core", icon: Github, external: true },
-  { label: "ESPRIT Engineering", href: "https://www.esprit.tn/", icon: Globe, external: true },
-  { label: "YEBNI", href: "https://www.yebni.com/", icon: Globe, external: true },
-];
+
+
+
 
 export function Footer() {
+  const t = useTranslations("Footer");
+
+  const COLUMNS = [
+    {
+      heading: t("col_product"),
+      links: [
+        { label: t("link_analyse"),   href: "/#analyse" },
+        { label: t("link_how"),     href: "/#how-it-works" },
+        { label: t("link_features"),         href: "/#features" },
+      ],
+    },
+    {
+      heading: t("col_resources"),
+      links: [
+        { label: t("link_cn"),  href: "https://www.corpus-nummorum.eu",  external: true },
+        { label: t("link_docs"), href: "/docs" },
+        { label: t("link_contact"),       href: "/contact" },
+      ],
+    },
+  ];
+
+  const ARCHITECTURE = [
+    t("arch_1"),
+    t("arch_2"),
+    t("arch_3"),
+    t("arch_4"),
+    t("arch_5"),
+  ];
+
+  const NETWORK_LINKS = [
+    { label: t("link_portfolio"), href: "https://dhiashayeb.vercel.app/", icon: Code2, external: true },
+    { label: t("link_linkedin"), href: "https://www.linkedin.com/in/dhia-shayeb/", icon: Linkedin, external: true },
+    { label: t("link_github"), href: "https://github.com/ChaiebDhia/DeepCoin-Core", icon: Github, external: true },
+    { label: t("link_esprit"), href: "https://www.esprit.tn/", icon: Globe, external: true },
+    { label: t("link_yebni"), href: "https://www.yebni.com/", icon: Globe, external: true },
+  ];
+
   return (
     <footer
       className="border-t mt-8"
@@ -86,10 +95,10 @@ export function Footer() {
             </div>
           ))}
 
-          {/* Core Architecture */}
+          {/* {t("col_arch")} */}
           <div>
             <h3 className="text-sm font-black uppercase tracking-widest mb-4" style={{ color: "var(--brand-gold)" }}>
-              Core Architecture
+              {t("col_arch")}
             </h3>
             <ul className="space-y-2.5">
               {ARCHITECTURE.map((t) => (
@@ -100,10 +109,10 @@ export function Footer() {
             </ul>
           </div>
 
-          {/* Network & Partners */}
+          {/* {t("col_network")} */}
           <div>
             <h3 className="text-sm font-black uppercase tracking-widest mb-4" style={{ color: "var(--brand-gold)" }}>
-              Network & Partners
+              {t("col_network")}
             </h3>
             <ul className="space-y-2.5">
               {NETWORK_LINKS.map(({ label, href, icon: Icon }) => (
@@ -132,9 +141,9 @@ export function Footer() {
             color:       "var(--text-muted)",
           }}
         >
-          <span>© 2026 DeepCoin · PFE Internship</span>       
+          <span>{t("copyright")}</span>       
           <div className="flex items-center gap-1.5">
-            <span>Architected By</span>
+            <span>{t("architected")}</span>
             <span className="font-semibold tracking-wide text-sm" style={{ color: "var(--brand-gold)", textShadow: "0 0 10px rgba(255, 215, 0, 0.15)" }}>
               Dhia Chaieb
             </span>

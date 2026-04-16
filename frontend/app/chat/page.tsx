@@ -19,6 +19,8 @@
  */
 
 import { useState, useRef, useEffect, useCallback, Suspense } from "react";
+import { useTranslations } from "next-intl";
+
 import { useSearchParams }                            from "next/navigation";
 import { useSession }                                 from "next-auth/react";
 import { motion, AnimatePresence }                   from "framer-motion";
@@ -340,6 +342,7 @@ function TypingIndicator() {
 /*  EmptyState  */
 
 function EmptyState({ onSelect }: { onSelect: (q: string) => void }) {
+  const t = useTranslations("Chat");
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -357,17 +360,17 @@ function EmptyState({ onSelect }: { onSelect: (q: string) => void }) {
           </div>
         </div>
         <div className="text-center">
-          <h2 className="text-2xl font-black" style={{ color: "var(--text-primary)" }}>DeepCoin AI</h2>
+          <h2 className="text-2xl font-black" style={{ color: "var(--text-primary)" }}>{t("hero_title")}</h2>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            Numismatic Q&A  grounded in 9,541 Corpus Nummorum coin types
+            {t("hero_subtitle")}
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-2">
           {[
-            { icon: <Database size={11} />, label: "47,705 KB chunks" },
-            { icon: <Coins     size={11} />, label: "9,541 coin types" },
-            { icon: <Cpu       size={11} />, label: "BM25 + vector search" },
-            { icon: <Zap       size={11} />, label: "Source-cited answers" },
+            { icon: <Database size={11} />, label: t("badge_chunks") },
+            { icon: <Coins     size={11} />, label: t("badge_types") },
+            { icon: <Cpu       size={11} />, label: t("badge_search") },
+            { icon: <Zap       size={11} />, label: t("badge_cited") },
           ].map(({ icon, label }) => (
             <span key={label} className="flex items-center gap-1.5 text-[10px] font-medium px-3 py-1 rounded-full"
                   >
@@ -379,7 +382,7 @@ function EmptyState({ onSelect }: { onSelect: (q: string) => void }) {
 
       <div className="w-full max-w-xl">
         <p className="text-xs text-center mb-4 uppercase tracking-wider font-semibold" style={{ color: "var(--text-muted)" }}>
-          Try asking
+          {t("try_asking")}
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           {STARTERS.map(s => (
@@ -485,6 +488,7 @@ function HistorySidebar({
 /*  main page  */
 
 function ChatPageInner() {
+  const t = useTranslations("Chat");
   const searchParams            = useSearchParams();
   const { data: session }       = useSession();
   const isAuthed                = !!session?.user;
@@ -849,8 +853,8 @@ function ChatPageInner() {
               <Sparkles size={16} style={{ color: "#a78bfa" }} />
             </div>
             <div>
-              <h1 className="text-sm font-black" style={{ color: "var(--text-primary)" }}>DeepCoin AI</h1>
-              <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>Grounded answers from the Corpus Nummorum</p>
+              <h1 className="text-sm font-black" style={{ color: "var(--text-primary)" }}>{t("title")}</h1>
+              <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>{t("subtitle")}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -864,7 +868,7 @@ function ChatPageInner() {
             <Link href="/explore"
               className="hidden sm:flex items-center gap-1 text-[10px] px-3 py-1 rounded-lg transition-all hover:bg-white/5"
               style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}>
-              <Coins size={10} /> Explore
+              <Coins size={10} /> {t("explore")}
             </Link>
           </div>
         </div>
@@ -880,12 +884,7 @@ function ChatPageInner() {
         >
           <AlertCircle size={11} className="shrink-0 mt-0.5 text-red-600 dark:text-red-500" />
           <span>
-            <span className="font-semibold text-red-600 dark:text-red-500">Domain-specific RAG assistant —</span>
-            {" "}answers are grounded in the{" "}
-            <span className="font-medium" style={{ color: "var(--text-secondary)" }}>Corpus Nummorum knowledge base</span>
-            {" "}(9,541 coin types, 47,705 semantic chunks). This assistant handles{" "}
-            <span className="font-medium" style={{ color: "var(--text-secondary)" }}>numismatic questions only</span>{" "}
-            — it will not respond to greetings, general topics, or anything outside ancient coin scholarship.
+            {t("desc")}
           </span>
         </div>
 
@@ -913,7 +912,7 @@ function ChatPageInner() {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 disabled={loading}
-                placeholder="Ask about a dynasty, mint, denomination, iconography"
+                placeholder={t("q_placeholder")}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(input); } }}
                 className="w-full px-4 py-3 text-sm rounded-xl outline-none transition-all disabled:opacity-50"
                 style={{
@@ -937,12 +936,12 @@ function ChatPageInner() {
             </motion.button>
           </form>
           <p className="text-center text-[9px] mt-2" style={{ color: "var(--text-muted)" }}>
-            Answers grounded in{" "}
+            {t("footer_1")}{" "}
             <a href="https://www.corpus-nummorum.eu" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-300 transition-colors">Corpus Nummorum</a>
-            {" "} Cite sources before academic use {" "}
-            <Link href="/docs" className="underline hover:text-blue-300 transition-colors">API docs</Link>
+            {" "} {t("footer_2")} {" "}
+            <Link href="/docs" className="underline hover:text-blue-300 transition-colors">{t("footer_api")}</Link>
             {!isAuthed && (
-              <>{" "} · <Link href="/login?callbackUrl=/chat" className="underline hover:text-purple-300 transition-colors">Sign in to save history</Link></>
+              <>{" "} · <Link href="/login?callbackUrl=/chat" className="underline hover:text-purple-300 transition-colors">{t("footer_signin")}</Link></>
             )}
           </p>
         </div>

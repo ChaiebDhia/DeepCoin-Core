@@ -26,6 +26,7 @@
 "use client";
 
 import { useState, FormEvent } from "react";
+import { useTranslations } from "next-intl";
 import { signIn }              from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link                    from "next/link";
@@ -34,6 +35,7 @@ import { Mail, Lock, Coins, AlertCircle, Loader2, CheckCircle } from "lucide-rea
 import { resendVerification }  from "@/lib/api";
 
 export function LoginForm() {
+  const t = useTranslations("AuthForms");
   const router       = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl  = searchParams.get("callbackUrl") ?? "/";
@@ -125,12 +127,8 @@ export function LoginForm() {
              style={{ background: "linear-gradient(135deg, var(--surface-1) 0%, var(--surface-1) 100%)", border: "1px solid var(--surface-1)" }}>
           <Coins size={28} style={{ color: "var(--brand-gold)" }} />
         </div>
-        <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
-          Welcome back
-        </h1>
-        <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-          Sign in to your DeepCoin account
-        </p>
+        <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>{t("welcome_back_title")}</h1>
+        <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>{t("sign_in_subtitle")}</p>
       </div>
 
       {/* Card */}
@@ -189,7 +187,7 @@ export function LoginForm() {
                 onChange={e => setEmail(e.target.value)}
                 required
                 autoComplete="email"
-                placeholder="you@example.com"
+                placeholder={t("email_placeholder")}
                 className="w-full pl-9 pr-4 py-2.5 rounded-lg text-sm outline-none transition-colors"
                 style={{
                   background:  "var(--surface-2)",
@@ -205,15 +203,13 @@ export function LoginForm() {
           {/* Password field */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label className="block text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
-                Password
-              </label>
+              <label className="block text-sm font-medium" style={{ color: "var(--text-secondary)" }}>{t("password_label")}</label>
               <Link
                 href="/forgot-password"
                 className="text-xs hover:underline"
                 style={{ color: "var(--text-muted)" }}
               >
-                Forgot password?
+                {t("forgot_password")}
               </Link>
             </div>
             <div className="relative">
@@ -225,7 +221,7 @@ export function LoginForm() {
                 onChange={e => setPassword(e.target.value)}
                 required
                 autoComplete="current-password"
-                placeholder="••••••••"
+                placeholder={t("password_placeholder")}
                 className="w-full pl-9 pr-4 py-2.5 rounded-lg text-sm outline-none transition-colors"
                 style={{
                   background: "var(--surface-2)",

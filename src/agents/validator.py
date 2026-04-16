@@ -177,10 +177,10 @@ class Validator:
 
         Returns (metal_str, detection_confidence_0_to_1, uncertainty_str, stats_dict).
         """
-        # Use Python open(rb)+frombuffer+imdecode to handle non-ASCII paths on Windows.
+        # Use Python open(rb, "r", encoding="utf-8")+frombuffer+imdecode to handle non-ASCII paths on Windows.
         # cv2.imread and np.fromfile both use C-runtime fopen() which rejects
-        # accented filenames (e.g. French locale screenshots "Capture_d_écran…").
-        # Python's open() uses CreateFileW (Windows Unicode API) — no such limit.
+        # accented filenames (e.g. French locale screenshots "Capture_d_écran…", "r", encoding="utf-8").
+        # Python's open() uses CreateFileW (Windows Unicode API, "r", encoding="utf-8") — no such limit.
         with open(image_path, "rb") as _fh:
             raw = np.frombuffer(_fh.read(), dtype=np.uint8)
         img = cv2.imdecode(raw, cv2.IMREAD_COLOR)

@@ -21,6 +21,7 @@
 
 import { useRef, useEffect, useState } from "react";
 import { motion, useMotionValue, useInView, animate } from "framer-motion";
+import { useTranslations }           from "next-intl";
 
 interface Stat {
   value:   number;
@@ -32,18 +33,19 @@ interface Stat {
 }
 
 const STATS: Stat[] = [
-  { value: 80.03, label: "TTA Accuracy",      suffix: "%",  decimal: 2, color: "#3b82f6" },
-  { value: 438,   label: "CNN Classes",       suffix: "",   decimal: 0, color: "#ec4899" },
-  { value: 9716,  label: "Coin Types in KB",  suffix: "",   decimal: 0, color: "#8b5cf6" },
-  { value: 47705, label: "RAG Chunks",        suffix: "",   decimal: 0, color: "#d4a853" },
-  { value: 5,     label: "Specialist AI Agents",suffix: "",   decimal: 0, color: "#10b981" },
-  { value: 122,   label: "Unit Tests",        suffix: "",   decimal: 0, color: "#f97316" },
+  { value: 80.03, label: "tta",      suffix: "%",  decimal: 2, color: "#3b82f6" },
+  { value: 438,   label: "cnn",       suffix: "",   decimal: 0, color: "#ec4899" },
+  { value: 9716,  label: "kb",  suffix: "",   decimal: 0, color: "#8b5cf6" },
+  { value: 47705, label: "rag",        suffix: "",   decimal: 0, color: "#d4a853" },
+  { value: 5,     label: "agents",suffix: "",   decimal: 0, color: "#10b981" },
+  { value: 122,   label: "tests",        suffix: "",   decimal: 0, color: "#f97316" },
 ];
 
 /** Single animated counter. */
 function Counter({ stat, active }: { stat: Stat; active: boolean }) {
   const mv    = useMotionValue(0);
   const [display, setDisplay] = useState("0");
+  const t = useTranslations("StatsBar");
 
   useEffect(() => {
     const unsubscribe = mv.on("change", (latest) => {
@@ -73,7 +75,7 @@ function Counter({ stat, active }: { stat: Stat; active: boolean }) {
         {stat.prefix ?? ""}{display}{stat.suffix ?? ""}
       </div>
       <div className="text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
-        {stat.label}
+        {t(stat.label)}
       </div>
     </div>
   );

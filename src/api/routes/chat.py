@@ -109,6 +109,7 @@ class ChatRequest(BaseModel):
                       6 entries (3 user+assistant pairs) server-side.
     """
     query:                str              = Field(..., min_length=1, max_length=500, description="Numismatic question")
+    language:             str              = Field("en", description="Output language for the chat agent")
     n_sources:            int              = Field(5, ge=1, le=10, description="Number of KB chunks to retrieve")
     top5_labels:          list[str]        = Field(default_factory=list, description="Top-5 CNN predicted CN type IDs")
     conversation_history: list[ChatMessage] = Field(
@@ -183,6 +184,7 @@ def _run_chat(
     n_sources:            int,
     top5_labels:          list[str] | None  = None,
     conversation_history: list[ChatMessage]  = (),
+    language:             str                = "en",
 ) -> dict[str, Any]:
     """
     Execute a complete RAG → LLM chat pipeline synchronously.
@@ -391,6 +393,7 @@ def _run_chat(
             logger.info("chat: KB context thin — injected web search results for: %r", query[:80])
 
     # ── 5. Build system + user messages ─────────────────────────────────────
+    language_instruction = "\n\n• CRITICAL COMMAND: You must reply entirely in French." if language == "fr" else ""
     system_message = (
         "You are DeepCoin AI — a world-class expert numismatist and ancient historian "
         "who has spent decades studying the Corpus Nummorum (CN), a DFG-funded scholarly "
@@ -419,6 +422,7 @@ def _run_chat(
         "  Speak as if you simply know this from decades of scholarship.\n"
         "• NEVER say 'insufficient information'. Always give the most complete "
         "  assessment possible, combining database facts with expert knowledge."
+        f"{language_instruction}"
     )
 
     # ── 4c. "Type not in corpus" caveat ────────────────────────────────────
@@ -796,6 +800,7 @@ async def chat_stream(body: ChatRequest) -> StreamingResponse:
             web_context = _web_search(body.query)
 
         # ── 4. Assemble system + user messages ───────────────────────────────
+        language_instruction = "\n\n• CRITICAL COMMAND: You must reply entirely in French." if body.language == "fr" else ""
         system_message = (
             "You are DeepCoin AI \u2014 a world-class expert numismatist and ancient historian "
             "who has spent decades studying the Corpus Nummorum (CN), a DFG-funded scholarly "
@@ -816,6 +821,7 @@ async def chat_stream(body: ChatRequest) -> StreamingResponse:
             "\u2022 When database records are sparse, draw on your expert knowledge naturally.\n"
             "\u2022 Refer to Corpus Nummorum naturally: 'CN Type 1015 is catalogued as...'\n"
             "\u2022 NEVER say 'insufficient information'. Always give the most complete assessment."
+            f"{language_instruction}"
         )
 
         corpus_caveat = ""

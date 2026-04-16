@@ -28,9 +28,11 @@ import { Upload }                    from "lucide-react";
 import { CoinUploader }              from "@/components/coin/CoinUploader";
 import { AnalysisPanel }             from "@/components/coin/AnalysisPanel";
 import { AgentPipeline }             from "@/components/coin/AgentPipeline";
+import { useTranslations } from "next-intl";
 import { useDeepCoinStore }          from "@/lib/store";
 
 export function AnalyseSection() {
+  const t = useTranslations("AnalyseSection");
   const { phase, result, _cancelFn } = useDeepCoinStore();
 
   const hasResult    = phase === "done" && result != null;
@@ -51,18 +53,17 @@ export function AnalyseSection() {
             backgroundColor: "var(--brand-gold-10)",
           }}
         >
-          Try it now
+          {t("try_it_now")}
         </span>
         <h2
           className="text-3xl sm:text-4xl font-black mb-4 flex items-center justify-center gap-3"
           style={{ color: "var(--text-primary)" }}
         >
           <Upload size={28} style={{ color: "var(--brand-gold)" }} />
-          Analyse your coin
+          {t("title")}
         </h2>
         <p className="max-w-lg mx-auto text-sm" style={{ color: "var(--text-secondary)" }}>
-          Upload a photograph — the full pipeline runs in real time.
-          Drag-and-drop, or click to browse. No account required.
+          {t("subtitle")}
         </p>
       </div>
 

@@ -71,7 +71,7 @@ class Investigator:
 
     # ── public ────────────────────────────────────────────────────────────────
 
-    def investigate(self, image_path: str, cnn_prediction: dict) -> dict:
+    def investigate(self, image_path: str, cnn_prediction: dict, language: str = "en") -> dict:
         """
         Main entry point called by Gatekeeper.
 
@@ -84,7 +84,7 @@ class Investigator:
         top5       = cnn_prediction.get("top5", [])
 
         # 1. Gemini Vision description
-        description, features, llm_used = self._describe_image(image_path, confidence, top5)
+        description, features, llm_used = self._describe_image(image_path, confidence, top5, language)
 
         # 2. KB cross-reference via RAG engine (9,541 types, hybrid BM25+vector)
         #    WHY RAG not legacy KB:
@@ -129,7 +129,7 @@ class Investigator:
 
     # ── private ───────────────────────────────────────────────────────────────
 
-    def _describe_image(self, image_path: str, confidence: float, top5: list) -> tuple:
+    def _describe_image(self, image_path: str, confidence: float, top5: list, language: str = "en") -> tuple:
         """
         Encode image as base64 and send to the vision-capable LLM.
 
@@ -178,6 +178,7 @@ class Investigator:
             )
             cnn_hint += f" Top CNN candidates: {candidates}."
 
+        language_instruction = "\n\nCRITICAL COMMAND: You must write the entire analysis strictly in French." if language == "fr" else ""
         prompt = (
             "You are an expert numismatist and archaeologist specialising in ancient Greek and Roman coins.\n"
             f"{cnn_hint}\n\n"
@@ -195,6 +196,7 @@ class Investigator:
             "IDENTIFICATION: Period, issuing authority, and region if determinable. "
             "If uncertain, state the most likely candidate with brief reasoning.\n\n"
             "Use numismatic terminology. If something is not visible, say so plainly."
+            + language_instruction
         )
 
         try:
@@ -401,10 +403,10 @@ def _opencv_fallback(image_path: str) -> tuple[str, dict]:
     lines    = []
 
     try:
-        # Use Python open(rb)+frombuffer+imdecode to handle non-ASCII paths on Windows.
+        # Use Python open(rb, "r", encoding="utf-8")+frombuffer+imdecode to handle non-ASCII paths on Windows.
         # cv2.imread and np.fromfile both use C-runtime fopen() which rejects
-        # accented filenames (e.g. French locale screenshots "Capture_d_écran…").
-        # Python's open() uses CreateFileW (Windows Unicode API) — no such limit.
+        # accented filenames (e.g. French locale screenshots "Capture_d_écran…", "r", encoding="utf-8").
+        # Python's open() uses CreateFileW (Windows Unicode API, "r", encoding="utf-8") — no such limit.
         with open(image_path, "rb") as _fh:
             raw = np.frombuffer(_fh.read(), dtype=np.uint8)
         img = cv2.imdecode(raw, cv2.IMREAD_COLOR)

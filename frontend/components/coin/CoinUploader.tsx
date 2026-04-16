@@ -26,6 +26,7 @@ import toast                                  from "react-hot-toast";
 import { classifyCoin }                       from "@/lib/api";
 import { useDeepCoinStore }                   from "@/lib/store";
 import { cn }                                 from "@/lib/utils";
+import { useTranslations } from "next-intl";
 import { Button }                             from "@/components/ui/button";
 import { Progress }                           from "@/components/ui/progress";
 import { Spinner }                            from "@/components/ui/spinner";
@@ -264,6 +265,7 @@ async function detectScreenshot(file: File): Promise<boolean> {
 }
 
 export function CoinUploader() {
+  const t = useTranslations("AnalysePage");
   const {
     tta, setTta,
     phase,
@@ -379,7 +381,7 @@ export function CoinUploader() {
   async function handleAnalyse() {
     if (!selectedFile) return;
 
-    // Cancel any previous in-flight request before starting a new one
+    // {t("cancel")} any previous in-flight request before starting a new one
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     const { signal } = abortRef.current;
@@ -443,7 +445,7 @@ export function CoinUploader() {
       <div
         role="button"
         tabIndex={0}
-        aria-label="Drop a coin image here or click to browse"
+        aria-label={`Drop a coin image here ${t("or_click")}`}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
         onDrop={onDrop}
@@ -464,7 +466,7 @@ export function CoinUploader() {
             {/* Thumbnail preview */}
             <img
               src={previewUrl!}
-              alt="Selected coin"
+              alt={t("selected_coin")}
               className="max-h-40 max-w-full rounded-lg object-contain shadow-md"
             />
             <p className="text-sm text-[var(--text-primary)] font-medium mt-1">
@@ -493,10 +495,10 @@ export function CoinUploader() {
             </div>
             <div>
               <p className="text-sm font-medium text-[var(--text-primary)]">
-                Drop a coin photograph here
+                {t("dropPhoto")}
               </p>
               <p className="text-xs text-[var(--text-muted)] mt-1">
-                or <span className="text-blue-400 underline underline-offset-2">browse files</span>
+                or <span className="text-blue-400 underline underline-offset-2">{t('browseFiles')}</span>
                 {" "}— JPEG / PNG, max 10 MB
               </p>
             </div>
@@ -504,12 +506,12 @@ export function CoinUploader() {
             {!isDragging && (
               <div className="w-full rounded-lg px-3 py-2.5 text-left"
                 style={{ background: "rgba(59,130,246,0.07)", border: "1px solid rgba(59,130,246,0.15)" }}>
-                <p className="text-xs font-semibold text-blue-300 mb-2">📸 For best results</p>
+                <p className="text-xs font-semibold text-blue-300 mb-2">{t("forBest")}</p>
                 <ul className="space-y-1">
                   {([
-                    ["🪙", "Photograph the obverse — the portrait or main inscription side"],
-                    ["💡", "Even lighting, no glare — natural light works best"],
-                    ["📐", "Coin flat and in focus, fully visible in the frame"],
+                    ["🪙", t("obverse")],
+                    ["💡", t("lighting")],
+                    ["📐", t("flat")],
                   ] as [string, string][]).map(([emoji, text]) => (
                     <li key={text} className="text-xs text-[var(--text-secondary)] flex gap-2">
                       <span>{emoji}</span><span>{text}</span>
@@ -517,7 +519,7 @@ export function CoinUploader() {
                   ))}
                 </ul>
                 <p className="text-xs text-[var(--text-muted)] mt-2 italic">
-                  Any quality works — the system automatically routes to the right specialist.
+                  {t("anyQuality")}
                 </p>
               </div>
             )}
@@ -613,7 +615,7 @@ export function CoinUploader() {
         </div>
       )}
 
-      {/* Action button — Cancel during loading, Analyse when idle */}
+      {/* Action button — {t("cancel")} during loading, Analyse when idle */}
       {isLoading ? (
         <Button
           variant="secondary"
@@ -622,7 +624,7 @@ export function CoinUploader() {
           className="w-full border border-red-700/50 text-red-400 hover:bg-red-900/30 hover:text-red-300"
         >
           <StopCircle size={16} />
-          Cancel Analysis
+          {t("cancel")} Analysis
         </Button>
       ) : (
         <Button

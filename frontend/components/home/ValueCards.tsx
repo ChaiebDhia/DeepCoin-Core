@@ -22,6 +22,7 @@
 
 import { useRef }                 from "react";
 import { motion, useInView }      from "framer-motion";
+import { useTranslations }           from "next-intl";
 import { Microscope, BookMarked, ShieldCheck, Users, Lock, TrendingUp } from "lucide-react";
 
 interface FeatureCard {
@@ -33,52 +34,53 @@ interface FeatureCard {
   featured? :boolean;
 }
 
-const CARDS: FeatureCard[] = [
-  {
-    icon:     Microscope,
-    title:    "Forensic material validation",
-    desc:     "OpenCV HSV multi-scale analysis detects gold, silver, and bronze from the photograph itself — then cross-references with the knowledge base.",
-    bullets:  [
-      "3 crop scales, majority vote",
-      "Ag₂S patina compensation",
-      "detection_confidence float output",
-    ],
-    color:    "#3b82f6",
-  },
-  {
-    icon:     BookMarked,
-    title:    "RAG-grounded LLM — zero hallucination",
-    desc:     "The Historian agent injects 5 labeled [CONTEXT N] blocks from ChromaDB into the Gemini prompt. The model may only cite what is in the context.",
-    bullets:  [
-      "47,705 vectors across 9,541 types",
-      "BM25 + vector hybrid search + RRF",
-      "Citations enforced in system prompt",
-    ],
-    color:    "#d4a853",
-    featured: true,
-  },
-  {
-    icon:     ShieldCheck,
-    title:    "Graceful degradation",
-    desc:     "Below 40 % CNN confidence the Investigator agent uses VLM visual attributes + full KB search to surface the best match — never a blank response.",
-    bullets:  [
-      "3 routing paths (>85 / 40-85 / <40 %)",
-      "OpenCV fallback when no VLM key",
-      "\"Best visual match\" framing in UI",
-    ],
-    color:    "#10b981",
-  },
-];
-
-const CHIPS = [
-  { icon: Users,       label: "RBAC — 3 roles",             color: "#3b82f6" },
-  { icon: Lock,        label: "JWT auth + audit log",        color: "#8b5cf6" },
-  { icon: TrendingUp,  label: "PostgreSQL history + JSONB",  color: "#10b981" },
-];
-
 export function ValueCards() {
+  const t = useTranslations("ValueCards");
   const ref    = useRef<HTMLElement>(null);
   const inView = useInView(ref, { once: true, margin: "-80px" });
+
+  const CARDS: FeatureCard[] = [
+    {
+      icon:     Microscope,
+      title:    t("c1_title"),
+      desc:     t("c1_desc"),
+      bullets:  [
+        t("c1_b1"),
+        t("c1_b2"),
+        t("c1_b3"),
+      ],
+      color:    "#3b82f6",
+    },
+    {
+      icon:     BookMarked,
+      title:    t("c2_title"),
+      desc:     t("c2_desc"),
+      bullets:  [
+        t("c2_b1"),
+        t("c2_b2"),
+        t("c2_b3"),
+      ],
+      color:    "#d4a853",
+      featured: true,
+    },
+    {
+      icon:     ShieldCheck,
+      title:    t("c3_title"),
+      desc:     t("c3_desc"),
+      bullets:  [
+        t("c3_b1"),
+        t("c3_b2"),
+        t("c3_b3"),
+      ],
+      color:    "#10b981",
+    },
+  ];
+
+  const CHIPS = [
+    { icon: Users,       label: t("chip1"),             color: "#3b82f6" },
+    { icon: Lock,        label: t("chip2"),        color: "#8b5cf6" },
+    { icon: TrendingUp,  label: t("chip3"),  color: "#10b981" },
+  ];
 
   return (
     <section id="features" ref={ref} className="py-24 scroll-mt-16">
@@ -98,14 +100,13 @@ export function ValueCards() {
             backgroundColor: "var(--brand-gold-10)",
           }}
         >
-          Why DeepCoin
+          {t("why")}
         </span>
         <h2 className="text-3xl sm:text-4xl font-black mb-4" style={{ color: "var(--text-primary)" }}>
-          Built for production, not for demo
+          {t("title")}
         </h2>
         <p className="max-w-xl mx-auto text-sm" style={{ color: "var(--text-secondary)" }}>
-          Every engineering decision was driven by real constraints — limited VRAM,
-          long-tail datasets, LLM hallucination risk, and archaeological accuracy requirements.
+          {t("desc")}
         </p>
       </motion.div>
 
@@ -132,7 +133,7 @@ export function ValueCards() {
                   className="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full"
                   style={{ backgroundColor: color, color: "var(--brand-navy)" }}
                 >
-                  Core innovation
+                  {t("core_innovation")}
                 </span>
               )}
 

@@ -345,10 +345,17 @@ export async function classifyCoin(
   const form = new FormData();
   form.append("file", file);
 
+  // Extract language from NEXT_LOCALE cookie if in browser
+  let lang = "en";
+  if (typeof document !== "undefined") {
+    const match = document.cookie.match(new RegExp('(^| )NEXT_LOCALE=([^;]+)'));
+    if (match) lang = match[2];
+  }
+
   try {
     // Use classifyApiClient (direct to FastAPI) — bypasses Next.js proxy timeout
     const { data } = await classifyApiClient.post<ClassifyResponse>(
-      `/api/classify?tta=${tta}`,
+      `/api/classify?tta=${tta}&language=${lang}`,
       form,
       {
         headers: { "Content-Type": "multipart/form-data" },
@@ -744,17 +751,16 @@ export async function chatQuery(
   try {
     const { data } = await classifyApiClient.post<ChatResponse>("/api/chat", {
       query,
+      language: typeof window === "undefined" ? "en" : (document.cookie.match(/(^|;)\s*NEXT_LOCALE\s*=\s*([^;]+)/)?.pop() || "en"),
       n_sources:            nSources,
       top5_labels:          top5Labels,
       conversation_history: conversationHistory,
     });
     return data;
-  } catch (err) {
-    throw toApiError(err);
+  } catch (error) {
+    return Promise.reject(error);
   }
 }
-
-// ── Chat SSE streaming ────────────────────────────────────────────────────────
 
 /**
  * Callbacks invoked as SSE events arrive from POST /api/chat/stream.
@@ -812,14 +818,17 @@ export async function chatQueryStream(
 ): Promise<void> {
   const CLASSIFY_BASE = process.env.NEXT_PUBLIC_CLASSIFY_URL ?? "";
   const url = `${CLASSIFY_BASE}/api/chat/stream`;
+  
+  // Send language cookie to instruct LLM
+  const isServer = typeof window === "undefined";
+  const lang = isServer ? "en" : document.cookie.match(/(^|;)\s*NEXT_LOCALE\s*=\s*([^;]+)/)?.pop() || "en";
 
   const res = await fetch(url, {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
     body:    JSON.stringify({
       query,
-      n_sources:            nSources,
-      top5_labels:          top5Labels,
+      language:             lang,
       conversation_history: conversationHistory,
     }),
     signal,

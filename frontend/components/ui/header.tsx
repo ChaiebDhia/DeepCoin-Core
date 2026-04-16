@@ -25,7 +25,6 @@ import { HealthDot }   from "@/components/ui/health-dot";
 import { UserMenu }    from "@/components/auth/UserMenu";
 import { NavLinks }    from "@/components/ui/NavLinks";
 import { MobileNav }   from "@/components/ui/MobileNav";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 export function Header() {
   return (
@@ -52,9 +51,8 @@ export function Header() {
         <div className="flex items-center gap-2">
           {/* Health indicator — left of the auth buttons */}
           <HealthDot />
-          {/* Theme Toggle */}
-          <ThemeToggle />
-          {/* Auth: avatar dropdown when logged in, Sign In / Register otherwise */}
+          {/* Language and Theme Toggles */}
+                              {/* Auth: avatar dropdown when logged in, Sign In / Register otherwise */}
           <UserMenu />
 
           {/* Mobile hamburger — far right, only renders below md */}

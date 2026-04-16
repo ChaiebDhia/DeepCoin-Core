@@ -18,7 +18,8 @@
 import { useRef }            from "react";
 import type { ElementType }  from "react";
 import { motion, useInView } from "framer-motion";
-import { Brain, Bot, ServerIcon, Monitor, ExternalLink, Layers } from "lucide-react";
+import { Brain, Bot, ServerIcon, Monitor, ExternalLink, Layers } from "lucide-react"
+import { useTranslations } from "next-intl";
 
 
 // ── Data ──────────────────────────────────────────────────────────────────────
@@ -38,66 +39,68 @@ interface Pillar {
   tech:    Tech[];
 }
 
-const PILLARS: Pillar[] = [
+// ── Component ─────────────────────────────────────────────────────────────────
+
+export function TechStack() {
+  const t = useTranslations("TechStack")
+
+  
+
+  const PILLARS: Pillar[] = [
   {
-    label: "Deep Learning",
+    label: t("dl_title"),
     icon:  Brain,
     color: "#60a5fa",
     glow:  "rgba(96,165,250,0.18)",
     tech: [
       { name: "PyTorch",        version: "2.6.0",     href: "https://pytorch.org",               note: "CUDA 12.4" },
-      { name: "EfficientNet",   version: "B3",         href: "https://arxiv.org/abs/1905.11946",  note: "12M params" },
-      { name: "Albumentations", version: "1.4+",       href: "https://albumentations.ai",         note: "6 augments" },
-      { name: "OpenCV",         version: "4.13",       href: "https://opencv.org",                note: "CLAHE/LAB" },
+      { name: "EfficientNet",   version: "B3",         href: "https://arxiv.org/abs/1905.11946",  note: t("dl_eff_params") },
+      { name: "Albumentations", version: "1.4+",       href: "https://albumentations.ai",         note: t("dl_alb_aug") },
+      { name: "OpenCV",         version: "4.13",       href: "https://opencv.org",                note: t("dl_cv_clahe") },
     ],
   },
   {
-    label: "Agentic AI",
+    label: t("ai_title"),
     icon:  Bot,
     color: "#a78bfa",
     glow:  "rgba(167,139,250,0.18)",
     tech: [
-      { name: "LangGraph",    version: "0.3+",  href: "https://langchain-ai.github.io/langgraph/",  note: "5 agents" },
-      { name: "ChromaDB",     version: "0.6+",  href: "https://docs.trychroma.com",                  note: "47,705 vecs" },
-      { name: "Gemini Flash", version: "2.5",   note: "GitHub Models" },
-      { name: "BM25+VEC+RRF", version: "hybrid", note: "9,541 types" },
+      { name: "LangGraph",    version: "0.3+",  href: "https://langchain-ai.github.io/langgraph/",  note: t("ai_lg_agents") },
+      { name: "ChromaDB",     version: "0.6+",  href: "https://docs.trychroma.com",                  note: t("ai_chr_vecs") },
+      { name: "Gemini Flash", version: "2.5",   note: t("ai_gem_model") },
+      { name: "BM25+VEC+RRF", version: t("ai_bm25_hyb"), note: t("ai_bm25_t") },
     ],
   },
   {
-    label: "Backend",
+    label: t("be_title"),
     icon:  ServerIcon,
     color: "#34d399",
     glow:  "rgba(52,211,153,0.18)",
     tech: [
-      { name: "FastAPI",      version: "0.115+",  href: "https://fastapi.tiangolo.com",  note: "async" },
-      { name: "PostgreSQL",   version: "17",      href: "https://postgresql.org",         note: "RBAC, JWT" },
-      { name: "SQLAlchemy",   version: "2.x",     note: "Alembic migrations" },
-      { name: "fpdf2",        version: "latest",  note: "PDF reports" },
+      { name: "FastAPI",      version: "0.115+",  href: "https://fastapi.tiangolo.com",  note: t("be_fa_async") },
+      { name: "PostgreSQL",   version: "17",      href: "https://postgresql.org",         note: t("be_pg_auth") },
+      { name: "SQLAlchemy",   version: "2.x",     note: t("be_sa_mig") },
+      { name: "fpdf2",        version: "latest",  note: t("be_fp_pdf") },
     ],
   },
   {
-    label: "Frontend",
+    label: t("fe_title"),
     icon:  Monitor,
     color: "#fb923c",
     glow:  "rgba(251,146,60,0.18)",
     tech: [
-      { name: "Next.js",       version: "15",   href: "https://nextjs.org",             note: "App Router" },
-      { name: "Framer Motion", version: "12",   href: "https://motion.dev",             note: "animations" },
-      { name: "TanStack Q",    version: "v5",   href: "https://tanstack.com/query",     note: "caching" },
-      { name: "NextAuth",      version: "v5β",  href: "https://authjs.dev",             note: "JWT sessions" },
+      { name: "Next.js",       version: "15",   href: "https://nextjs.org",             note: t("fe_nx_app") },
+      { name: "Framer Motion", version: "12",   href: "https://motion.dev",             note: t("fe_fm_anim") },
+      { name: "TanStack Q",    version: "v5",   href: "https://tanstack.com/query",     note: t("fe_tq_cache") },
+      { name: "NextAuth",      version: "v5β",  href: "https://authjs.dev",             note: t("fe_na_jwt") },
     ],
   },
 ];
-
-const HERO_STATS = [
-  { value: "80.03%",  label: "TTA accuracy",  sub: "EfficientNet-B3 × 438 classes" },
-  { value: "47,705",  label: "RAG vectors",    sub: "5 chunks × 9,541 coin types"  },
-  { value: "<20 s",   label: "Full pipeline",  sub: "CNN → agents → PDF"           },
+  const HERO_STATS = [
+  { value: "80.03%",  label: t("top_acc"),  sub: t("acc_desc") },
+  { value: "47,705",  label: t("rag_vectors"),    sub: t("rag_desc")  },
+  { value: "<20 s",   label: t("full_pipeline"),  sub: t("pipe_desc")           },
 ];
-
-// ── Component ─────────────────────────────────────────────────────────────────
-
-export function TechStack() {
   const ref    = useRef<HTMLElement>(null);
   const inView = useInView(ref, { once: true, margin: "-60px" });
 
@@ -117,14 +120,14 @@ export function TechStack() {
             className="text-xs font-bold uppercase tracking-widest"
             style={{ color: "var(--brand-gold)" }}
           >
-            Open-source stack
+          {t("hero_tag")}
           </span>
         </div>
         <h2 className="text-3xl sm:text-4xl font-black leading-tight" style={{ color: "var(--text-primary)" }}>
-          The technology behind it
+          {t("hero_title")}
         </h2>
         <p className="mt-2 text-sm max-w-md" style={{ color: "var(--text-secondary)" }}>
-          Every package is verified, versioned, and auditable. No black boxes.
+          {t("hero_subtitle")}
         </p>
       </motion.div>
 
@@ -150,16 +153,16 @@ export function TechStack() {
 
           <div className="relative">
             <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "rgba(212,168,83,0.7)" }}>
-              Verified results
+          {t("verified_title")}
             </span>
             <h3 className="mt-3 text-5xl font-black tabular-nums leading-none" style={{ color: "var(--brand-gold)" }}>
               80%
             </h3>
             <p className="mt-1 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-              Top-1 accuracy
+          {t("top_acc")}
             </p>
             <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-              TTA ×8 · 438 ancient coin classes
+          {t("acc_desc")}
             </p>
           </div>
 
@@ -285,12 +288,12 @@ export function TechStack() {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
-              Training dataset
+          {t("ds_title")}
             </span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-base font-bold" style={{ color: "var(--text-primary)" }}>
-              Corpus Nummorum v1
+          {t("ds_logo")}
             </span>
             <ExternalLink
               size={13}
@@ -299,16 +302,16 @@ export function TechStack() {
             />
           </div>
           <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-            DFG-funded · Freie Universität Berlin · CC BY-SA 4.0
+          {t("ds_credit")}
           </p>
         </div>
 
         {/* Right stats */}
         <div className="flex items-center gap-6">
           {[
-            { v: "115,160", label: "raw images" },
-            { v: "9,716",   label: "coin types" },
-            { v: "438",     label: "trained on" },
+            { v: "115,160", label: t("ds_raw") },
+            { v: "9,716",   label: t("ds_types") },
+            { v: "438",     label: t("ds_trained") },
           ].map(({ v, label }) => (
             <div key={label} className="text-center">
               <div className="text-xl font-black tabular-nums" style={{ color: "var(--brand-gold)" }}>

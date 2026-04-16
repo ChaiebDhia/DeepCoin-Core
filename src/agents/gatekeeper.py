@@ -55,6 +55,8 @@ _REPORTS_DIR  = _ROOT / "reports"
 # ── LangGraph state schema ────────────────────────────────────────────────────────
 
 class CoinState(TypedDict, total=False):
+    language:           str      # "en" or "fr"
+    language:           str      # "en" or "fr"
     """LangGraph state — travels through every node."""
     # inputs
     image_path    : str
@@ -119,7 +121,7 @@ class Gatekeeper:
 
     # ── public ────────────────────────────────────────────────────────────────
 
-    def analyze(self, image_path: str, tta: bool = True) -> dict:
+    def analyze(self, image_path: str, tta: bool = True, language: str = "en") -> dict:
         """
         Run the full pipeline on one coin image.
 
@@ -139,6 +141,7 @@ class Gatekeeper:
         initial_state: CoinState = {
             "image_path": image_path,
             "use_tta":    tta,
+            "language":   language,
             "node_timings": {},
         }
         final_state = self._graph.invoke(initial_state)
@@ -288,7 +291,7 @@ class Gatekeeper:
             """
             t0 = time.perf_counter()
             try:
-                result = _retry_call(lambda: historian.research(state["cnn_prediction"]))
+                result = _retry_call(lambda: historian.research(state["cnn_prediction"], language=state.get("language", "en")))
             except Exception as exc:
                 logger.error("historian_node failed: %s", exc, exc_info=True)
                 result = {
@@ -326,7 +329,7 @@ class Gatekeeper:
                     "_error":               str(exc),
                 }
             try:
-                hist_result = _retry_call(lambda: historian.research(state["cnn_prediction"]))
+                hist_result = _retry_call(lambda: historian.research(state["cnn_prediction"], language=state.get("language", "en")))
             except Exception as exc:
                 logger.error("validator_node (historian) failed: %s", exc, exc_info=True)
                 hist_result = {
@@ -362,7 +365,7 @@ class Gatekeeper:
             try:
                 result = _retry_call(
                     lambda: investigator.investigate(
-                        state["image_path"], state["cnn_prediction"]
+                        state["image_path"], state["cnn_prediction"], language=state.get("language", "en")
                     )
                 )
             except Exception as exc:

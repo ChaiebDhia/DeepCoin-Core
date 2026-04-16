@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * app/explore/page.tsx — Numismatic Discovery
+ * app/explore/page.tsx — {t("subtitle")}
  * =============================================
  * WHAT: A public browser for all 9,541 coin types in the Corpus Nummorum
  *       knowledge base.  Anyone can search "silver tetradrachm Athens" and
@@ -28,6 +28,7 @@
  */
 
 import { useState, useRef }               from "react";
+import { useTranslations } from "next-intl";
 import { useQuery }                        from "@tanstack/react-query";
 import Link                                from "next/link";
 import { Search, ExternalLink, Sparkles, BookOpen, ChevronLeft, ChevronRight, X } from "lucide-react";
@@ -50,7 +51,7 @@ function materialPillClass(material: string): string {
     if (m.includes("electrum"))                           return "bg-amber-600/10 text-amber-800 border-amber-600/20 dark:text-amber-400";
     return "bg-[var(--surface-2)] text-[var(--text-secondary)] border-[var(--border)]";
 }
-  /** Build the "Ask AI" chat URL with the CN type pre-loaded as context. */
+  /** Build the "{t("ask_ai")}" chat URL with the CN type pre-loaded as context. */
 function chatUrl(item: KbTypeItem): string {
   const label = item.denomination
     ? `${item.denomination}${item.authority ? " of " + item.authority : ""} (CN ${item.type_id})`
@@ -61,6 +62,7 @@ function chatUrl(item: KbTypeItem): string {
 // ── KbTypeCard ────────────────────────────────────────────────────────────────
 
 function KbTypeCard({ item }: { item: KbTypeItem }) {
+  const t = useTranslations("ExplorePage");
   const mat = item.material || "—";
   return (
     <div
@@ -130,7 +132,7 @@ function KbTypeCard({ item }: { item: KbTypeItem }) {
                    border: "1px solid rgba(99,102,241,0.25)" }}
         >
           <Sparkles className="w-3 h-3" />
-          Ask AI
+          {t("ask_ai")}
         </Link>
         <a
           href={`https://www.corpus-nummorum.eu/types/${item.type_id}`}
@@ -142,7 +144,7 @@ function KbTypeCard({ item }: { item: KbTypeItem }) {
                    border: "1px solid rgba(255,255,255,0.10)" }}
         >
           <ExternalLink className="w-3 h-3" />
-          View Record
+          {t("view_record")}
         </a>
       </div>
     </div>
@@ -152,6 +154,7 @@ function KbTypeCard({ item }: { item: KbTypeItem }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ExplorePage() {
+  const t = useTranslations("ExplorePage");
   const [query, setQuery]              = useState("");
   const [debouncedQuery, setDebounced] = useState("");
   const [page, setPage]                = useState(0);
@@ -191,21 +194,18 @@ export default function ExplorePage() {
              style={{ background: "rgba(99,102,241,0.12)", color: "#a5b4fc",
                       border: "1px solid rgba(99,102,241,0.20)" }}>
           <BookOpen className="w-3.5 h-3.5" />
-          Corpus Nummorum Scholarly Database
+          {t("title")}
         </div>
 
         <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-3"
             style={{ color: "var(--text-primary)" }}>
-          Numismatic Discovery
+          {t("subtitle")}
         </h1>
 
         <p className="text-base max-w-xl mx-auto mb-2"
            style={{ color: "var(--text-secondary)" }}>
-          Browse{" "}
-          <span className="font-semibold" style={{ color: "var(--brand-mid)" }}>
-            9,541 ancient coin types
-          </span>{" "}
-          from the Corpus Nummorum — the scholarly reference behind every DeepCoin analysis.
+          
+          {t("desc_1")}
         </p>
 
         {data && !isLoading && (
@@ -225,7 +225,7 @@ export default function ExplorePage() {
             type="text"
             value={query}
             onChange={(e) => handleSearch(e.target.value)}
-            placeholder="Search denominations, dynasties, regions, legends…"
+            placeholder={t("search")}
             className="w-full rounded-xl py-3 pl-10 pr-10 text-sm outline-none transition-all
                        focus:ring-2 focus:ring-[var(--accent-primary)]/40"
             style={{
@@ -256,7 +256,7 @@ export default function ExplorePage() {
                           : "border-[var(--border)] text-[var(--text-primary)] text-[var(--text-secondary)] hover:border-[var(--brand-mid)]/40"}`}
             style={{ background: !cnnOnly ? "rgba(99,102,241,0.12)" : "rgba(255,255,255,0.03)" }}
           >
-            All 9,541 types
+            {t("all_types")}
           </button>
           <button
             onClick={() => { setCnnOnly(true); setPage(0); }}
@@ -266,7 +266,7 @@ export default function ExplorePage() {
                           : "border-[var(--border)] text-[var(--text-primary)] text-[var(--text-secondary)] hover:border-[var(--brand-mid)]/40"}`}
             style={{ background: cnnOnly ? "rgba(16,185,129,0.10)" : "rgba(255,255,255,0.03)" }}
           >
-            CNN-trained only (438)
+            {t("cnn_trained")}
           </button>
         </div>
       </section>
@@ -335,10 +335,10 @@ export default function ExplorePage() {
                            border: "1px solid rgba(255,255,255,0.10)" }}
                 >
                   <ChevronLeft className="w-4 h-4" />
-                  Previous
+                  {t("previous")}
                 </button>
                 <span className="text-sm tabular-nums" style={{ color: "var(--text-secondary)" }}>
-                  Page {page + 1} / {totalPages}
+                  {t("page")} {page + 1} / {totalPages}
                 </span>
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
@@ -348,7 +348,7 @@ export default function ExplorePage() {
                   style={{ background: "var(--surface-2)", color: "var(--text-secondary)",
                            border: "1px solid rgba(255,255,255,0.10)" }}
                 >
-                  Next
+                  {t("next")}
                   <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
@@ -361,7 +361,7 @@ export default function ExplorePage() {
       <section className="border-t px-4 py-10 text-center"
                style={{ borderColor: "rgba(255,255,255,0.07)" }}>
         <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
-          Have a coin photo? Run a full AI analysis — CNN classification + historical research + PDF report.
+          {t("have_photo")}
         </p>
         <Link
           href="/analyse"
@@ -370,7 +370,7 @@ export default function ExplorePage() {
           style={{ background: "var(--brand-mid)", color: "#fff" }}
         >
           <Sparkles className="w-4 h-4" />
-          Analyse a coin
+          {t("analyse_coin")}
         </Link>
       </section>
     </main>

@@ -225,7 +225,7 @@ class Historian:
 
     # ── public ────────────────────────────────────────────────────────────────
 
-    def research(self, cnn_prediction: dict) -> dict:
+    def research(self, cnn_prediction: dict, language: str = "en") -> dict:
         """
         Main entry point called by Gatekeeper.
 
@@ -268,7 +268,7 @@ class Historian:
         context_blocks = self._rag.get_context_blocks(type_id)
 
         # 3. Generate grounded narrative
-        narrative, llm_used = self._generate_narrative(record, confidence, context_blocks)
+        narrative, llm_used = self._generate_narrative(record, confidence, context_blocks, language)
 
         # 4. Extract obverse/reverse from structured fields (clean, no blob parsing)
         obverse_parts = []
@@ -320,6 +320,7 @@ class Historian:
         record:         dict,
         confidence:     float,
         context_blocks: str,
+        language:       str = "en",
     ) -> tuple[str, bool]:
         """
         Generate a grounded historical narrative via [CONTEXT N] injection.
@@ -353,6 +354,8 @@ class Historian:
         if not context_blocks:
             context_blocks = f"CN type {record.get('type_id', 'unknown')}: limited data available."
 
+        language_instruction = "\n\nCRITICAL COMMAND: You must write the entire analysis strictly in French." if language == "fr" else ""
+        language_instruction = "\n\nCRITICAL COMMAND: You must write the entire analysis strictly in French." if language == "fr" else ""
         prompt = (
             "You are a professional numismatist and archaeologist specialising in ancient coins.\n"
             "You have been given structured data from the Corpus Nummorum academic database.\n\n"
@@ -371,6 +374,7 @@ class Historian:
             "     in your response. The context blocks are for your internal reference only.\n"
             "  7. Write in complete sentences. No special characters except standard punctuation.\n\n"
             "Write the commentary now:"
+            + language_instruction
         )
 
         try:

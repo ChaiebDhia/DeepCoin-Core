@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -23,15 +24,25 @@ export const metadata: Metadata = {
   keywords:    ["numismatics", "ancient coins", "AI", "deep learning", "Corpus Nummorum"],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const cookieStore = await cookies();
+  const locale = cookieStore.get('NEXT_LOCALE')?.value || 'en';
+  let messages = {};
+  try {
+    messages = (await import("../messages/" + locale + ".json")).default;
+  } catch (error) {
+    messages = (await import("../messages/en.json")).default;
+  }
+
   return (
-    <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
+    <html lang={locale} suppressHydrationWarning data-scroll-behavior="smooth">
       <body
+        suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col transition-colors duration-200`}
       >
-        <Providers>
+        <Providers locale={locale} messages={messages}>
           <Header />
           <MainLayout>
             {children}
@@ -43,4 +54,6 @@ export default function RootLayout({
     </html>
   );
 }
+
+
 

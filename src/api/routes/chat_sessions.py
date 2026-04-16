@@ -1,268 +1,268 @@
-﻿"""
-src/api/routes/chat_sessions.py
-================================
-Chat session history â€” save, list, retrieve, and delete AI chat conversations.
-
-WHAT: These endpoints store and retrieve AI chat histories per user.
-      Each "session" is one conversation thread: a list of messages with
-      {role, content, sources, provider}.
-
-WHY this is separate from the chat.py endpoint:
-    chat.py handles the LLM inference: question â†’ answer.
-    chat_sessions.py handles persistence: save, list, load, delete.
-    Separation of concerns â€” inference and storage are independent concerns.
-
-AUTHENTICATION:
-    All routes below require a valid JWT.  Guest users can use /api/chat
-    without authentication, but chat history is a per-user feature.
-
-ENDPOINTS:
-    POST   /api/chat/sessions           â€” create a new session (first message)
-    GET    /api/chat/sessions           â€” list user's sessions (paginated, newest first)
-    GET    /api/chat/sessions/{id}      â€” fetch a session with all messages
-    PATCH  /api/chat/sessions/{id}      â€” append messages to an existing session
-    DELETE /api/chat/sessions/{id}      â€” delete a session
-"""
-
-
-import logging
-from datetime import datetime, timezone
-
-from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from sqlalchemy import desc, func
-
-from src.api.auth.deps import get_current_user
-from src.api.db.models import User, ChatSession
-from src.api.db.session import get_db
-
-logger = logging.getLogger(__name__)
-
-router = APIRouter(prefix="/api/chat/sessions", tags=["Chat History"])
-
-
-# â”€â”€ Pydantic schemas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-class MessageIn(BaseModel):
-    """One chat message to store."""
-    role:     str = Field(..., pattern="^(user|assistant)$")
-    content:  str = Field(..., max_length=8000)
-    sources:  list[dict] = Field(default_factory=list)
-    provider: str | None = None
-
-
-class SessionCreate(BaseModel):
-    """
-    Body for creating a new chat session.
-
-    title is the first user message (truncated to 200 chars).
-    messages is the full initial exchange (at minimum one user message).
-    """
-    title:    str            = Field(..., min_length=1, max_length=200)
-    messages: list[MessageIn] = Field(..., min_length=1)
-
-
-class SessionAppend(BaseModel):
-    """Append one or more messages to an existing session."""
-    messages: list[MessageIn] = Field(..., min_length=1)
-
-
-class SessionSummary(BaseModel):
-    """Slim session record for the list view."""
-    id:         str
-    title:      str
-    created_at: datetime
-    updated_at: datetime
-    msg_count:  int
-
-
-class SessionDetail(BaseModel):
-    """Full session including all messages."""
-    id:         str
-    title:      str
-    messages:   list[dict]
-    created_at: datetime
-    updated_at: datetime
-
-
-class SessionListResponse(BaseModel):
-    items: list[SessionSummary]
-    total: int
-    skip:  int
-    limit: int
-
-
-# â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-def _to_summary(s: ChatSession) -> SessionSummary:
-    return SessionSummary(
-        id         = s.id,
-        title      = s.title,
-        created_at = s.created_at,
-        updated_at = s.updated_at,
-        msg_count  = len(s.messages),
-    )
-
-
-# â”€â”€ POST /api/chat/sessions â€” create â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-@router.post("", response_model=SessionDetail, status_code=201)
-async def create_session(
-    body: SessionCreate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession   = Depends(get_db),
-) -> SessionDetail:
-    """
-    Create a new chat session (first exchange saved).
-
-    Called by the frontend immediately after the assistant responds for
-    the first time in a new conversation.
-
-    Returns the full session including the messages just stored.
-    """
-    session = ChatSession(
-        user_id  = current_user.id,
-        title    = body.title[:200],
-        messages = [m.model_dump() for m in body.messages],
-    )
-    db.add(session)
-    await db.commit()
-    await db.refresh(session)
-    logger.info("Created chat session %s for user %s", session.id[:8], current_user.id[:8])
-    return SessionDetail(
-        id         = session.id,
-        title      = session.title,
-        messages   = session.messages,
-        created_at = session.created_at,
-        updated_at = session.updated_at,
-    )
-
-
-# â”€â”€ GET /api/chat/sessions â€” list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-@router.get("", response_model=SessionListResponse)
-async def list_sessions(
-    skip:  int            = 0,
-    limit: int            = 20,
-    current_user: User    = Depends(get_current_user),
-    db: AsyncSession      = Depends(get_db),
-) -> SessionListResponse:
-    """
-    List the authenticated user's chat sessions, newest first.
-
-    Paginated with skip/limit.  Returns slim summaries (no messages)
-    to keep the response fast even for users with hundreds of sessions.
-    """
-    # Total count for pagination
-    count_q  = select(func.count()).select_from(ChatSession).where(ChatSession.user_id == current_user.id)
-    total    = (await db.execute(count_q)).scalar_one()
-
-    # Page of sessions
-    rows_q   = (
-        select(ChatSession)
-        .where(ChatSession.user_id == current_user.id)
-        .order_by(desc(ChatSession.updated_at))
-        .offset(skip)
-        .limit(min(limit, 50))
-    )
-    rows = (await db.execute(rows_q)).scalars().all()
-
-    return SessionListResponse(
-        items = [_to_summary(s) for s in rows],
-        total = total,
-        skip  = skip,
-        limit = limit,
-    )
-
-
-# â”€â”€ GET /api/chat/sessions/{id} â€” fetch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-@router.get("/{session_id}", response_model=SessionDetail)
-async def get_session(
-    session_id:   str,
-    current_user: User       = Depends(get_current_user),
-    db: AsyncSession         = Depends(get_db),
-) -> SessionDetail:
-    """
-    Fetch a single chat session with all messages.
-
-    403 if the session belongs to a different user (not just 404, so the
-    requester cannot enumerate other users' session IDs).
-    """
-    q   = select(ChatSession).where(ChatSession.id == session_id)
-    row = (await db.execute(q)).scalar_one_or_none()
-    if row is None:
-        raise HTTPException(status_code=404, detail="Session not found.")
-    if row.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not your session.")
-    return SessionDetail(
-        id         = row.id,
-        title      = row.title,
-        messages   = row.messages,
-        created_at = row.created_at,
-        updated_at = row.updated_at,
-    )
-
-
-# â”€â”€ PATCH /api/chat/sessions/{id} â€” append â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-@router.patch("/{session_id}", response_model=SessionDetail)
-async def append_messages(
-    session_id:   str,
-    body:         SessionAppend,
-    current_user: User       = Depends(get_current_user),
-    db: AsyncSession         = Depends(get_db),
-) -> SessionDetail:
-    """
-    Append new messages to an existing session.
-
-    Called after each assistant response in a continuing conversation.
-    Uses PostgreSQL JSONB concatenation operator (||) to extend the messages array.
-    """
-    q   = select(ChatSession).where(ChatSession.id == session_id)
-    row = (await db.execute(q)).scalar_one_or_none()
-    if row is None:
-        raise HTTPException(status_code=404, detail="Session not found.")
-    if row.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not your session.")
-
-    # Extend messages list
-    new_msgs = [m.model_dump() for m in body.messages]
-    row.messages = row.messages + new_msgs
-    row.updated_at = datetime.now(timezone.utc)
-    await db.commit()
-    await db.refresh(row)
-    return SessionDetail(
-        id         = row.id,
-        title      = row.title,
-        messages   = row.messages,
-        created_at = row.created_at,
-        updated_at = row.updated_at,
-    )
-
-
-# â”€â”€ DELETE /api/chat/sessions/{id} â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-@router.delete("/{session_id}", status_code=204, response_class=Response)
-async def delete_session(
-    session_id:   str,
-    current_user: User       = Depends(get_current_user),
-    db: AsyncSession         = Depends(get_db),
-) -> None:
-    """
-    Permanently delete a chat session.
-
-    Returns 204 No Content on success, 404 if not found, 403 if wrong user.
-    """
-    q   = select(ChatSession).where(ChatSession.id == session_id)
-    row = (await db.execute(q)).scalar_one_or_none()
-    if row is None:
-        raise HTTPException(status_code=404, detail="Session not found.")
-    if row.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not your session.")
-    await db.delete(row)
-    await db.commit()
-    logger.info("Deleted chat session %s (user=%s)", session_id[:8], current_user.id[:8])
-
+"""
+src/api/routes/chat_sessions.py
+================================
+Chat session history — save, list, retrieve, and delete AI chat conversations.
+
+WHAT: These endpoints store and retrieve AI chat histories per user.
+      Each "session" is one conversation thread: a list of messages with
+      {role, content, sources, provider}.
+
+WHY this is separate from the chat.py endpoint:
+    chat.py handles the LLM inference: question → answer.
+    chat_sessions.py handles persistence: save, list, load, delete.
+    Separation of concerns — inference and storage are independent concerns.
+
+AUTHENTICATION:
+    All routes below require a valid JWT.  Guest users can use /api/chat
+    without authentication, but chat history is a per-user feature.
+
+ENDPOINTS:
+    POST   /api/chat/sessions           — create a new session (first message)
+    GET    /api/chat/sessions           — list user's sessions (paginated, newest first)
+    GET    /api/chat/sessions/{id}      — fetch a session with all messages
+    PATCH  /api/chat/sessions/{id}      — append messages to an existing session
+    DELETE /api/chat/sessions/{id}      — delete a session
+"""
+
+
+import logging
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy import desc, func
+
+from src.api.auth.deps import get_current_user
+from src.api.db.models import User, ChatSession
+from src.api.db.session import get_db
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/chat/sessions", tags=["Chat History"])
+
+
+# ── Pydantic schemas ──────────────────────────────────────────────────────────
+
+class MessageIn(BaseModel):
+    """One chat message to store."""
+    role:     str = Field(..., pattern="^(user|assistant)$")
+    content:  str = Field(..., max_length=8000)
+    sources:  list[dict] = Field(default_factory=list)
+    provider: str | None = None
+
+
+class SessionCreate(BaseModel):
+    """
+    Body for creating a new chat session.
+
+    title is the first user message (truncated to 200 chars).
+    messages is the full initial exchange (at minimum one user message).
+    """
+    title:    str            = Field(..., min_length=1, max_length=200)
+    messages: list[MessageIn] = Field(..., min_length=1)
+
+
+class SessionAppend(BaseModel):
+    """Append one or more messages to an existing session."""
+    messages: list[MessageIn] = Field(..., min_length=1)
+
+
+class SessionSummary(BaseModel):
+    """Slim session record for the list view."""
+    id:         str
+    title:      str
+    created_at: datetime
+    updated_at: datetime
+    msg_count:  int
+
+
+class SessionDetail(BaseModel):
+    """Full session including all messages."""
+    id:         str
+    title:      str
+    messages:   list[dict]
+    created_at: datetime
+    updated_at: datetime
+
+
+class SessionListResponse(BaseModel):
+    items: list[SessionSummary]
+    total: int
+    skip:  int
+    limit: int
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+def _to_summary(s: ChatSession) -> SessionSummary:
+    return SessionSummary(
+        id         = s.id,
+        title      = s.title,
+        created_at = s.created_at,
+        updated_at = s.updated_at,
+        msg_count  = len(s.messages),
+    )
+
+
+# ── POST /api/chat/sessions — create ─────────────────────────────────────────
+
+@router.post("", response_model=SessionDetail, status_code=201)
+async def create_session(
+    body: SessionCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession   = Depends(get_db),
+) -> SessionDetail:
+    """
+    Create a new chat session (first exchange saved).
+
+    Called by the frontend immediately after the assistant responds for
+    the first time in a new conversation.
+
+    Returns the full session including the messages just stored.
+    """
+    session = ChatSession(
+        user_id  = current_user.id,
+        title    = body.title[:200],
+        messages = [m.model_dump() for m in body.messages],
+    )
+    db.add(session)
+    await db.commit()
+    await db.refresh(session)
+    logger.info("Created chat session %s for user %s", session.id[:8], current_user.id[:8])
+    return SessionDetail(
+        id         = session.id,
+        title      = session.title,
+        messages   = session.messages,
+        created_at = session.created_at,
+        updated_at = session.updated_at,
+    )
+
+
+# ── GET /api/chat/sessions — list ────────────────────────────────────────────
+
+@router.get("", response_model=SessionListResponse)
+async def list_sessions(
+    skip:  int            = 0,
+    limit: int            = 20,
+    current_user: User    = Depends(get_current_user),
+    db: AsyncSession      = Depends(get_db),
+) -> SessionListResponse:
+    """
+    List the authenticated user's chat sessions, newest first.
+
+    Paginated with skip/limit.  Returns slim summaries (no messages)
+    to keep the response fast even for users with hundreds of sessions.
+    """
+    # Total count for pagination
+    count_q  = select(func.count()).select_from(ChatSession).where(ChatSession.user_id == current_user.id)
+    total    = (await db.execute(count_q)).scalar_one()
+
+    # Page of sessions
+    rows_q   = (
+        select(ChatSession)
+        .where(ChatSession.user_id == current_user.id)
+        .order_by(desc(ChatSession.updated_at))
+        .offset(skip)
+        .limit(min(limit, 50))
+    )
+    rows = (await db.execute(rows_q)).scalars().all()
+
+    return SessionListResponse(
+        items = [_to_summary(s) for s in rows],
+        total = total,
+        skip  = skip,
+        limit = limit,
+    )
+
+
+# ── GET /api/chat/sessions/{id} — fetch ──────────────────────────────────────
+
+@router.get("/{session_id}", response_model=SessionDetail)
+async def get_session(
+    session_id:   str,
+    current_user: User       = Depends(get_current_user),
+    db: AsyncSession         = Depends(get_db),
+) -> SessionDetail:
+    """
+    Fetch a single chat session with all messages.
+
+    403 if the session belongs to a different user (not just 404, so the
+    requester cannot enumerate other users' session IDs).
+    """
+    q   = select(ChatSession).where(ChatSession.id == session_id)
+    row = (await db.execute(q)).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    if row.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your session.")
+    return SessionDetail(
+        id         = row.id,
+        title      = row.title,
+        messages   = row.messages,
+        created_at = row.created_at,
+        updated_at = row.updated_at,
+    )
+
+
+# ── PATCH /api/chat/sessions/{id} — append ───────────────────────────────────
+
+@router.patch("/{session_id}", response_model=SessionDetail)
+async def append_messages(
+    session_id:   str,
+    body:         SessionAppend,
+    current_user: User       = Depends(get_current_user),
+    db: AsyncSession         = Depends(get_db),
+) -> SessionDetail:
+    """
+    Append new messages to an existing session.
+
+    Called after each assistant response in a continuing conversation.
+    Uses PostgreSQL JSONB concatenation operator (||) to extend the messages array.
+    """
+    q   = select(ChatSession).where(ChatSession.id == session_id)
+    row = (await db.execute(q)).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    if row.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your session.")
+
+    # Extend messages list
+    new_msgs = [m.model_dump() for m in body.messages]
+    row.messages = row.messages + new_msgs
+    row.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(row)
+    return SessionDetail(
+        id         = row.id,
+        title      = row.title,
+        messages   = row.messages,
+        created_at = row.created_at,
+        updated_at = row.updated_at,
+    )
+
+
+# ── DELETE /api/chat/sessions/{id} ───────────────────────────────────────────
+
+@router.delete("/{session_id}", status_code=204, response_class=Response)
+async def delete_session(
+    session_id:   str,
+    current_user: User       = Depends(get_current_user),
+    db: AsyncSession         = Depends(get_db),
+) -> None:
+    """
+    Permanently delete a chat session.
+
+    Returns 204 No Content on success, 404 if not found, 403 if wrong user.
+    """
+    q   = select(ChatSession).where(ChatSession.id == session_id)
+    row = (await db.execute(q)).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    if row.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your session.")
+    await db.delete(row)
+    await db.commit()
+    logger.info("Deleted chat session %s (user=%s)", session_id[:8], current_user.id[:8])
+

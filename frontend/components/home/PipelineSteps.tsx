@@ -19,46 +19,48 @@
 
 import { useRef }                    from "react";
 import { motion, useInView }         from "framer-motion";
+import { useTranslations }           from "next-intl";
 import { Camera, Brain, BookOpen, FileText, ArrowRight } from "lucide-react";
-
-const STEPS = [
-  {
-    step:  "01",
-    icon:  Camera,
-    title: "Upload a photograph",
-    desc:  "Drag-and-drop any coin photo. The engine auto-crops the coin region, applies CLAHE in LAB colour space, and resizes to 299 × 299.",
-    tech:  "OpenCV · Auto-crop · CLAHE",
-    color: "#3b82f6",
-  },
-  {
-    step:  "02",
-    icon:  Brain,
-    title: "CNN Classification",
-    desc:  "EfficientNet-B3 extracts a 1,536-dim feature vector. 8-pass Test-Time Augmentation averages softmax scores for 80.03 % TTA accuracy.",
-    tech:  "EfficientNet-B3 · PyTorch · 80.03 % TTA",
-    color: "#8b5cf6",
-  },
-  {
-    step:  "03",
-    icon:  BookOpen,
-    title: "Agent-based analysis",
-    desc:  "A LangGraph state machine routes by confidence. High: Historian  (RAG + LLM). Mid: Validator (OpenCV forensics). Low: Investigator (VLM + BM25).",
-    tech:  "LangGraph · ChromaDB · Gemini",
-    color: "#d4a853",
-  },
-  {
-    step:  "04",
-    icon:  FileText,
-    title: "Professional PDF report",
-    desc:  "Synthesis agent assembles all outputs into a branded PDF — historical narrative, forensic material check, top-5 candidates, and KB attribution.",
-    tech:  "fpdf2 · FastAPI · PostgreSQL",
-    color: "#10b981",
-  },
-];
 
 export function PipelineSteps() {
   const ref     = useRef<HTMLElement>(null);
   const inView  = useInView(ref, { once: true, margin: "-80px" });
+  const t       = useTranslations("PipelineSteps");
+
+  const STEPS = [
+    {
+      step:  "01",
+      icon:  Camera,
+      title: t("s1_title"),
+      desc:  t("s1_desc"),
+      tech:  "OpenCV · Auto-crop · CLAHE",
+      color: "#3b82f6",
+    },
+    {
+      step:  "02",
+      icon:  Brain,
+      title: t("s2_title"),
+      desc:  t("s2_desc"),
+      tech:  "EfficientNet-B3 · PyTorch · 80.03 % TTA",
+      color: "#8b5cf6",
+    },
+    {
+      step:  "03",
+      icon:  BookOpen,
+      title: t("s3_title"),
+      desc:  t("s3_desc"),
+      tech:  "LangGraph · ChromaDB · Gemini",
+      color: "#d4a853",
+    },
+    {
+      step:  "04",
+      icon:  FileText,
+      title: t("s4_title"),
+      desc:  t("s4_desc"),
+      tech:  "fpdf2 · FastAPI · PostgreSQL",
+      color: "#10b981",
+    },
+  ];
 
   return (
     <section
@@ -81,14 +83,13 @@ export function PipelineSteps() {
             backgroundColor: "var(--brand-gold-10)",
           }}
         >
-          Under the hood
+          {t("under_hood")}
         </span>
         <h2 className="text-3xl sm:text-4xl font-black mb-4" style={{ color: "var(--text-primary)" }}>
-          From photograph to report in four steps
+          {t("title")}
         </h2>
         <p className="max-w-xl mx-auto text-sm" style={{ color: "var(--text-secondary)" }}>
-          Every inference runs the full production pipeline — the same code that
-          powers the live system, not a simplified demo path.
+          {t("desc")}
         </p>
       </motion.div>
 

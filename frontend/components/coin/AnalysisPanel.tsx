@@ -16,6 +16,7 @@
  *     └── PdfDownloadBar
  */
 
+import { useTranslations } from 'next-intl';
 import Link                                         from "next/link";
 import { useState, useEffect, FormEvent }            from "react";
 import { AnimatePresence, motion }                   from "framer-motion";
@@ -49,7 +50,7 @@ function DataRow({ label, value }: { label: string; value?: string | null }) {
   if (!value) return null;
   return (
     <div className="flex items-start gap-2 py-1.5 border-b border-[var(--border)] last:border-0">
-      <span className="text-xs text-[var(--text-muted)] w-32 shrink-0 pt-0.5">{label}</span>
+      <span className="text-xs text-[var(--text-muted)] shrink-0 min-w-[7rem] md:min-w-[8rem] pt-0.5">{label}</span>
       <span className="text-sm text-[var(--text-primary)] break-words flex-1">{value}</span>
     </div>
   );
@@ -88,7 +89,7 @@ function Section({
 
 // ── CNN Section ───────────────────────────────────────────────────────────────
 
-// ─── Confidence threshold displayed to end-users ─────────────────────────────
+// ─── {t('confidence')} threshold displayed to end-users ─────────────────────────────
 // WHY 0.70: below 70% the top-1 prediction flips too often to be presented as
 // a classification. We still run the KB pipeline and show it as "closest match"
 // so the user always gets maximum information — just framed honestly.
@@ -102,7 +103,7 @@ const DISPLAY_CONF_THRESHOLD = 0.70;
 // WHY 0.875 (not 0.75): 6/8 agreement is too weak a signal — two passes
 // disagreed, and the raw softmax may still be very low (<20%) meaning the
 // model genuinely found multiple plausible candidates. At 7/8+, the consensus
-// is strong enough to surface as a "Consistent Match" with a review notice.
+// is strong enough to surface as a t('consistentMatch') with a review notice.
 //
 // IMPORTANT: TTA consistency ≠ correctness. A low softmax score alongside
 // high TTA agreement means the model found a strong visual pattern, but two
@@ -111,10 +112,12 @@ const DISPLAY_CONF_THRESHOLD = 0.70;
 const TTA_VOTE_THRESHOLD = 0.875;
 
 function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
+  const t = useTranslations("AnalysisPanel");
+  const tCoin = useTranslations("Coin");
   /**
    * THREE visual modes:
    * 1. IDENTIFIED    (conf ≥ 0.70)                   → green type + CountUp %
-   * 2. TTA CONSENSUS (conf < 0.70, vote ≥ 0.875)    → teal badge + "Consistent Match" + review notice
+   * 2. TTA CONSENSUS (conf < 0.70, vote ≥ 0.875)    → teal badge + t('consistentMatch') + review notice
    * 3. LOW SIGNAL    (conf < 0.70, vote < 0.875)    → purple Deep Search pill
    *
    * State 2 means the model voted consistently across augmented views, but the
@@ -142,20 +145,20 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
   const passLabel  = agreeCount != null ? `${agreeCount}/${numPasses}` : null;
 
   return (
-    <Section icon={<Cpu size={16} />} title="CNN Classification" variant="cnn" delay={0}>
+    <Section icon={<Cpu size={16} />} title={tCoin("cnnClass")} variant="cnn" delay={0}>
       <div className="flex flex-col gap-3">
 
         {identified ? (
           /* ── STATE 1 — IDENTIFIED: conf ≥ 70% ──────────────────────────── */
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-[var(--text-muted)]">Identified Type</p>
+              <p className="text-xs text-[var(--text-muted)]">{t('identifiedType')}</p>
               <p className="text-2xl font-bold text-[var(--text-primary)] font-mono">
                 CN {cnn.label}
               </p>
             </div>
             <div className="text-right">
-              <p className="text-xs text-[var(--text-muted)] mb-1">Confidence</p>
+              <p className="text-xs text-[var(--text-muted)] mb-1">{t('confidence')}</p>
               <span className={`text-3xl font-black tabular-nums ${confidenceText(cnn.confidence)}`}>
                 <CountUp end={cnn.confidence * 100} decimals={1} suffix="%" duration={1.1} delay={0.15} />
               </span>
@@ -173,7 +176,7 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
           <>
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs text-[var(--text-muted)] mb-0.5">Consistent Match</p>
+                <p className="text-xs text-[var(--text-muted)] mb-0.5">{t('consistentMatch')}</p>
                 <p className="text-2xl font-bold text-[var(--text-primary)] font-mono">
                   CN {cnn.label}
                 </p>
@@ -196,7 +199,7 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
               className="rounded-lg px-3 py-2.5 text-xs leading-relaxed"
               style={{ background: "rgba(20,184,166,0.07)", border: "1px solid rgba(20,184,166,0.22)" }}
             >
-              <p className="font-semibold text-teal-300 mb-1">What does this mean?</p>
+              <p className="font-semibold text-teal-300 mb-1">{t('whatDoesThisMean')}</p>
               <p className="text-[var(--text-secondary)]">
                 <span className="text-teal-200 font-medium">
                   {passLabel ? `${passLabel}` : `${numPasses}/${numPasses}`} augmented views
@@ -208,7 +211,7 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
                 </span>
                 {" "}indicates this coin type shares visual features with other CN types.
                 Review the{" "}
-                <span className="text-teal-200 font-medium">Top-5 predictions</span>
+                <span className="text-teal-200 font-medium">{t('top5Predictions')}</span>
                 {" "}below before treating this as a definitive identification.
               </p>
             </div>
@@ -216,7 +219,7 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
 
         ) : (
           /* ── STATE 3 — LOW VISUAL SIGNAL ──────────────────────────────────
-           *  Low softmax + low TTA agreement. The system has dispatched the
+           *  {t("gradcamScaleLow")} softmax + low TTA agreement. The system has dispatched the
            *  Investigation Agent to run a deep cross-reference across all
            *  9,541 CN types — this is MORE analysis, not less.
            *
@@ -252,7 +255,7 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
                 The initial visual scan returned a weak match — the system automatically dispatched
                 the Investigation Agent to cross-reference all&nbsp;
                 <span className="text-purple-200 font-medium">9,541 Corpus Nummorum types</span>
-                &nbsp;and analyse the coin's visual attributes in detail.
+                &nbsp;and analyse the coin&apos;s visual attributes in detail.
                 The result below is grounded in the full scholarly knowledge base and is
                 <span className="text-purple-200 font-medium"> independent of the visual score</span>.
               </p>
@@ -288,7 +291,7 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
             className="rounded-lg px-3 py-2 text-xs"
             style={{ background: "rgba(139,92,246,0.07)", border: "1px solid rgba(139,92,246,0.22)" }}
           >
-            <span className="font-bold text-purple-300">↓ Review all 5 candidate types below</span>
+            <span className="font-bold text-purple-300">{t("top5Predictions")}</span>
             <span className="text-[var(--text-muted)]">
               {" "}— the correct coin may rank 2nd or 3rd. Each label links to the official Corpus Nummorum record.
             </span>
@@ -298,7 +301,7 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
         {/* Top-5 table */}
         <div>
           <p className="text-xs text-[var(--text-muted)] mb-2 uppercase tracking-wide">
-            Top-5 Predictions
+            {tCoin("top5")}
           </p>
           <div className="rounded-lg overflow-hidden border border-[var(--border)]">
             {cnn.top5.map((item: Top5Item, idx: number) => (
@@ -364,7 +367,7 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
             >
               <Eye size={13} className="text-indigo-400" />
               <span className="text-[11px] font-semibold tracking-wide uppercase text-indigo-300">
-                Grad-CAM — CNN Visual Explanation
+                {t("gradcamTitle")}
               </span>
             </div>
 
@@ -374,7 +377,7 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
               <div className="shrink-0 rounded-lg overflow-hidden" style={{ background: "rgba(0,0,0,0.3)" }}>
                 <img
                   src={gradcamDisplayUrl(cnn.gradcam_url)}
-                  alt="Grad-CAM activation heatmap"
+                  alt="Carte d'activation Grad-CAM"
                   width={160}
                   height={160}
                   className="block w-40 h-40 object-cover"
@@ -390,30 +393,30 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
               <div className="flex flex-col gap-2 min-w-0">
                 <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
                   Regions highlighted in{" "}
-                  <span className="font-semibold" style={{ color: "#f87171" }}>red/yellow</span>{" "}
+                  <span className="font-semibold" style={{ color: "#f87171" }}>{t("gradcamRed")}</span>{" "}
                   are the pixels the CNN weighted most when selecting{" "}
                   <span className="font-mono text-blue-300">CN {cnn.label}</span> as the top match.
                   Areas shown in{" "}
-                  <span className="font-semibold text-blue-400">dark blue</span>{" "}
-                  contributed little to the decision.
+                  <span className="font-semibold text-blue-400">{t("gradcamBlue")}</span>{" "}
+                 {t("gradcamContrib")}
                 </p>
                 {/* Colour scale bar */}
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="text-[10px] text-[var(--text-muted)]">Low</span>
+                  <span className="text-[10px] text-[var(--text-muted)]">{t("gradcamScaleLow")}</span>
                   <div
                     className="flex-1 h-2 rounded-full"
                     style={{
                       background: "linear-gradient(to right, #3b82f6, #22c55e, #eab308, #ef4444)",
                     }}
                   />
-                  <span className="text-[10px] text-[var(--text-muted)]">High</span>
+                  <span className="text-[10px] text-[var(--text-muted)]">{t("gradcamScaleHigh")}</span>
                 </div>
                 <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>
                   Generated by Grad-CAM++ on EfficientNet-B3 stage-5 (19×19 feature map, 3.6×
                   finer spatial resolution than the final layer). Overlay is computed on the
                   original (pre-TTA) image.
                 </p>
-                {/* Confidence-aware note for low-confidence predictions.
+                {/* {t('confidence')}-aware note for low-confidence predictions.
                  *  WHY this message was rewritten: diagnostic tests on actual training
                  *  images revealed that "BNF 1966.453" catalog scans (historical museum
                  *  photographs) inside the training set itself only score 15-28%, while
@@ -426,7 +429,7 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
                     className="text-[10px] mt-1 px-2 py-1 rounded"
                     style={{ background: "rgba(234,179,8,0.08)", color: "#ca8a04", border: "1px solid rgba(234,179,8,0.20)" }}
                   >
-                    ⚠️ Low confidence ({Math.round(cnn.confidence * 100)}%) — the photograph style may
+                    ⚠️ {t("gradcamScaleLow")} confidence ({Math.round(cnn.confidence * 100)}%) — the photograph style may
                     differ from the model&apos;s training data. The CNN was trained primarily on
                     standardised composite coin scans; single-face photographs, historical
                     catalog images, or non-standard lighting can reduce confidence even for
@@ -458,7 +461,7 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
         >
           <div className="min-w-0">
             <p className="text-xs font-semibold text-blue-300 group-hover:text-blue-200 transition-colors">
-              Explore the official scholarly record
+              {t("exploreRecord")}
             </p>
             <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
               corpus-nummorum.eu · CN{" "}
@@ -478,17 +481,19 @@ function CnnSection({ cnn }: { cnn: ClassifyResponse["cnn"] }) {
 // ── Historian Section ─────────────────────────────────────────────────────────
 
 function HistorianSection({ result }: { result: ClassifyResponse }) {
-  // TTA consensus counts as confident — show full "Historical Analysis" title
+  const t = useTranslations("AnalysisPanel");
+  const tCoin = useTranslations("Coin");
+  // TTA consensus counts as confident — show full tCoin("histAnal") title
   // instead of "Best Scholarly Match". Only degrade for genuine uncertainty.
   const isLowConf = result.cnn.confidence < DISPLAY_CONF_THRESHOLD
     && !(result.cnn.vote_fraction != null && result.cnn.vote_fraction >= TTA_VOTE_THRESHOLD);
-  const sectionTitle = isLowConf ? "Best Scholarly Match" : "Historical Analysis";
+  const sectionTitle = isLowConf ? "Best Scholarly Match" : tCoin("histAnal");
   return (
     <Section icon={<BookOpen size={16} />} title={sectionTitle} variant="historian" delay={0.1}>
       <div className="flex flex-col gap-1">
         {result.cnn.label && (
           <div className="flex items-start gap-2 py-1.5 border-b border-[var(--border)]">
-            <span className="text-xs text-[var(--text-muted)] w-32 shrink-0 pt-0.5">CN Type</span>
+            <span className="text-xs text-[var(--text-muted)] shrink-0 min-w-[7rem] md:min-w-[8rem] pt-0.5">{t('cnType')}</span>
             <a
               href={`https://www.corpus-nummorum.eu/types/${result.cnn.label}`}
               target="_blank"
@@ -500,15 +505,15 @@ function HistorianSection({ result }: { result: ClassifyResponse }) {
             </a>
           </div>
         )}
-        <DataRow label="Denomination" value={result.denomination} />
-        <DataRow label="Region"       value={result.region} />
-        <DataRow label="Mint"         value={result.mint} />
-        <DataRow label="Date"         value={result.date_range} />
-        <DataRow label="Material"     value={result.material} />
+        <DataRow label={tCoin("denom")}value={result.denomination} />
+        <DataRow label={tCoin("region")}value={result.region} />
+        <DataRow label={tCoin("mint")}value={result.mint} />
+        <DataRow label={tCoin("date")}value={result.date_range} />
+        <DataRow label={tCoin("material")}value={result.material} />
         {result.narrative && (
           <div className="mt-3 pt-3 border-t border-[var(--border)]">
             <p className="text-xs text-[var(--text-muted)] mb-2 uppercase tracking-wide">
-              Expert Narrative
+              {t('expertNarrative')}
             </p>
             <div className="deepcoin-prose text-sm text-[var(--text-secondary)] leading-relaxed">
               {result.narrative.split("\n\n").map((para, i) => (
@@ -525,6 +530,8 @@ function HistorianSection({ result }: { result: ClassifyResponse }) {
 // ── Validator Section ─────────────────────────────────────────────────────────
 
 function ValidatorSection({ result }: { result: ClassifyResponse }) {
+  const t = useTranslations("AnalysisPanel");
+  const tCoin = useTranslations("Coin");
   // TTA consensus counts as confident — show full "Forensic Validation" title.
   // Only degrade to "Best Match · Forensic Check" for genuinely uncertain predictions.
   const isLowConf = result.cnn.confidence < DISPLAY_CONF_THRESHOLD
@@ -541,7 +548,7 @@ function ValidatorSection({ result }: { result: ClassifyResponse }) {
       <div className="flex flex-col gap-1">
         {result.cnn.label && (
           <div className="flex items-start gap-2 py-1.5 border-b border-[var(--border)]">
-            <span className="text-xs text-[var(--text-muted)] w-32 shrink-0 pt-0.5">CN Type</span>
+            <span className="text-xs text-[var(--text-muted)] shrink-0 min-w-[7rem] md:min-w-[8rem] pt-0.5">{t('cnType')}</span>
             <a
               href={`https://www.corpus-nummorum.eu/types/${result.cnn.label}`}
               target="_blank"
@@ -553,11 +560,11 @@ function ValidatorSection({ result }: { result: ClassifyResponse }) {
             </a>
           </div>
         )}
-        <DataRow label="Denomination" value={result.denomination} />
-        <DataRow label="Region"       value={result.region} />
-        <DataRow label="Material"     value={result.material} />
+        <DataRow label={tCoin("denom")}value={result.denomination} />
+        <DataRow label={tCoin("region")}value={result.region} />
+        <DataRow label={tCoin("material")}value={result.material} />
         <div className="flex items-start gap-2 py-1.5 border-b border-[var(--border)]">
-          <span className="text-xs text-[var(--text-muted)] w-32 shrink-0 pt-0.5">Material Check</span>
+          <span className="text-xs text-[var(--text-muted)] shrink-0 min-w-[7rem] md:min-w-[8rem] pt-0.5">{t('materialCheck')}</span>
           <span className={`text-sm font-semibold capitalize ${statusColor}`}>
             {result.material_status ?? "—"}
             {result.material_confidence != null && (
@@ -587,8 +594,10 @@ function ValidatorSection({ result }: { result: ClassifyResponse }) {
 // ── Investigator Section ──────────────────────────────────────────────────────
 
 function InvestigatorSection({ result }: { result: ClassifyResponse }) {
+  const t = useTranslations("AnalysisPanel");
+  const tCoin = useTranslations("Coin");
   return (
-    <Section icon={<Search size={16} />} title="Visual Investigation" variant="investigator" delay={0.1}>
+    <Section icon={<Search size={16} />} title={t('visualInvestigation')} variant="investigator" delay={0.1}>
       <div className="flex flex-col gap-3">
         {/* Context banner — positive framing: system is doing MORE work, not less */}
         <div className="rounded-lg px-3 py-2.5 text-xs leading-relaxed"
@@ -596,7 +605,7 @@ function InvestigatorSection({ result }: { result: ClassifyResponse }) {
           <p className="font-semibold text-purple-300 mb-1">🔍 Deep Investigation Mode</p>
           <p className="text-[var(--text-secondary)]">
             The visual classifier returned a low signal, so the system activated its most powerful
-            pipeline: the Investigation Agent has analysed the coin's visual attributes and
+            pipeline: the Investigation Agent has analysed the coin&apos;s visual attributes and
             cross-referenced all{" "}
             <span className="text-purple-300 font-medium">9,541 types</span> in the
             Corpus Nummorum knowledge base. The result below comes from the full numismatic
@@ -604,10 +613,7 @@ function InvestigatorSection({ result }: { result: ClassifyResponse }) {
           </p>
           {/* Obverse tip */}
           <p className="mt-2 pt-2 border-t border-purple-700/30 text-[var(--text-muted)]">
-            💡 <span className="text-purple-300 font-medium">Tip:</span> The classification model was
-            trained on <strong className="text-purple-200">obverse views</strong> (portrait or main
-            inscription side). If you have that side of the coin, re-uploading it may significantly
-            improve the confidence score.
+            <span className="text-purple-300 font-medium">{t("tip")}</span> {t("obverseViews")}
           </p>
         </div>
         {result.visual_description && (
@@ -653,9 +659,11 @@ interface AnalysisPanelProps {
 }
 
 export function AnalysisPanel({ result, showLink = false }: AnalysisPanelProps) {
+  const t = useTranslations("AnalysisPanel");
+  const tCoin = useTranslations("Coin");
   const { label: routeLabel, color: routeColor } = routeStyle(result.route_taken);
 
-  // ── "Mark as wrong" feedback state ───────────────────────────────────────
+  // ── "{t('markAsWrong')}" feedback state ───────────────────────────────────────
   const [feedbackOpen,   setFeedbackOpen]   = useState(false);
   const [feedbackType,   setFeedbackType]   = useState("");
   const [feedbackNote,   setFeedbackNote]   = useState("");
@@ -706,7 +714,7 @@ export function AnalysisPanel({ result, showLink = false }: AnalysisPanelProps) 
           title="View this coin type on Corpus Nummorum"
         >
           {result.cnn.confidence >= DISPLAY_CONF_THRESHOLD ? (
-            /* High confidence — normal coloured badge */
+            /* {t("gradcamScaleHigh")} confidence — normal coloured badge */
             <Badge variant={confBadgeVariant(result.cnn.confidence)}>
               CN {result.cnn.label} · {formatConfidence(result.cnn.confidence)}
             </Badge>
@@ -741,7 +749,7 @@ export function AnalysisPanel({ result, showLink = false }: AnalysisPanelProps) 
       {/* ── CNN card ── */}
       <CnnSection cnn={result.cnn} />
 
-      {/* ── Low-confidence explainer ──────────────────────────────────────
+      {/* ── {t("gradcamScaleLow")}-confidence explainer ──────────────────────────────────────
        *  Only shown when isLowConf is true (confidence < 70 %, no TTA
        *  consensus).  Goal: calm the user — a low % is NOT a failure.
        *  WHAT it shows:
@@ -802,13 +810,13 @@ export function AnalysisPanel({ result, showLink = false }: AnalysisPanelProps) 
             }`}>
               {isLowConf
                 ? "🔍 Ask DeepCoin AI — explore all 5 candidates"
-                : `✨ Ask DeepCoin AI about CN ${result.cnn.label}`
+                : `✨ {t("askAi")}${result.cnn.label}`
               }
             </p>
             <p className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
               {isLowConf
                 ? `All ${result.cnn.top5.length} candidate types loaded as context — ask to compare them`
-                : "Deep-dive into history, iconography & numismatic significance"
+                : t("deepDive")
               }
             </p>
           </div>
@@ -832,14 +840,14 @@ export function AnalysisPanel({ result, showLink = false }: AnalysisPanelProps) 
                  rel="noreferrer" kept to suppress referrer header for the file URL. */}
             <a href={pdfDownloadUrl(result.pdf_url)} download rel="noreferrer">
               <Download size={15} />
-              Download PDF Report
+              {t("downloadPdf")}
             </a>
           </Button>
         )}
         {showLink && (
           <Link href={`/history/${result.id}`}>
             <Button variant="secondary" size="md">
-              View Full Record
+              {tCoin("viewFull")}
             </Button>
           </Link>
         )}
@@ -857,7 +865,7 @@ export function AnalysisPanel({ result, showLink = false }: AnalysisPanelProps) 
             title="Report a misclassification — help improve the model"
           >
             <ThumbsDown size={12} />
-            Mark as wrong
+            {t('markAsWrong')}
           </button>
         )}
       </div>
@@ -968,3 +976,4 @@ export function AnalysisPanel({ result, showLink = false }: AnalysisPanelProps) 
     </div>
   );
 }
+

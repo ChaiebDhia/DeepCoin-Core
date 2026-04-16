@@ -15,7 +15,7 @@
  *       "We'll reach out to <email> when we launch"
  *
  *   • email_sent=false (dev / no SMTP — current PFE environment):
- *       "We saved <email>. You'll be the first to know when we launch."
+ *       "{t("we_saved")} <email>. You'll be the first to know when we launch."
  *
  * WHY no confirm link:
  *   The previous design showed a "Confirm subscription →" link pointing to
@@ -36,6 +36,7 @@ import { useState }              from "react";
 import { useSession }            from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mail, CheckCircle, Loader2, ArrowRight } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 type State = "idle" | "loading" | "done";
 
@@ -46,6 +47,7 @@ interface SubscribeResponse {
 }
 
 export function EmailCapture() {
+  const t = useTranslations("EmailCapture");
   const { data: session } = useSession();
   const [email,     setEmail]     = useState("");
   const [state,     setState]     = useState<State>("idle");
@@ -58,7 +60,7 @@ export function EmailCapture() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!submitEmail || !submitEmail.includes("@")) {
-      setError("Please enter a valid email address.");
+      setError(t("err_invalid"));
       return;
     }
     setError("");
@@ -73,7 +75,7 @@ export function EmailCapture() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({})) as { detail?: string };
-        setError(data.detail ?? "Something went wrong. Please try again.");
+        setError(data.detail ?? t("err_submit"));
         setState("idle");
         return;
       }
@@ -81,7 +83,7 @@ export function EmailCapture() {
       const data: SubscribeResponse = await res.json();
       setEmailSent(data.email_sent ?? false);
     } catch {
-      setError("Could not reach the server. Please try again.");
+      setError(t("err_server"));
       setState("idle");
       return;
     }
@@ -127,7 +129,7 @@ export function EmailCapture() {
             className="relative z-10 text-3xl sm:text-4xl font-black mb-3"
             style={{ color: "var(--text-primary)" }}
           >
-            Stay in the loop
+            {t("hero_title")}
           </h2>
           <p
             className="relative z-10 max-w-md mx-auto text-sm mb-10"
@@ -152,7 +154,7 @@ export function EmailCapture() {
                 <div className="flex flex-col items-center w-full max-w-sm mb-4">
                   {isAuthed && (
                     <p className="text-sm mb-3" style={{ color: "var(--text-secondary)" }}>
-                      Subscribe as <strong>{session.user.email}</strong>
+                      {t("subscribe_as")} <strong>{session.user.email}</strong>
                     </p>
                   )}
                   {error && (
@@ -162,7 +164,7 @@ export function EmailCapture() {
                 {!isAuthed && (
                   <input
                     type="email"
-                    placeholder="your@email.com"
+                    placeholder={t("placeholder")}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     disabled={state === "loading"}
@@ -184,7 +186,7 @@ export function EmailCapture() {
                     <Loader2 size={16} className="animate-spin" />
                   ) : (
                     <>
-                      Notify me
+                      {t("btn_notify")}
                       <ArrowRight size={14} />
                     </>
                   )}
@@ -202,15 +204,15 @@ export function EmailCapture() {
                 <>
                   <CheckCircle size={40} style={{ color: "#10b981" }} />
                   <p className="font-bold text-base" style={{ color: "var(--text-primary)" }}>
-                    You&rsquo;re on the list!
+                    {t("success_title")}
                   </p>
                   <p className="text-sm max-w-xs" style={{ color: "var(--text-secondary)" }}>
                     {emailSent
-                      ? <>We&rsquo;ll reach out to <strong>{submitEmail}</strong> when the public API launches or a new model version is released.</>
-                      : <>We saved <strong>{submitEmail}</strong>. You&rsquo;ll be the first to know when we launch.</>}
+                      ? <>{t("reach_out")} <strong>{submitEmail}</strong> {t("reach_out_end")}</>
+                      : <>{t("we_saved")} <strong>{submitEmail}</strong>{t("we_saved_end")}</>}
                   </p>
                   <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                    No spam. One email per major release. Unsubscribe any time.
+                    {t("privacy")}
                   </p>
                 </>
               </motion.div>
@@ -227,7 +229,7 @@ export function EmailCapture() {
           {/* Privacy note */}
           {state !== "done" && (
             <p className="relative z-10 mt-4 text-xs" style={{ color: "var(--text-muted)" }}>
-              No spam. One email per major release. Unsubscribe any time.
+              {t("privacy")}
             </p>
           )}
         </div>
@@ -235,3 +237,5 @@ export function EmailCapture() {
     </section>
   );
 }
+
+

@@ -136,6 +136,7 @@ async def classify(
     request:  Request,
     file:     UploadFile = File(..., description="Coin photograph (JPEG or PNG, max 10 MB)"),
     tta:      bool       = Query(True,  description="Test-Time Augmentation (default on): +~1% accuracy, ~5× slower CNN pass"),
+    language: str        = Query("en",  description="Language for the PDF report (en or fr)"),
     current_user: User | None = Depends(optional_user_dep),
     db:       AsyncSession    = Depends(get_db),
 ) -> ClassifyResponse:
@@ -193,7 +194,7 @@ async def classify(
     gk = request.app.state.gk
     try:
         async with _classify_sem:
-            result = await asyncio.to_thread(gk.analyze, str(save_path), tta)
+            result = await asyncio.to_thread(gk.analyze, str(save_path), tta, language)
     except Exception as exc:
         logger.error("Gatekeeper pipeline error: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Pipeline error: {exc}")

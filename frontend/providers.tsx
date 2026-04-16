@@ -24,6 +24,7 @@ import { Toaster }                          from "react-hot-toast";
 import { SessionProvider }                  from "next-auth/react";
 import { SessionSync }                      from "@/components/auth/SessionSync";
 import { ThemeProvider }                    from "next-themes";
+import { NextIntlClientProvider }           from "next-intl";
 
 /**
  * WHY SessionProvider here:
@@ -36,9 +37,11 @@ import { ThemeProvider }                    from "next-themes";
 
 interface ProvidersProps {
   children: ReactNode;
+  locale?: string;
+  messages?: Record<string, unknown>;
 }
 
-export default function Providers({ children }: ProvidersProps) {
+export default function Providers({ children, locale = "en", messages = {} }: ProvidersProps) {
   /**
    * WHY useState to create QueryClient instead of module-level:
    *   Each Next.js request must get its own QueryClient to avoid sharing
@@ -58,35 +61,38 @@ export default function Providers({ children }: ProvidersProps) {
   );
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-      <SessionProvider>
-        {/* Keeps the module-level auth token cache in lib/api.ts in sync.
-            This eliminates Console ClientFetchError: getSession() was called
-            in every Axios interceptor; now the token is read synchronously
-            from a cache that SessionSync updates when the session changes. */}
-        <SessionSync />
-        <QueryClientProvider client={queryClient}>
-          {children}
+    <NextIntlClientProvider locale={locale} messages={messages}>
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+        <SessionProvider>
+          {/* Keeps the module-level auth token cache in lib/api.ts in sync.
+              This eliminates Console ClientFetchError: getSession() was called
+              in every Axios interceptor; now the token is read synchronously
+              from a cache that SessionSync updates when the session changes. */}
+          <SessionSync />
+          <QueryClientProvider client={queryClient}>
+            {children}
 
-          {/* Toast notifications (errors, PDF ready, etc.) */}
-          <Toaster
-            position="top-right"
-            toastOptions={{
-              duration: 4000,
-              style: {
-                background: "var(--surface-1)",
-                color:      "var(--text-primary)",
-                border:     "1px solid var(--border)",
-                fontFamily: "var(--font-geist-sans)",
-                fontSize:   "14px",
-              },
-              success: { iconTheme: { primary: "#22c55e", secondary: "var(--surface-1)" } },
-              error:   { iconTheme: { primary: "#ef4444", secondary: "var(--surface-1)" } },
-            }}
-          />
+            {/* Toast notifications (errors, PDF ready, etc.) */}
+            <Toaster
+              position="top-right"
+              toastOptions={{
+                duration: 4000,
+                style: {
+                  background: "var(--surface-1)",
+                  color:      "var(--text-primary)",
+                  border:     "1px solid var(--border)",
+                  fontFamily: "var(--font-geist-sans)",
+                  fontSize:   "14px",
+                },
+                success: { iconTheme: { primary: "#22c55e", secondary: "var(--surface-1)" } },
+                error:   { iconTheme: { primary: "#ef4444", secondary: "var(--surface-1)" } },
+              }}
+            />
 
-        </QueryClientProvider>
-      </SessionProvider>
-    </ThemeProvider>
+          </QueryClientProvider>
+        </SessionProvider>
+      </ThemeProvider>
+    </NextIntlClientProvider>
   );
 }
+

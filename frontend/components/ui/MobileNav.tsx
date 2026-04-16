@@ -27,8 +27,12 @@ import { useState, useEffect, useRef } from "react";
 import Link                             from "next/link";
 import { usePathname }                  from "next/navigation";
 import { Menu, X, Cpu, BookOpen, MessageSquare, FlaskConical, Globe, FileText, Mail, Home } from "lucide-react";
-import { useSession }                   from "next-auth/react";
+import { useSession } from "next-auth/react";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { LanguageToggle } from "@/components/ui/LanguageToggle";
+
 import { NAV_LINKS }                    from "@/components/ui/NavLinks";
+import { useTranslations }                from "next-intl";
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   "/":          <Home size={14} />,
@@ -38,6 +42,8 @@ const ICON_MAP: Record<string, React.ReactNode> = {
 };
 
 export function MobileNav() {
+  const t = useTranslations("AuthMenu");
+  const tNav = useTranslations("Navbar");
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const { data: session } = useSession();
@@ -65,7 +71,7 @@ export function MobileNav() {
   }, [open]);
 
   return (
-    <div className="md:hidden relative" ref={menuRef}>
+    <div className="lg:hidden relative" ref={menuRef}>
       {/* Hamburger trigger */}
       <button
         onClick={() => setOpen(v => !v)}
@@ -98,7 +104,7 @@ export function MobileNav() {
               className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-widest"
               style={{ color: "var(--text-muted)" }}
             >
-              Navigation
+              {tNav("navigation")}
             </p>
             {NAV_LINKS.map(l => {
               const active = !l.href.startsWith("/#") && (
@@ -119,7 +125,7 @@ export function MobileNav() {
                   <span style={{ color: active ? "var(--brand-gold, #d4a853)" : "var(--text-muted)" }}>
                     {ICON_MAP[l.href]}
                   </span>
-                  {l.label}
+                  {tNav(l.labelKey)}
                   {active && (
                     <span
                       className="ml-auto w-1.5 h-1.5 rounded-full"
@@ -138,7 +144,7 @@ export function MobileNav() {
                 className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-widest"
                 style={{ color: "var(--text-muted)" }}
               >
-                {session ? "My Account" : "Get Started"}
+                {session ? t("my_account") : t("get_started")}
               </p>
               {session ? (
                 <>
@@ -150,7 +156,7 @@ export function MobileNav() {
                     style={{ color: "var(--brand-gold)" }}
                   >
                     <Cpu size={14} />
-                    Analyse a Coin
+                    {t("analyse_coin")}
                   </Link>
                   <Link
                     href="/history"
@@ -160,7 +166,7 @@ export function MobileNav() {
                     style={{ color: "var(--text-secondary)" }}
                   >
                     <BookOpen size={14} />
-                    My History
+                    {t("my_history")}
                   </Link>
                 </>
               ) : (
@@ -172,7 +178,7 @@ export function MobileNav() {
                     className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-[var(--surface-2)]"
                     style={{ color: "var(--text-secondary)" }}
                   >
-                    Sign In
+                    {t("sign_in")}
                   </Link>
                   <Link
                     href="/register"
@@ -181,10 +187,14 @@ export function MobileNav() {
                     className="flex items-center gap-3 px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-[var(--surface-2)]"
                     style={{ color: "var(--brand-gold)" }}
                   >
-                    Create Account
+                    {t("create_account")}
                   </Link>
                 </>
               )}
+            </div>
+            <div className="py-2 border-t flex justify-center gap-6" style={{ borderColor: 'var(--border)' }}>
+              <LanguageToggle />
+              <ThemeToggle />
             </div>
           </div>
         </div>

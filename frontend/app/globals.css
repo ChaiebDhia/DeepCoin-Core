@@ -23,7 +23,7 @@
   --bg-gradient: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%);
   
   --surface-0: #f1f5f9; /* Main background layer */
-  --surface-1: #ffffff; /* Card/Elevated surface */
+  --surface-1: #e8e8e8d8; /* Card/Elevated surface */
   --surface-2: #f1f5f9; /* Subtle secondary sections */
   --surface-3: #e2e8f0; /* Deepest layer/Dividers */
 
@@ -118,6 +118,7 @@ body {
   font-family:      var(--font-geist-sans, system-ui, sans-serif);
   -webkit-font-smoothing:  antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
 }
 
 /* ── Scrollbar styling ───────────────────────────────────────────────────── */

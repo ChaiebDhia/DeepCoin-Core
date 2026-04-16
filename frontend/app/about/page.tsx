@@ -16,6 +16,8 @@
  *   boosting SEO with zero JavaScript cost.
  */
 
+import { getTranslations } from "next-intl/server";
+import { useTranslations } from "next-intl";
 import Link      from "next/link";
 import { Github, BookOpen, Cpu, Database, Layers, ShieldCheck,
          ExternalLink, GraduationCap, Building2, FlaskConical, Award } from "lucide-react";
@@ -96,6 +98,7 @@ const TEAM = [
 /* ── component ────────────────────────────────────────────────────────────── */
 
 export default function AboutPage() {
+  const t = useTranslations("About");
   return (
     <div className="py-12 max-w-4xl space-y-20">
 

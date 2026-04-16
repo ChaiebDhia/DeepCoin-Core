@@ -373,14 +373,14 @@ class CoinInference:
         if not path.exists():
             raise FileNotFoundError(f"Image not found: {path}")
 
-        # WHY open(rb) + np.frombuffer + imdecode instead of cv2.imread / np.fromfile:
+        # WHY open(rb, "r", encoding="utf-8") + np.frombuffer + imdecode instead of cv2.imread / np.fromfile:
         # cv2.imread() and np.fromfile() both use C-runtime fopen() on Windows,
         # which only accepts ANSI paths.  Any non-ASCII character (accented
         # letters, CJK, etc.) causes a silent None return.
         # Common real-world case: French/Windows screenshots saved as
         # "Capture_d_écran_2026-03-01.png".
         # Python's built-in open() in binary mode uses the Windows Unicode API
-        # (CreateFileW) — it handles every valid Unicode path.
+        # (CreateFileW, "r", encoding="utf-8") — it handles every valid Unicode path.
         # np.frombuffer() wraps the in-memory bytes with zero copies;
         # cv2.imdecode() decodes from memory → no file path reaches the C runtime.
         with open(str(path), "rb") as _fh:
