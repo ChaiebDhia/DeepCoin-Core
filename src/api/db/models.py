@@ -133,6 +133,7 @@ class User(Base):
     email_verifications: Mapped[list["EmailVerification"]] = relationship(back_populates="user", lazy="select", cascade="all, delete-orphan")
     refresh_tokens:    Mapped[list["RefreshToken"]]      = relationship(back_populates="user", lazy="select", cascade="all, delete-orphan")
     chat_sessions:     Mapped[list["ChatSession"]]       = relationship(back_populates="user", lazy="select", cascade="all, delete-orphan")
+    coins:             Mapped[list["Coin"]]              = relationship(back_populates="user", lazy="select")
 
     def __repr__(self) -> str:
         return f"<User id={self.id[:8]} email={self.email} role={self.role.value}>"
@@ -450,5 +451,54 @@ class EmailLog(Base):
     def __repr__(self) -> str:
         return f"<EmailLog {self.to_email} subject={self.subject[:20]}>"
 
+
+# ── Coin ──────────────────────────────────────────────────────────────────────
+
+class Coin(Base):
+    """
+    Physical coin inventory and dataset tracking.
+    
+    Tracks whether a coin is part of the CNN training set or was uploaded
+    by an admin manually. The AI helps pre-fill the metadata (duplicate detection,
+    nonsense rejection) before insertion.
+    """
+    __tablename__ = "coins"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True,
+        server_default=func.gen_random_uuid(),
+    )
+    cn_type_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    image_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    
+    # Metadata fields pre-filled by AI
+    material: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    weight: Mapped[float | None] = mapped_column(Float, nullable=True)
+    diameter: Mapped[float | None] = mapped_column(Float, nullable=True)
+    
+    # Training & Audit states
+    in_training_set: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    added_by_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    ai_validated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    
+    # Who added it
+    user_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False,
+        server_default=func.now(), onupdate=func.now()
+    )
+
+    # ── Relationships ──
+    user: Mapped["User | None"] = relationship(back_populates="coins")
+    
     def __repr__(self) -> str:
-        return f"<EmailLog {self.to_email} subject={self.subject[:20]}>"
+        return f"<Coin id={self.id[:8]} type={self.cn_type_id} training={self.in_training_set}>"
+

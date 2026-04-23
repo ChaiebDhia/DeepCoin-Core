@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 /**
  * app/admin/page.tsx  Enterprise Admin Dashboard v2
@@ -43,7 +43,7 @@ import {
 } from "lucide-react";
 
 import {
-  getHealth, getHistory, getAdminFeedback, getAdminAnalyses, pdfDownloadUrl,
+  getHealth, getHistory, getAdminFeedback, getAdminAnalyses, pdfDownloadUrl, getAdminCoins, analyzePrefillAdminCoin, createAdminCoin, deleteAdminCoin, AdminCoin,
   getAdminUsers, updateUserRole, updateUserStatus, deleteAdminUser,
   getAdminStats, getAdminContacts, markContactRead, deleteContactMessage,
   deleteCorrection, deleteSubscriber,
@@ -64,7 +64,7 @@ type Subscriber = {
   status?:       string;
 };
 
-type TabId = "overview" | "analyses" | "corrections" | "subscribers" | "users" | "contacts";
+type TabId = "overview" | "analyses" | "corrections" | "inventory" | "subscribers" | "users" | "contacts";
 
 // -- Constants ---------------------------------------------------------------
 
@@ -134,7 +134,7 @@ function Pagination({
 }: {
   page: number; pages: number; onChange: (p: number) => void;
 }) {
-  // Always render the pagination bar � even on a single page.
+  // Always render the pagination bar ï¿½ even on a single page.
   // Hidden would leave users confused about whether data is loading or truly empty.
   const total = Math.max(1, pages);
   return (
@@ -201,7 +201,7 @@ function OverviewTab({
     queryKey:        ["health"],
     queryFn:         getHealth,
     refetchInterval: 30_000,
-    // health endpoint is public � no auth needed; always enabled
+    // health endpoint is public ï¿½ no auth needed; always enabled
   });
 
   const { data: historyData } = useQuery({
@@ -225,28 +225,28 @@ function OverviewTab({
 
   return (
     <div className="space-y-6">
-      {/* KPI row � live user + activity counters, polls every 30�s */}
+      {/* KPI row ï¿½ live user + activity counters, polls every 30ï¿½s */}
       {isPrivileged && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[
             {
               icon: Users,
               label: "Total Users",
-              value: stats?.users_total?.toLocaleString() ?? "�",
+              value: stats?.users_total?.toLocaleString() ?? "ï¿½",
               sub:   "registered accounts",
               color: "#8b5cf6",
             },
             {
               icon: Calendar,
               label: "New Today",
-              value: stats?.users_today?.toLocaleString() ?? "�",
+              value: stats?.users_today?.toLocaleString() ?? "ï¿½",
               sub:   "registered today (UTC)",
               color: "#10b981",
             },
             {
               icon: TrendingUp,
               label: "Analyses Today",
-              value: stats?.analyses_today?.toLocaleString() ?? "�",
+              value: stats?.analyses_today?.toLocaleString() ?? "ï¿½",
               sub:   "coins analysed today (UTC)",
               color: "#3b82f6",
             },
@@ -329,7 +329,7 @@ function OverviewTab({
           </div>
         </div>
 
-        {/* Route Distribution � live data from GET /api/admin/stats */}
+        {/* Route Distribution ï¿½ live data from GET /api/admin/stats */}
         {isPrivileged && (
           <div
             className="rounded-xl border p-5"
@@ -394,7 +394,7 @@ function OverviewTab({
                         {stats.top_labels[0].label}
                       </p>
                       <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>
-                        top coin ({stats.top_labels[0].count}�)
+                        top coin ({stats.top_labels[0].count}ï¿½)
                       </p>
                     </div>
                   )}
@@ -412,7 +412,7 @@ function OverviewTab({
                 </button>
               </div>
             ) : (
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>Loading stats�</p>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>Loading statsï¿½</p>
             )}
           </div>
         )}
@@ -472,7 +472,7 @@ function OverviewTab({
         )}
       </div>
 
-      {/* Live Activity Feed � last 5 analyses across all users, polls every 30 s */}
+      {/* Live Activity Feed ï¿½ last 5 analyses across all users, polls every 30 s */}
       {isPrivileged && (
         <div
           className="rounded-xl border"
@@ -493,7 +493,7 @@ function OverviewTab({
               LIVE
             </span>
             <span className="ml-auto text-[10px]" style={{ color: "var(--text-muted)" }}>
-              refreshes every 30�s
+              refreshes every 30ï¿½s
             </span>
           </div>
           {stats?.recent_activity?.length ? (
@@ -521,7 +521,7 @@ function OverviewTab({
                       <span className="tabular-nums" style={{ color: "var(--text-muted)" }}>
                         {item.confidence !== null
                           ? `${Math.round(item.confidence * 100)}%`
-                          : "�"}
+                          : "ï¿½"}
                       </span>
                       <span style={{ color: "var(--text-muted)" }}>{item.user_email}</span>
                       <span style={{ color: "var(--text-muted)" }}>
@@ -537,7 +537,7 @@ function OverviewTab({
             </div>
           ) : (
             <p className="px-5 py-8 text-xs text-center" style={{ color: "var(--text-muted)" }}>
-              {stats ? "No analyses yet." : "Loading�"}
+              {stats ? "No analyses yet." : "Loadingï¿½"}
             </p>
           )}
         </div>
@@ -1172,7 +1172,7 @@ function UsersTab({ sessionStatus }: { sessionStatus: string }) {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search by email�"
+            placeholder="Search by emailï¿½"
             className="bg-transparent text-xs outline-none w-full"
             style={{ color: "var(--text-primary)" }}
           />
@@ -1212,7 +1212,7 @@ function UsersTab({ sessionStatus }: { sessionStatus: string }) {
 
                   {/* Display name */}
                   <td className="px-4 py-3" style={{ color: "var(--text-muted)" }}>
-                    {u.display_name ?? "�"}
+                    {u.display_name ?? "ï¿½"}
                   </td>
 
                   {/* Role badge + change select */}
@@ -1251,7 +1251,7 @@ function UsersTab({ sessionStatus }: { sessionStatus: string }) {
                   <td className="px-4 py-3 whitespace-nowrap tabular-nums" style={{ color: "var(--text-muted)" }}>
                     {u.created_at
                       ? new Date(u.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
-                      : "�"}
+                      : "ï¿½"}
                   </td>
 
                   {/* Analyses count */}
@@ -1452,6 +1452,7 @@ const TABS: {
 }[] = [
   { id: "overview",    label: "Overview",    icon: LayoutDashboard,      privileged: false },
   { id: "analyses",    label: "Analyses",    icon: FileBarChart2,        privileged: true  },
+  { id: "inventory",   label: "Inventory",   icon: Database,             privileged: true  },
   { id: "corrections", label: "Corrections", icon: MessageSquareWarning, privileged: true  },
   { id: "subscribers", label: "Subscribers", icon: Mail,                 privileged: true  },
   { id: "users",       label: "Users",       icon: UserCog,              privileged: true  },
@@ -1624,6 +1625,7 @@ export default function AdminPage() {
         >
           {activeTab === "overview"    && <OverviewTab isPrivileged={isPrivileged} sessionStatus={sessionStatus} />}
           {activeTab === "analyses"    && <AnalysesTab    sessionStatus={sessionStatus} />}
+          {activeTab === "inventory"   && <InventoryTab   sessionStatus={sessionStatus} />}
           {activeTab === "corrections" && <CorrectionsTab sessionStatus={sessionStatus} />}
           {activeTab === "subscribers" && <SubscribersTab sessionStatus={sessionStatus} />}
           {activeTab === "users"       && <UsersTab       sessionStatus={sessionStatus} />}
@@ -1634,3 +1636,179 @@ export default function AdminPage() {
     </div>
   );
 }
+
+
+
+// -- Tab: Inventory -----------------------------------------------------------
+
+function InventoryTab({ sessionStatus }: { sessionStatus: string }) {
+  const authed = sessionStatus === "authenticated";
+  const qc = useQueryClient();
+  const [modalOpen, setModalOpen] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [prefillData, setPrefillData] = useState<any>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+
+  const [formState, setFormState] = useState({
+    cn_type_id: "",
+    material: "",
+    weight: "",
+    diameter: "",
+  });
+
+  const { data: coins, isLoading } = useQuery({
+    queryKey: ["admin", "coins"],
+    queryFn: () => getAdminCoins(),
+    enabled: authed,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: Partial<AdminCoin>) => createAdminCoin(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "coins"] });
+      setModalOpen(false);
+      setFile(null);
+      setPrefillData(null);
+      setFormState({ cn_type_id: "", material: "", weight: "", diameter: "" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteAdminCoin(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "coins"] }),
+  });
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.length) return;
+    const selected = e.target.files[0];
+    setFile(selected);
+    setAnalyzing(true);
+    setPrefillData(null);
+
+    try {
+      const data = await analyzePrefillAdminCoin(selected);
+      setPrefillData(data);
+      setFormState(prev => ({ ...prev, cn_type_id: data.suggested_cn_type_id || "" }));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!prefillData || !formState.cn_type_id) return;
+    createMutation.mutate({
+      cn_type_id: formState.cn_type_id,
+      image_path: prefillData.param,
+      material: formState.material || undefined,
+      weight: formState.weight ? parseFloat(formState.weight) : undefined,
+      diameter: formState.diameter ? parseFloat(formState.diameter) : undefined,
+    });
+  };
+
+  return (
+    <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--surface-1)' }}>
+      <div className="flex flex-wrap items-center justify-between px-5 py-3.5 border-b" style={{ borderColor: 'var(--border)' }}>
+        <div className="flex items-center gap-3">
+          <Database size={14} style={{ color: '#22c55e' }} />
+          <span className="font-bold text-sm" style={{ color: 'var(--text-primary)' }}>Coin Inventory</span>
+          {coins && (
+            <span className="text-[10px] font-black px-2 py-0.5 rounded-full tabular-nums" style={{ backgroundColor: '#22c55e20', color: '#22c55e' }}>
+              {coins.length}
+            </span>
+          )}
+        </div>
+        <button onClick={() => setModalOpen(true)} className="px-3 py-1.5 text-xs font-bold rounded-lg text-white" style={{ background: 'var(--brand-gold)' }}>
+          + Add Coin
+        </button>
+      </div>
+
+      <div className="w-full overflow-x-auto">
+        <table className="w-full text-left text-xs whitespace-nowrap">
+          <thead style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-muted)' }} className="border-b">
+            <tr>
+              <th className="px-4 py-2.5 font-bold uppercase tracking-wider">CN Type</th>
+              <th className="px-4 py-2.5 font-bold uppercase tracking-wider">Material</th>
+              <th className="px-4 py-2.5 font-bold uppercase tracking-wider">Added By</th>
+              <th className="px-4 py-2.5 font-bold uppercase tracking-wider text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y" style={{ borderColor: 'var(--border)' }}>
+            {isLoading ? (
+              <tr><td colSpan={4} className="p-8 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Loading inventory...</td></tr>
+            ) : (!coins || coins.length === 0) ? (
+              <tr><td colSpan={4} className="p-8 text-center text-sm" style={{ color: 'var(--text-muted)' }}>No coins in inventory</td></tr>
+            ) : (
+              coins.map(coin => (
+                <tr key={coin.id} style={{ color: 'var(--text-secondary)' }} className="hover:bg-black/5 transition-colors">
+                  <td className="px-4 py-3 font-mono font-bold" style={{ color: 'var(--text-primary)' }}>{coin.cn_type_id}</td>
+                  <td className="px-4 py-3">{coin.material || '-'}</td>
+                  <td className="px-4 py-3">{coin.user_id ? 'Admin' : 'System'}</td>
+                  <td className="px-4 py-3 text-right">
+                    <button onClick={() => { if (window.confirm('Delete coin?')) deleteMutation.mutate(coin.id!) }} className="p-1 rounded-md opacity-70 hover:opacity-100 hover:bg-black/10 transition-colors" style={{ color: '#ef4444' }}>
+                      <Trash2 size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {modalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl p-6 relative" style={{ backgroundColor: 'var(--surface-1)', border: '1px solid var(--border)', boxShadow: '0 20px 40px rgba(0,0,0,0.4)' }}>
+            <button onClick={() => setModalOpen(false)} className="absolute top-4 right-4 opacity-50 hover:opacity-100"><XCircle size={18} /></button>
+            <h2 className="text-xl font-bold mb-4" style={{ color: 'var(--brand-gold)' }}>Add Master Coin</h2>
+            
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              <div>
+                <label className="block text-xs font-bold mb-1" style={{ color: 'var(--text-muted)' }}>Upload Coin Image</label>
+                <input type="file" accept="image/*" onChange={handleFileChange} className="w-full text-xs" />
+              </div>
+
+              {analyzing && <p className="text-xs text-blue-400 animate-pulse">Running AI Gatekeeper preview Analysis...</p>}
+              
+              {prefillData && prefillData.duplicate_warning && (
+                <p className="text-xs text-red-500 font-bold bg-red-900/20 p-2 rounded">{prefillData.duplicate_warning}</p>
+              )}
+
+              {prefillData && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold mb-1" style={{ color: 'var(--text-muted)' }}>CN Type ID (Suggested)</label>
+                      <input required value={formState.cn_type_id} onChange={e => setFormState(s => ({...s, cn_type_id: e.target.value}))} className="w-full bg-black/20 border border-gray-700 rounded px-3 py-1.5 text-sm outline-none text-white" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold mb-1" style={{ color: 'var(--text-muted)' }}>Material (Optional)</label>
+                      <input value={formState.material} onChange={e => setFormState(s => ({...s, material: e.target.value}))} className="w-full bg-black/20 border border-gray-700 rounded px-3 py-1.5 text-sm outline-none text-white" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold mb-1" style={{ color: 'var(--text-muted)' }}>Weight (g)</label>
+                      <input type="number" step="0.01" value={formState.weight} onChange={e => setFormState(s => ({...s, weight: e.target.value}))} className="w-full bg-black/20 border border-gray-700 rounded px-3 py-1.5 text-sm outline-none text-white" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold mb-1" style={{ color: 'var(--text-muted)' }}>Diameter (mm)</label>
+                      <input type="number" step="0.01" value={formState.diameter} onChange={e => setFormState(s => ({...s, diameter: e.target.value}))} className="w-full bg-black/20 border border-gray-700 rounded px-3 py-1.5 text-sm outline-none text-white" />
+                    </div>
+                  </div>
+                  
+                  <button type="submit" disabled={createMutation.isPending} className="mt-2 w-full py-2.5 rounded-lg text-sm font-bold text-black" style={{ background: 'var(--brand-gold)' }}>
+                    {createMutation.isPending ? "Adding..." : "Confirm & Add"}
+                  </button>
+                </>
+              )}
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+

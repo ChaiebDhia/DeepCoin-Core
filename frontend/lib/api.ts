@@ -1082,3 +1082,36 @@ export async function verifyEmail(token: string): Promise<{ message: string }> {
   );
   return data;
 }
+export interface AdminCoin {
+  id: string;
+  cn_type_id: string;
+  image_path: string;
+  material?: string;
+  weight?: number;
+  diameter?: number;
+  in_training_set: boolean;
+  added_by_admin: boolean;
+  ai_validated: boolean;
+  user_id?: string;
+}
+
+export const getAdminCoins = async (): Promise<AdminCoin[]> => {
+  const resp = await apiClient.get<AdminCoin[]>("/admin/coins");
+  return resp.data;
+};
+
+export const analyzePrefillAdminCoin = async (file: File): Promise<{ suggested_cn_type_id: string; duplicate_warning: string | null; param: string }> => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const resp = await apiClient.post("/admin/coins/analyze-prefill", formData);
+  return resp.data;
+};
+
+export const createAdminCoin = async (data: Partial<AdminCoin>): Promise<AdminCoin> => {
+  const resp = await apiClient.post<AdminCoin>("/admin/coins", data);
+  return resp.data;
+};
+
+export const deleteAdminCoin = async (id: string): Promise<void> => {
+  await apiClient.delete('/admin/coins/' + id);
+};

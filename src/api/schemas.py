@@ -145,3 +145,32 @@ class HistoryListResponse(BaseModel):
     total: int  = Field(..., description="Total records (before pagination)")
     skip:  int  = Field(..., description="Offset applied")
     limit: int  = Field(..., description="Page size applied")
+
+# -- Admin Coins --
+class CoinBase(BaseModel):
+    cn_type_id: str
+    image_path: str
+    material: Optional[str] = None
+    weight: Optional[float] = None
+    diameter: Optional[float] = None
+    in_training_set: bool = False
+    added_by_admin: bool = True
+    ai_validated: bool = False
+
+class CoinCreate(CoinBase):
+    pass
+
+class CoinUpdate(BaseModel):
+    cn_type_id: Optional[str] = None
+    image_path: Optional[str] = None
+    material: Optional[str] = None
+    weight: Optional[float] = None
+    diameter: Optional[float] = None
+    in_training_set: Optional[bool] = None
+    added_by_admin: Optional[bool] = None
+    ai_validated: Optional[bool] = None
+
+class CoinResponse(CoinBase):
+    id: str
+    user_id: Optional[str] = None
+    model_config = {'from_attributes': True}

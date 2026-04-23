@@ -48,6 +48,9 @@
 33. [Layer 5 v2  Animated Mission Control & UX Overhaul (March 2026)](#33-layer-5-v2-animated-mission-control-ux-overhaul-march-2026)
 34. [Layer 5 Security Audit  HTTP Headers, AbortController, Blob Cleanup (March 2026)](#34-layer-5-security-audit-http-headers-abortcontroller-blob-cleanup-march-2026)
 35. [Layer 5 Runtime Proxy Fixes  IPv6 + Turbopack Timeout (March 2026)](#35-layer-5-runtime-proxy-fixes-ipv6-turbopack-timeout-march-2026)
+36. [The 0 to Hero Engineering Journal Master Blueprint](#the-0-to-hero-engineering-journal-master-blueprint)
+37. [Phase 2 Kickoff (Admin Cartography & Coin Injector)](#section-232-phase-2-kickoff-admin-cartography--coin-injector)
+36. [The "0 to Hero" Engineering Journal Master Blueprint](#-the-0-to-hero-engineering-journal-master-blueprint)
 36. [Layer 5 Live Testing UX Fixes  Health Dot, Modal, Synthesis Cycling (March 2026)](#36-layer-5-live-testing-ux-fixes-health-dot-modal-synthesis-cycling-march-2026)
 37. [CLAHE Train/Inference Mismatch + Investigator UX (March 2026)](#37-clahe-traininference-mismatch-investigator-ux-march-2026)
 38. [Cancel Button & Abort Architecture (March 2026)](#38-cancel-button-abort-architecture-march-2026)
@@ -44401,3 +44404,42 @@ If you are managing this cluster, these are your daily weapons:
 2. **DON'T Bake Secrets into Images:** Never use `COPY .env .env` in a Dockerfile that will be pushed to a registry. Your API keys will be permanently embedded in the image history. Use Docker Compose `env_file` to inject them at runtime.
 3. **DON'T Pull GPU Wheels in CPU Clusters:** If you aren't passing the NVIDIA GPU to the container via `deploy: resources: reservations: devices`, explicitly force PyTorch to pull CPU wheels. You will save 400 seconds on build times and 4GB of RAM.
 4. **DON'T Ignore Health Checks:** A container can be "Running", but completely dead (e.g., deadlocked in a `while True` loop or frozen by a crashed Uvicorn worker). Always implement `HEALTHCHECK` hitting a `/health` REST endpoint to ensure true liveness.
+
+ 
+ # # #   S e c t i o n   2 3 1 :   F i n a l   U I   P o l i s h   &   Z e r o - B u d g e t   R e s i l i e n c y   ( A p r i l   2 0 2 6 ) 
+ * * W h a t   w a s   d e l i v e r e d : * * 
+ -   F i x e d   m a j o r   p a d d i n g / l a y o u t   o v e r l a p   i s s u e s   c a u s e d   b y   F r e n c h   t r a n s l a t i o n s   ( N a v L i n k s . t s x ,   L a n g u a g e T o g g l e . t s x ) . 
+ -   S i m p l i f i c a t i o n   o f   t e l e m e t r y   a n d   f r o n t e n d   A P I   v 0 . 4 . 0   s t a t u s   i n t o   a   c l e a n    l l   s y s t e m s   o k   b a d g e . 
+ -   R e m o v a l   o f   u n u s e d   p y t h o n   l o g g i n g   a n d   t e s t   s c r i p t s   v i a   t a r g e t e d   R e m o v e - I t e m   a u t o m a t i o n . 
+ -   C o m p l e t e   c o m p l e t i o n   o f   P r i o r i t y   1   ( i 1 8 n ,   U s e r   C o n f i g   R e s i l i e n c e ) ,   c l o s i n g   o u t   t h e   i n i t i a l   c o n s t r a i n t   p h a s e   a n d   o p e n i n g   t h e   p a t h w a y   f o r   P r i o r i t y   2 :   A d m i n   T e l e m e t r y . 
+ 
+ # # #   S e c t i o n   2 3 2 :   P h a s e   2   K i c k o f f   ( A d m i n   C a r t o g r a p h y   &   C o i n   I n j e c t o r ) 
+ * * W h a t   i s   p l a n n e d : * * 
+ -   * * C a r t o g r a p h y   a n d   S o u r c e   A n a l y t i c s : * *   P r o v i d e   t h e   P r o f e s s o r   w i t h   a   r e a l - t i m e   m a p / g e o g r a p h y   v i e w   o f   w h e r e   t h e   a n c i e n t   c o i n s   o r i g i n a t e   f r o m . 
+ -   * * C a t e g o r i z a t i o n   M e t r i c s : * *   D i f f e r e n t i a t e   v i s u a l l y   a n d   s t r u c t u r a l l y   b e t w e e n   ' M o d e l   T r a i n e d   C o i n s '   a n d   ' N e w   A d m i n - I n j e c t e d   C o i n s ' . 
+ -   * * A I - G u a r d e d   C M S   E n g i n e : * *   A n   A d m i n - o n l y   d a s h b o a r d   f o r m   w h e r e   a   u p l o a d e d   c o i n   r u n s   t h r o u g h   t h e   C N N / V i s i o n   s y s t e m ,   a u t o - p o p u l a t e s   f a c t u a l   d a t a ,   a n d   t h e   A d m i n   c a n   e i t h e r   e d i t   o r   a p p e n d .   T h e   A I   a c t s   a s   a   s e n t r y   b l o c k i n g   d u p l i c a t e   c o i n s ,   h a l l u c i n a t e d   d a t a ,   o r   n o n s e n s i c a l   e n t r i e s . 
+ -   * * F u l l   C R U D   T a b l e : * *   A   r e a l - t i m e   d a t a   t a b l e   s h o w i n g   t h e   e n t i r e   c o r p u s   ( i m a g e s   i n c l u d e d ) . 
+ 
+ 
+ 
+
+---
+
+### Section 250 — DeepCoin Asset Expansion & Admin Hub Prefill Integrations
+
+**Date:** April 23, 2026
+**Lead Engineer:** AI System
+
+**What was built:**
+- A fully encapsulated Next.js administrative client integration mapping to the new dmin_coins.py FastAPI endpoint.
+- We configured the new InventoryTab functionally isolated by the existing Tab UI component orchestrator (rontend/app/admin/page.tsx).
+- Connected Tanstack useQuery mapped directly to piClient.get('/admin/coins') rendering a highly interactive database tabular view. 
+
+**Why it matters:**
+- **Encapsulation:** The Next.js 16.2 Turbopack compiler mandates separation of Client side browser state tracking logic. All state management functions cleanly inside the functional node space using isolated custom Axios mappings inside lib/api.ts.
+- **System Stability:** AI analysis is costly in CUDA execution terms. By validating duplicates sequentially inside FastAPI using shutil upload wrappers inside /analyze-prefill via Gatekeeper instantiation, we completely bypass invalid db constraints from poisoning main analysis cycles.
+
+**Decisions:**
+- nalyzePrefillAdminCoin(file: File) uses native FormData POST payloads via unified piClient.
+- Implemented optimistic deletions and re-rendering via invalidating the TanStack cache node internally.
+

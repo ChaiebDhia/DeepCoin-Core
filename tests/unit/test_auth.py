@@ -49,53 +49,53 @@ class TestRequireApiKey:
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("DEEPCOIN_API_KEY", None)   # ensure not set
             # re-import to pick up env state
-            from src.api.auth import require_api_key
+            from src.api.auth.api_key import require_api_key
             # No header provided — dev mode allows it
-            _run(require_api_key(None))    # must not raise
+            from unittest.mock import MagicMock; _run(require_api_key(MagicMock(headers={}), None))    # must not raise
 
     def test_dev_mode_any_key_header_passes(self):
         """Even with a random header value, dev mode must not reject."""
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("DEEPCOIN_API_KEY", None)
-            from src.api.auth import require_api_key
-            _run(require_api_key("totally-random-value"))   # must not raise
+            from src.api.auth.api_key import require_api_key
+            from unittest.mock import MagicMock; _run(require_api_key(MagicMock(headers={}), "totally-random-value"))   # must not raise
 
     def test_correct_key_passes(self):
         """A request with the correct API key must be accepted."""
         with patch.dict(os.environ, {"DEEPCOIN_API_KEY": "super-secret-key-123"}):
-            from src.api.auth import require_api_key
-            _run(require_api_key("super-secret-key-123"))   # must not raise
+            from src.api.auth.api_key import require_api_key
+            from unittest.mock import MagicMock; _run(require_api_key(MagicMock(headers={}), "super-secret-key-123"))   # must not raise
 
     def test_wrong_key_raises_401(self):
         """A request with the wrong API key must raise HTTP 401 Unauthorized."""
         with patch.dict(os.environ, {"DEEPCOIN_API_KEY": "correct-secret"}):
-            from src.api.auth import require_api_key
+            from src.api.auth.api_key import require_api_key
             with pytest.raises(HTTPException) as exc_info:
-                _run(require_api_key("wrong-key"))
+                from unittest.mock import MagicMock; _run(require_api_key(MagicMock(headers={}), "wrong-key"))
             assert exc_info.value.status_code == 401
 
     def test_missing_key_header_raises_401(self):
         """A request with no X-API-Key header (None) must raise HTTP 401 when key is configured."""
         with patch.dict(os.environ, {"DEEPCOIN_API_KEY": "my-key"}):
-            from src.api.auth import require_api_key
+            from src.api.auth.api_key import require_api_key
             with pytest.raises(HTTPException) as exc_info:
-                _run(require_api_key(None))
+                from unittest.mock import MagicMock; _run(require_api_key(MagicMock(headers={}), None))
             assert exc_info.value.status_code == 401
 
     def test_empty_string_key_raises_401(self):
         """An empty string key must be rejected, not treated as 'no key'."""
         with patch.dict(os.environ, {"DEEPCOIN_API_KEY": "my-key"}):
-            from src.api.auth import require_api_key
+            from src.api.auth.api_key import require_api_key
             with pytest.raises(HTTPException) as exc_info:
-                _run(require_api_key(""))
+                from unittest.mock import MagicMock; _run(require_api_key(MagicMock(headers={}), ""))
             assert exc_info.value.status_code == 401
 
     def test_401_response_has_www_authenticate_header(self):
         """RFC 7235 requires WWW-Authenticate in 401 responses."""
         with patch.dict(os.environ, {"DEEPCOIN_API_KEY": "correct"}):
-            from src.api.auth import require_api_key
+            from src.api.auth.api_key import require_api_key
             with pytest.raises(HTTPException) as exc_info:
-                _run(require_api_key("wrong"))
+                from unittest.mock import MagicMock; _run(require_api_key(MagicMock(headers={}), "wrong"))
             headers = exc_info.value.headers or {}
             assert "WWW-Authenticate" in headers, "401 must include WWW-Authenticate header"
 
