@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
 
 /**
  * globals.css — DeepCoin brand design system
@@ -12,32 +13,31 @@
   /* --- 1. Refined Brand Palette (Enterprise Scale) --- */
   --brand-navy:      #020617; /* Deeper, richer navy */
   --brand-dark:      #0f172a; /* Slate 900 */
-  --brand-mid:       #3b82f6; /* Blue 500 - Matches scrollbar/accents */
-  --brand-light:     #60a5fa; /* Blue 400 */
-  --brand-primary:   #2563eb; /* Vibrant but professional blue */
+  --brand-mid:       #166534; /* Dark green accent */
+  --brand-light:     #22c55e; /* Green 500 */
+  --brand-primary:   #14532d; /* Deep green primary */
   --brand-gold:      #a37e2c; /* Muted antique gold (better for text contrast) */
   --brand-gold-soft: #fefce8; /* For subtle highlights/badges */
 
-  /* --- 2. Surface & Background (The "Depth" Layers) --- */
-  /* Using a subtle top-to-bottom wash for the main background */
-  --bg-gradient: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%);
-  
-  --surface-0: #f1f5f9; /* Main background layer */
-  --surface-1: #e8e8e8d8; /* Card/Elevated surface */
-  --surface-2: #f1f5f9; /* Subtle secondary sections */
-  --surface-3: #e2e8f0; /* Deepest layer/Dividers */
+  /* --- 2. Surface & Background (The "Depth" Layers - LIGHT MODE) --- */
+  /* Darker light-mode palette to reduce glare and keep contrast strong. */
+  --surface-0: #dce5de; /* page background - muted green-gray */
+  --surface-1: #c8d4cb; /* cards */
+  --surface-2: #b7c6bc; /* nested containers */
+  --surface-3: #8ea193; /* strongest layer */
 
   /* --- 3. Typography (High Readability) --- */
   /* Using Slate tones prevents the "harsh" look of pure black */
-  --text-primary:   #0f172a; /* Main headings - high contrast */
-  --text-secondary: #334155; /* Body text */
-  --text-muted:     #64748b; /* Captions and labels */
+  --text-primary:   #08111f; /* Main headings - high contrast */
+  --text-secondary: #243244; /* Body text */
+  --text-muted:     #53657d; /* Captions and labels */
   --text-on-navy:   #f8fafc;
 
   /* --- 4. Interactive & Borders --- */
-  --border-subtle:  #e2e8f0;
-  --border-strong:  #cbd5e1;
-  --ring-focus:     rgba(37, 99, 235, 0.2); /* Soft blue glow for focus states */
+  --border-subtle:  #98ab9d;
+  --border-strong:  #6f8676;
+  --border:         #6f8676; /* darker border in light mode */
+  --ring-focus:     rgba(22, 101, 52, 0.28); /* dark-green focus ring */
 
   /* --- 5. Anchor Surfaces (Navbar & Footer) --- */
   /* Option A: The "Classy Navy" (Keeps brand identity strong) */
@@ -45,12 +45,6 @@
   --nav-text:       #f8fafc;
   --footer-bg:      #020617;
   --footer-text:    #f8fafc;
-  
-  /* Option B: The "Clean White" (Uncomment if you want a pure light look) */
-  /* --nav-bg:      #ffffff; */
-  /* --nav-text:    #0f172a; */
-  /* --footer-bg:   #ffffff; */
-  /* --footer-text: #0f172a; */
 }
 .dark {
   /* DeepCoin brand palette */
@@ -81,23 +75,8 @@
   --text-muted:     #64748b;
 }
 
-@theme inline {
-  --color-brand-navy:  var(--brand-navy);
-  --color-brand-dark:  var(--brand-dark);
-  --color-brand-mid:   var(--brand-mid);
-  --color-brand-light: var(--brand-light);
-  --color-brand-gold:  var(--brand-gold);
-
-  --color-surface-0:   var(--surface-0);
-  --color-surface-1:   var(--surface-1);
-  --color-surface-2:   var(--surface-2);
-  --color-surface-3:   var(--surface-3);
-
-  --color-border:      var(--border);
-
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* Theme mapping block removed: custom properties already defined above.
+   The @theme at-rule is non-standard and caused lint warnings. */
 
 /* ── Base HTML overrides ──────────────────────────────────────────────────── */
 
@@ -256,6 +235,18 @@ body {
 
 .animate-scan-beam {
   animation: scan-beam 3.2s ease-in-out infinite;
+}
+
+/* Keep Leaflet internals below sticky header/user menu in admin pages. */
+.coin-layer-map .leaflet-container {
+  z-index: 0 !important;
+}
+
+.coin-layer-map .leaflet-pane,
+.coin-layer-map .leaflet-top,
+.coin-layer-map .leaflet-bottom,
+.coin-layer-map .leaflet-control {
+  z-index: 5 !important;
 }
 
 .animate-orbit {

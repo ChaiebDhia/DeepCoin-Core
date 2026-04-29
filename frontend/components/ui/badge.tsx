@@ -12,14 +12,15 @@ import { cn } from "@/lib/utils";
 const badgeVariants = cva(
   "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors whitespace-nowrap",
   {
-    variants: {
+      variants: {
       variant: {
-        historian:    "bg-green-700/80  text-green-100",
-        validator:    "bg-amber-600/80  text-amber-100",
-        investigator: "bg-purple-700/80 text-purple-100",
-        high:         "bg-green-600     text-white",
-        medium:       "bg-amber-500     text-white",
-        low:          "bg-red-500       text-white",
+        // Darker, higher-contrast badge colors for light mode (improves readability)
+        historian:    "bg-green-800 text-white",
+        validator:    "bg-amber-700 text-white",
+        investigator: "bg-purple-800 text-white",
+        high:         "bg-green-800 text-white",
+        medium:       "bg-amber-700 text-white",
+        low:          "bg-red-600 text-white",
         outline:      "border border-[var(--border)] text-[var(--text-secondary)]",
         muted:        "bg-[var(--surface-3)] text-[var(--text-muted)]",
         gold:         "bg-[var(--brand-gold)] text-[var(--brand-navy)]",

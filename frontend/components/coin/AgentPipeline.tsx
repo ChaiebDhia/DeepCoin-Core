@@ -449,7 +449,7 @@ export function AgentPipeline({ onCancel }: AgentPipelineProps) {
 
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
 
-      style={{ backdropFilter: "blur(8px)", background: "rgba(4,10,20,0.75)" }}
+      style={{ backdropFilter: "blur(8px)", background: "rgba(8,18,12,0.78)" }}
 
     >
 
@@ -467,9 +467,9 @@ export function AgentPipeline({ onCancel }: AgentPipelineProps) {
 
       style={{
 
-        border:     "1px solid rgba(255,255,255,0.07)",
+        border:     "1px solid var(--border)",
 
-        background: "linear-gradient(145deg, var(--surface-1) 0%, var(--surface-0) 100%)",
+        background: "linear-gradient(145deg, var(--surface-2) 0%, var(--surface-0) 100%)",
 
         overflow:   "hidden",
 
@@ -483,7 +483,7 @@ export function AgentPipeline({ onCancel }: AgentPipelineProps) {
 
         className="flex items-center justify-between px-5 py-3 border-b"
 
-        style={{ borderColor: "rgba(255,255,255,0.07)" }}
+        style={{ borderColor: "var(--border)" }}
 
       >
 
@@ -553,9 +553,9 @@ export function AgentPipeline({ onCancel }: AgentPipelineProps) {
 
                 color:       xHovered ? "#f87171" : "var(--text-muted)",
 
-                background:  xHovered ? "rgba(239,68,68,0.15)" : "rgba(255,255,255,0.05)",
+                background:  xHovered ? "rgba(239,68,68,0.15)" : "rgba(8,18,12,0.12)",
 
-                border:      `1px solid ${xHovered ? "rgba(239,68,68,0.35)" : "rgba(255,255,255,0.08)"}`,
+                border:      `1px solid ${xHovered ? "rgba(239,68,68,0.35)" : "var(--border)"}`,
 
                 transition:  "color 0.15s, background 0.15s, border-color 0.15s",
 
@@ -605,9 +605,9 @@ export function AgentPipeline({ onCancel }: AgentPipelineProps) {
 
             style={{
 
-              borderBottom: "1px solid rgba(255,255,255,0.05)",
+              borderBottom: "1px solid var(--border)",
 
-              background:   "rgba(255,255,255,0.015)",
+              background:   "rgba(10,24,14,0.08)",
 
             }}
 
@@ -761,11 +761,11 @@ className="flex flex-col items-center text-center gap-1 sm:gap-2 rounded-xl px-1
 
                   background:  isActive ? agent.bgActive
 
-                             : isDone   ? "rgba(255,255,255,0.03)"
+                             : isDone   ? "rgba(10,24,14,0.10)"
 
                              :            "transparent",
 
-                  border:      `1px solid ${isActive ? agent.border : isDone ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.03)"}`,
+                  border:      `1px solid ${isActive ? agent.border : isDone ? "var(--border)" : "rgba(10,24,14,0.16)"}`,
 
                   boxShadow:   isActive ? `0 0 22px 3px ${agent.color}26` : "none",
 
@@ -783,9 +783,9 @@ className="flex flex-col items-center text-center gap-1 sm:gap-2 rounded-xl px-1
 
                   style={{
 
-                    background:  isActive ? agent.bgActive : "rgba(255,255,255,0.04)",
+                    background:  isActive ? agent.bgActive : "rgba(10,24,14,0.12)",
 
-                    border:      `1.5px solid ${isActive ? agent.border : "rgba(255,255,255,0.06)"}`,
+                    border:      `1.5px solid ${isActive ? agent.border : "var(--border)"}`,
 
                     filter:      isWaiting ? "grayscale(0.7) opacity(0.45)" : "none",
 
@@ -853,7 +853,7 @@ className="flex flex-col items-center text-center gap-1 sm:gap-2 rounded-xl px-1
 
                                    : isActive  ? agent.color
 
-                                   :             "rgba(255,255,255,0.12)",
+                                   :             "rgba(10,24,14,0.30)",
 
                     transition: "background-color 0.4s ease",
 
@@ -873,7 +873,7 @@ className="flex flex-col items-center text-center gap-1 sm:gap-2 rounded-xl px-1
 
                   className="relative mx-0.5 sm:mx-1 h-0.5 w-3 sm:w-8 rounded-full overflow-hidden shrink-0"
 
-                  style={{ backgroundColor: "rgba(255,255,255,0.06)" }}
+                  style={{ backgroundColor: "rgba(10,24,14,0.22)" }}
 
                 >
 
@@ -929,7 +929,7 @@ className="flex flex-col items-center text-center gap-1 sm:gap-2 rounded-xl px-1
 
         className="border-t px-5 py-4"
 
-        style={{ borderColor: "rgba(255,255,255,0.06)" }}
+        style={{ borderColor: "var(--border)" }}
 
       >
 
