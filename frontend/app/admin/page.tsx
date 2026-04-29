@@ -122,10 +122,12 @@ import {
   Search, ChevronLeft, ChevronRight, LayoutDashboard, Users, Trash2,
 
 
-  FileBarChart2, ThumbsDown, UserCog, TrendingUp, Calendar, Wifi, Inbox,
+  FileBarChart2, ThumbsDown, UserCog, TrendingUp, Calendar, Wifi, Inbox, Coins,
 
 
 } from "lucide-react";
+
+import { CoinInventoryTab } from "@/components/admin/CoinInventoryTab";
 
 
 
@@ -197,7 +199,7 @@ type Subscriber = {
 
 
 
-type TabId = "overview" | "analyses" | "corrections" | "subscribers" | "users" | "contacts";
+type TabId = "overview" | "coins" | "analyses" | "corrections" | "subscribers" | "users" | "contacts";
 
 
 
@@ -413,6 +415,7 @@ function Pagination({
   // Hidden would leave users confused about whether data is loading or truly empty.
 
 
+  const t = useTranslations("AdminDashboard");
   const total = Math.max(1, pages);
 
 
@@ -593,6 +596,7 @@ function OverviewTab(
 
 
   
+  const t = useTranslations("AdminDashboard");
   const authed = sessionStatus === "authenticated";
 
 
@@ -701,13 +705,13 @@ function OverviewTab(
               icon: Users,
 
 
-              label: "Total Users",
+              label: t("total_users"),
 
 
               value: stats?.users_total?.toLocaleString() ?? "",
 
 
-              sub:   "registered accounts",
+              sub:   t("registered_accounts"),
 
 
               color: "#8b5cf6",
@@ -722,13 +726,13 @@ function OverviewTab(
               icon: Calendar,
 
 
-              label: "New Today",
+              label: t("new_today"),
 
 
               value: stats?.users_today?.toLocaleString() ?? "",
 
 
-              sub:   "registered today (UTC)",
+              sub:   t("registered_today"),
 
 
               color: "#10b981",
@@ -743,13 +747,13 @@ function OverviewTab(
               icon: TrendingUp,
 
 
-              label: "Analyses Today",
+              label: t("analyses_today"),
 
 
               value: stats?.analyses_today?.toLocaleString() ?? "",
 
 
-              sub:   "coins analysed today (UTC)",
+              sub:   t("coins_analysed"),
 
 
               color: "#3b82f6",
@@ -872,7 +876,7 @@ function OverviewTab(
               <span className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>
 
 
-                System Health
+                {t("system_health")}
 
 
               </span>
@@ -884,7 +888,7 @@ function OverviewTab(
             {health        && <StatusDot status={health.status} />}
 
 
-            {healthLoading && <span className="text-xs" style={{ color: "var(--text-muted)" }}>Checking</span>}
+            {healthLoading && <span className="text-xs" style={{ color: "var(--text-muted)" }}>{t("checking")}</span>}
 
 
           </div>
@@ -902,7 +906,7 @@ function OverviewTab(
               ))
 
 
-            : <p className="text-xs" style={{ color: "var(--text-muted)" }}>Loading components</p>}
+            : <p className="text-xs" style={{ color: "var(--text-muted)" }}>{t("loading_components")}</p>}
 
 
         </div>
@@ -935,7 +939,7 @@ function OverviewTab(
             <span className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>
 
 
-              Pipeline Statistics
+              {t("pipeline_statistics")}
 
 
             </span>
@@ -950,16 +954,16 @@ function OverviewTab(
             {[
 
 
-              { icon: FileText,  label: "Total analyses",  value: historyData?.total?.toLocaleString() ?? "", sub: "all time",          color: "#3b82f6" },
+              { icon: FileText,  label: t("total_analyses_all"),  value: historyData?.total?.toLocaleString() ?? "", sub: t("all_time"),          color: "#3b82f6" },
 
 
-              { icon: Cpu,       label: "CNN accuracy",    value: "80.03%",  sub: "TTA 8",                                               color: "#8b5cf6" },
+              { icon: Cpu,       label: t("cnn_accuracy"),    value: "80.03%",  sub: t("tta_8"),                                               color: "#8b5cf6" },
 
 
-              { icon: Database,  label: "RAG chunks",      value: "47,705",  sub: "9,541 CN types",                                       color: "#d4a853" },
+              { icon: Database,  label: t("rag_chunks"),      value: "47,705",  sub: "9,541 CN types",                                       color: "#d4a853" },
 
 
-              { icon: Activity,  label: "Max latency",     value: "< 20 s",  sub: "Ollama LLM path",                                      color: "#10b981" },
+              { icon: Activity,  label: t("max_latency"),     value: "< 20 s",  sub: t("ollama_path"),                                      color: "#10b981" },
 
 
             ].map(({ icon: Icon, label, value, sub, color }) => (
@@ -1782,7 +1786,7 @@ function OverviewTab(
 
 
 function AnalysesTab({ sessionStatus }: { sessionStatus: string }) {
-  const t = useTranslations("Admin");
+  const t = useTranslations("AdminDashboard");
 
   const authed = sessionStatus === "authenticated";
 
@@ -2337,7 +2341,7 @@ function AnalysesTab({ sessionStatus }: { sessionStatus: string }) {
 
 
 function CorrectionsTab({ sessionStatus }: { sessionStatus: string }) {
-  const t = useTranslations("Admin");
+  const t = useTranslations("AdminDashboard");
 
   const authed      = sessionStatus === "authenticated";
 
@@ -2835,7 +2839,7 @@ function CorrectionsTab({ sessionStatus }: { sessionStatus: string }) {
 
 
 function SubscribersTab({ sessionStatus }: { sessionStatus: string }) {
-  const t = useTranslations("Admin");
+  const t = useTranslations("AdminDashboard");
 
   const authed      = sessionStatus === "authenticated";
 
@@ -3270,7 +3274,7 @@ const USER_STATUS_COLORS: Record<string, string> = {
 
 
 function UsersTab({ sessionStatus }: { sessionStatus: string }) {
-  const t = useTranslations("Admin");
+  const t = useTranslations("AdminDashboard");
 
   const authed      = sessionStatus === "authenticated";
 
@@ -3879,7 +3883,7 @@ function UsersTab({ sessionStatus }: { sessionStatus: string }) {
 
 
 function ContactsTab({ sessionStatus }: { sessionStatus: string }) {
-  const t = useTranslations("Admin");
+  const t = useTranslations("AdminDashboard");
 
   const { data, isLoading, refetch } = useQuery<AdminContactsResponse>({
 
@@ -4346,7 +4350,7 @@ const TABS: {
   id:         TabId;
 
 
-  label:      string;
+  labelKey:   string;
 
 
   icon:       React.ElementType;
@@ -4358,22 +4362,25 @@ const TABS: {
 }[] = [
 
 
-  { id: "overview",    label: "Overview",    icon: LayoutDashboard,      privileged: false },
+  { id: "overview",    labelKey: "overview",    icon: LayoutDashboard,      privileged: false },
 
 
-  { id: "analyses",    label: "Analyses",    icon: FileBarChart2,        privileged: true  },
+  { id: "coins",       labelKey: "coins",       icon: Coins,                privileged: true  },
 
 
-  { id: "corrections", label: "Corrections", icon: MessageSquareWarning, privileged: true  },
+  { id: "analyses",    labelKey: "analyses",    icon: FileBarChart2,        privileged: true  },
 
 
-  { id: "subscribers", label: "Subscribers", icon: Mail,                 privileged: true  },
+  { id: "corrections", labelKey: "corrections", icon: MessageSquareWarning, privileged: true  },
 
 
-  { id: "users",       label: "Users",       icon: UserCog,              privileged: true  },
+  { id: "subscribers", labelKey: "subscribers", icon: Mail,                 privileged: true  },
 
 
-  { id: "contacts",    label: "Contacts",    icon: Inbox,                privileged: true  },
+  { id: "users",       labelKey: "users",       icon: UserCog,              privileged: true  },
+
+
+  { id: "contacts",    labelKey: "contacts",    icon: Inbox,                privileged: true  },
 
 
 ];
@@ -4383,7 +4390,7 @@ const TABS: {
 
 
 export default function AdminPage() {
-  const t = useTranslations("Admin");
+  const tAdmin = useTranslations("AdminDashboard");
 
   const { data: session, status: sessionStatus } = useSession();
 
@@ -4670,7 +4677,7 @@ export default function AdminPage() {
           <h1 className="text-2xl font-black" style={{ color: "var(--text-primary)" }}>
 
 
-            Admin Dashboard
+            {tAdmin("adminDashboard")}
 
 
           </h1>
@@ -4679,7 +4686,7 @@ export default function AdminPage() {
           <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
 
 
-            System health  analyses  corrections  subscribers
+            {tAdmin("system_health")} · {tAdmin("coins")} · {tAdmin("analyses")} · {tAdmin("corrections")} · {tAdmin("subscribers")}
 
 
           </p>
@@ -4829,7 +4836,7 @@ export default function AdminPage() {
               <Icon size={13} />
 
 
-              {tab.label}
+              {tAdmin(tab.labelKey)}
 
 
             </button>
@@ -4875,6 +4882,9 @@ export default function AdminPage() {
 
 
           {activeTab === "overview"    && <OverviewTab isPrivileged={isPrivileged} sessionStatus={sessionStatus} />}
+
+
+          {activeTab === "coins"       && <CoinInventoryTab sessionStatus={sessionStatus} />}
 
 
           {activeTab === "analyses"    && <AnalysesTab    sessionStatus={sessionStatus} />}
