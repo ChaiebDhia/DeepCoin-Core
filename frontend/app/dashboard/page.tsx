@@ -47,9 +47,9 @@ const ROUTE_COLORS: Record<string, { bg: string; text: string; border: string }>
 };
 
 const ROLE_META: Record<string, { label: string; color: string; icon: typeof User }> = {
-  admin:   { label: "Admin",    color: "#fca5a5",          icon: ShieldCheck },
-  curator: { label: "Curator",  color: "var(--brand-gold)", icon: ShieldCheck },
-  analyst: { label: "Analyst",  color: "var(--text-muted)", icon: User        },
+  admin:   { label: "admin",    color: "#fca5a5",          icon: ShieldCheck },
+  curator: { label: "curator",  color: "var(--brand-gold)", icon: ShieldCheck },
+  analyst: { label: "analyst",  color: "var(--text-muted)", icon: User        },
 };
 
 function formatDate(iso: string | null | undefined): string {
@@ -124,7 +124,7 @@ function StatCard({
 // ── Page component ────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const t = useTranslations("Dashboard");
+  const t = useTranslations("DashboardPage");
   const { data: session, status } = useSession();
   const router = useRouter();
 
@@ -179,10 +179,10 @@ export default function DashboardPage() {
         >
           <div>
             <h1 className="text-2xl font-black" style={{ color: "var(--text-primary)" }}>
-              Welcome back, {displayName.split(" ")[0]}
+              {t("welcome_back")}, {displayName.split(" ")[0]}
             </h1>
             <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-              Here&rsquo;s your personal numismatic analytics dashboard
+              {t("personal_analytics")}
             </p>
           </div>
           {/* Role badge */}
@@ -199,31 +199,31 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             icon={FileText}
-            label="Total Analyses"
+            label={t("total_analyses")}
             value={statsLoading ? "—" : totalAnalyses.toLocaleString()}
-            sub="all time"
+            sub={t("all_time")}
             color="#3b82f6"
             delay={0}
           />
           <StatCard
             icon={TrendingUp}
-            label="Avg Confidence"
+            label={t("avg_confidence")}
             value={statsLoading || avgConf === null ? "—" : `${avgConf}%`}
-            sub="across all submissions"
+            sub={t("across_submissions")}
             color="#10b981"
             delay={0.05}
           />
           <StatCard
             icon={Compass}
-            label="Top Coin"
+            label={t("top_coin")}
             value={statsLoading ? "—" : topLabel ? topLabel.label : "—"}
-            sub={topLabel ? `${topLabel.count}× classified` : "no data yet"}
+            sub={topLabel ? `${topLabel.count}${t("classified")}` : t("no_data")}
             color="#d4a853"
             delay={0.1}
           />
           <StatCard
             icon={Clock}
-            label="Member Since"
+            label={t("member_since")}
             value={formatDate((user as { created_at?: string }).created_at)}
             sub={`${user.email}`}
             color="#8b5cf6"
@@ -245,7 +245,7 @@ export default function DashboardPage() {
             <div className="flex items-center gap-2 mb-5">
               <BarChart3 size={15} style={{ color: "var(--brand-gold)" }} />
               <span className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>
-                Route Breakdown
+                {t("route_breakdown")}
               </span>
               <span
                 className="ml-auto text-xs tabular-nums"
@@ -314,14 +314,14 @@ export default function DashboardPage() {
             >
               <History size={14} style={{ color: "var(--brand-gold)" }} />
               <span className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>
-                Recent Analyses
+                {t("recent_analyses")}
               </span>
               <Link
                 href="/history"
                 className="ml-auto text-xs hover:underline flex items-center gap-1"
                 style={{ color: "var(--text-muted)" }}
               >
-                All history <ArrowRight size={11} />
+                {t("all_history")} <ArrowRight size={11} />
               </Link>
             </div>
 
@@ -376,7 +376,7 @@ export default function DashboardPage() {
               </div>
             ) : (
               <p className="px-5 py-8 text-xs text-center" style={{ color: "var(--text-muted)" }}>
-                No analyses yet. <Link href="/analyse" className="underline" style={{ color: "var(--brand-gold)" }}>Analyse a coin</Link>
+                {t("no_analyses")} <Link href="/analyse" className="underline" style={{ color: "var(--brand-gold)" }}>{t("analyse_first")}</Link>
               </p>
             )}
           </motion.div>
@@ -389,35 +389,35 @@ export default function DashboardPage() {
           transition={{ duration: 0.35, delay: 0.3 }}
         >
           <h2 className="text-sm font-bold mb-3" style={{ color: "var(--text-primary)" }}>
-            Quick Actions
+            {t("quick_actions")}
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
               {
                 icon: Coins,
-                label: "Analyse a Coin",
-                desc:  "Upload a new photograph",
+                label: t("analyse_coin"),
+                desc:  t("upload_photo"),
                 href:  "/analyse",
                 color: "var(--brand-gold)",
               },
               {
                 icon: History,
-                label: "My History",
-                desc:  "Browse past analyses",
+                label: t("my_history"),
+                desc:  t("browse_analyses"),
                 href:  "/history",
                 color: "#3b82f6",
               },
               {
                 icon: MessageSquare,
-                label: "AI Chat",
-                desc:  "Ask numismatic questions",
+                label: t("ai_chat"),
+                desc:  t("ask_questions"),
                 href:  "/chat",
                 color: "#8b5cf6",
               },
               {
                 icon: BookOpen,
-                label: "Explore",
-                desc:  "Community coin gallery",
+                label: t("explore"),
+                desc:  t("community_gallery"),
                 href:  "/explore",
                 color: "#10b981",
               },
@@ -462,10 +462,10 @@ export default function DashboardPage() {
               <ShieldCheck size={18} style={{ color: role === "admin" ? "#fca5a5" : "var(--brand-gold)" }} />
               <div>
                 <p className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>
-                  Admin Dashboard
+                  {t("admin_dashboard")}
                 </p>
                 <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-                  Manage users, view all analyses, and monitor the live feed
+                  {t("manage_system")}
                 </p>
               </div>
               <ArrowRight size={15} className="ml-auto" style={{ color: "var(--text-muted)" }} />
