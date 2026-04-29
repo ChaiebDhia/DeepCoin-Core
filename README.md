@@ -479,6 +479,33 @@ State 2 (TTA vote >= 87.5%):   Teal   "Consistent Match"   + "N/8 agree" (no raw
 State 3 (below both):          Purple "Deep Search"         + "Best Visual Match" (no raw %)
 ```
 
+### Internationalization (i18n) & Accessibility
+
+Built-in support for **English and French** (next-intl) with full key coverage across all pages:
+
+- Admin panels, auth flows, and mission-control messages fully translated
+- Flag-based language switcher in header
+- Fallback message protection prevents missing-key console errors
+- Supports future RTL and additional language additions without architectural change
+
+### Light & Dark Mode
+
+Full theme support with CSS custom properties:
+
+- Light mode enhanced for accessibility: darker badge contrast (green-800, amber-700, purple-800)
+- Dark mode preserves brand identity: adjusted opacity and border visibility
+- `ThemeToggle` component in header (auto-detects system preference on first load)
+- Mission Control modal, Grad-CAM card, and agent pipeline styling tuned for both themes
+
+### OAuth Authentication (Google Sign-In)
+
+NextAuth v5 configuration with NextAuth-to-FastAPI bridge:
+
+- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` loaded from ENV
+- Bridge endpoint at `/auth/oauth/google` (protected by `AUTH_BRIDGE_SECRET`)
+- Silent JWT refresh on token expiry
+- Supports fallback to credential (username/password) auth
+
 ### Security Headers (6 headers in next.config.ts)
 
 CSP (blob: in img-src, dev/prod split) . HSTS 2-year preload . X-Frame-Options: DENY . nosniff . Referrer-Policy . Permissions-Policy
@@ -844,6 +871,9 @@ deepcoin/
 | 7 | PostgreSQL Migration | Planned | Replace residual SQLite paths in runtime/history with Postgres-only architecture |
 | 8 | Deployment Automation | Planned | Add CD workflow (build, scan, deploy, rollback) |
 | 9 | Container Security Hardening | Planned | Resolve current base-image vulnerability findings and enforce scan gate in CI |
+| 10 | Availability & Scaling | Planned | Load testing (k6), horizontal Pod autoscaling, Redis caching for KB queries, connection pooling |
+| 11 | Security & Compliance | Planned | OWASP Top 10 penetration testing, audit trail for curator corrections, compliance reporting |
+| 12 | User Traffic Analytics | Planned | Custom observability dashboard (route distribution, cost tracking, user cohort analysis) |
 
 ---
 
