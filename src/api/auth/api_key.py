@@ -52,8 +52,8 @@ _api_key_scheme = APIKeyHeader(
 
 
 async def require_api_key(
-    request: Request,
     api_key: str | None = Security(_api_key_scheme),
+    request: Request = None,
 ) -> None:
     """
     FastAPI dependency — enforces X-API-Key header authentication.
@@ -77,7 +77,7 @@ async def require_api_key(
         return
 
     # Check for Bearer token fallback (e.g. from Prometheus scrape_configs)
-    if not api_key:
+    if not api_key and request is not None:
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             api_key = auth_header.replace("Bearer ", "", 1)

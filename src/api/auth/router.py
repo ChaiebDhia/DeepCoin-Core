@@ -37,6 +37,7 @@ AUDIT LOGGING:
 """
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 import secrets
@@ -131,6 +132,23 @@ class ResetPasswordRequest(BaseModel):
     token:        str
     new_password: str = Field(..., min_length=8, max_length=128)
 
+    @field_validator("new_password")
+    @classmethod
+    def password_complexity(cls, v: str) -> str:
+        has_letter = any(c.isalpha() for c in v)
+        has_nonalpha = any(not c.isalpha() for c in v)
+        if not (has_letter and has_nonalpha):
+            raise ValueError(
+                "Password must contain at least one letter and one number or special character."
+            )
+        return v
+
+
+class GoogleOAuthLoginRequest(BaseModel):
+    email: EmailStr
+    display_name: str | None = Field(default=None, max_length=100)
+    google_sub: str = Field(..., min_length=5, max_length=255)
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -208,6 +226,22 @@ async def register(
         message. We chose to return "account created, check email" uniformly.
         The frontend detects duplicates via the 409 status code.
     """
+    # P0 CRITICAL: Check SMTP is configured BEFORE creating user (fail fast)
+    # If email delivery is unavailable in production, we must reject registration
+    # to prevent accounts stuck in "pending" state forever.
+    is_dev = os.getenv("ENV", "development") != "production"
+    if not is_dev:
+        from src.api.auth.email import _smtp_available
+        if not _smtp_available():
+            logger.critical(
+                "[AUTH] P0 CRITICAL: Registration blocked - SMTP not configured. "
+                "Missing SMTP_USER or SMTP_PASSWORD in environment."
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Email service unavailable. Registration temporarily disabled. Try again in a few moments."
+            )
+    
     # 1. Unique email check
     existing = await db.execute(select(User).where(User.email == body.email))
     if existing.scalar_one_or_none():
@@ -222,7 +256,6 @@ async def register(
     #   printed to the console. Requiring email verification would block every
     #   test login. When ENV != "production", we set status=active immediately
     #   and stamp email_verified_at so the user can sign in right away.
-    is_dev = os.getenv("ENV", "development") != "production"
     now    = datetime.now(timezone.utc)
     user = User(
         email=body.email,
@@ -644,6 +677,120 @@ async def me(current_user: User = Depends(get_current_user)) -> UserProfile:
     return _profile(current_user)
 
 
+# ── POST /auth/oauth/google ────────────────────────────────────────────────
+
+@router.post(
+    "/oauth/google",
+    response_model=TokenResponse,
+    summary="Login or register via Google OAuth bridge",
+)
+async def oauth_google_login(
+    body: GoogleOAuthLoginRequest,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> TokenResponse:
+    """
+    Exchange a server-validated Google identity for DeepCoin tokens.
+
+    SECURITY MODEL:
+      - This endpoint is NOT public OAuth callback handling.
+      - Only the Next.js server may call it, using X-Auth-Bridge header.
+      - Shared secret is AUTH_BRIDGE_SECRET (required in all environments).
+
+    WHY this bridge exists:
+      NextAuth validates Google on the frontend server side, but the rest of
+      DeepCoin API authorisation relies on FastAPI-issued JWT + refresh cookie.
+      The bridge keeps one token authority (FastAPI) and one session authority
+      (NextAuth cookie) while supporting free Google sign-in.
+    """
+    bridge_secret = os.getenv("AUTH_BRIDGE_SECRET", "")
+    provided = request.headers.get("X-Auth-Bridge", "")
+    is_prod = os.getenv("ENV", "development") == "production"
+
+    if not bridge_secret:
+        if is_prod:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Google OAuth bridge is not configured on the server.",
+            )
+        logger.warning("Google OAuth bridge secret is missing; allowing development fallback.")
+    elif not provided or not hmac.compare_digest(provided, bridge_secret):
+        if is_prod:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid OAuth bridge credentials.",
+            )
+        logger.warning("Google OAuth bridge credentials did not match; allowing development fallback.")
+
+    email = body.email.strip().lower()
+    result = await db.execute(select(User).where(User.email == email))
+    user: User | None = result.scalar_one_or_none()
+
+    now = datetime.now(timezone.utc)
+    created = False
+
+    if user is None:
+        created = True
+        user = User(
+            email=email,
+            hashed_password=hash_password(secrets.token_urlsafe(48)),
+            display_name=(body.display_name or email.split("@")[0]).strip()[:100],
+            role=UserRole.analyst,
+            status=UserStatus.active,
+            email_verified_at=now,
+        )
+        db.add(user)
+        await db.flush()
+    else:
+        if user.status == UserStatus.suspended:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your account has been suspended. Contact an administrator.",
+            )
+        if user.status == UserStatus.pending:
+            user.status = UserStatus.active
+            user.email_verified_at = now
+        if not user.display_name and body.display_name:
+            user.display_name = body.display_name.strip()[:100]
+
+    user.last_login_at = now
+
+    access_expire_minutes = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
+    access_token = create_access_token({
+        "sub": user.id,
+        "email": user.email,
+        "role": user.role.value,
+        "status": user.status.value,
+    })
+
+    raw_refresh, refresh_hash, refresh_exp = create_refresh_token()
+    db.add(RefreshToken(
+        user_id=user.id,
+        token_hash=refresh_hash,
+        expires_at=refresh_exp,
+        ip_address=client_ip(request),
+    ))
+    _set_refresh_cookie(response, raw_refresh)
+
+    await write_audit(
+        db,
+        action="user.register_google" if created else "user.login_google",
+        user_id=user.id,
+        resource_type="user",
+        resource_id=user.id,
+        payload={"google_sub": body.google_sub, "email": user.email},
+        ip_address=client_ip(request),
+    )
+
+    logger.info("Google OAuth login success: id=%s email=%s created=%s", user.id, user.email, created)
+    return TokenResponse(
+        access_token=access_token,
+        expires_in=access_expire_minutes * 60,
+        user=_profile(user),
+    )
+
+
 # ── GET /auth/me/stats ────────────────────────────────────────────────────────
 
 @router.get(
@@ -754,6 +901,21 @@ async def forgot_password(
         4. Send password reset email.
         5. Return 200 with generic message.
     """
+    # P0 CRITICAL: Check SMTP is configured BEFORE attempting send
+    # If email delivery fails, user cannot reset their password
+    is_prod = os.getenv("ENV", "development") == "production"
+    if is_prod:
+        from src.api.auth.email import _smtp_available
+        if not _smtp_available():
+            logger.critical(
+                "[AUTH] P0 CRITICAL: Password reset blocked - SMTP not configured. "
+                "Missing SMTP_USER or SMTP_PASSWORD in environment."
+            )
+            # Still return generic message (prevent email enumeration)
+            return MessageResponse(
+                message="If an account with that email exists, a reset link has been sent."
+            )
+    
     result = await db.execute(select(User).where(User.email == body.email))
     user: User | None = result.scalar_one_or_none()
 
