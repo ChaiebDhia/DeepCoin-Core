@@ -55,6 +55,12 @@ desktop.ini
 notes.md
 CLAUDE.md
 NOTES.md
+
+# Exclude all .md files except README and ENGINEERING_JOURNAL (production docs only)
+*.md
+!README.md
+!ENGINEERING_JOURNAL.md
+
 data/raw/
 data/processed/
 data/uploads/
@@ -123,3 +129,4 @@ technical_review.md
 # Technical Review Documents
 technical_review_master.md
 technical_review_master.pdf
+.aider*
