@@ -2058,6 +2058,7 @@ This guarantees the project's memory is perfectly synced.
 - **P0 Silent Auth Failure:** email.py returned True when API keys missing, committing broken pending users. FIXED: Resend removed entirely, pure smtplib implementation hard-fails on bad credentials.
 
 ## 🟢 RECENT COMPLETED TASKS (March 22, 2026)
+* (April 24, 2026) Implemented the admin coin inventory workflow: `CoinInventory` ORM model, `/api/admin/coins/*` CRUD + prefill + stats + image upload routes, frontend API contracts, and a dedicated `Coins` admin dashboard tab.
 * Fixed Resend "No Activity" bug by booting uvicorn with `--env-file .env` flag, restoring transactional email logs.
 * Redesigned `/api/subscribers` and Waitlist UX inside Next.js to allow users to directly Unsubscribe inside `/dashboard` seamlessly and reuse their auth session for the Notify Me feature.
 * (March 23, 2026) Solved the 'AssertionError: Status code 204 must not have a response body' boot crash. Identified rom __future__ import annotations stringifies types natively triggering FastAPI 0.115's JSON deserializer to violently reject 204 No Content endpoints. Mass purged it globally, and enforced 
@@ -2068,7 +2069,8 @@ esponse_class=Response manually across all Route DELETE requests.
 
 ## 🚨 ENTERPRISE GIT COMMIT STANDARDS (March 2026 Directive) 🚨
 1. **Atomic Commits:** NEVER bundle unrelated frontend, backend, and documentation changes into one massive git commit -am. Each distinct logical change must have its own commit to keep the GitHub contribution graph accurate and the git history revertible.
-2. **Conventional Commits:** Use <type>(<scope>): <subject> format. Types include eat, ix, efactor, docs, chore.
+2. **Conventional Commits:** Use <type>(<scope>): <subject> format. Types include eat, ix, 
+efactor, docs, chore.
 3. **Deep Context:** Always append a  -m "..." paragraph explicitly explaining the 'Why' and the 'How' associated with the code.
 
 
@@ -2080,3 +2082,4 @@ See AI_LEAD_MEMORY.md for the prioritized 4-Phase execution plan.
 3. AI Translation & Localization Pipeline
 4. HITL Admin Curation Engine
 **Strict Directive:** Build these top-to-bottom. NEVER invent a new separate DB for admins; use 'Single Source of Truth' with metadata flags.
+**Current milestone:** admin coin inventory baseline is implemented; continue with QA hardening and UX refinements.
