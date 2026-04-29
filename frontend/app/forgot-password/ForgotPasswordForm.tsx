@@ -20,9 +20,41 @@ import { useState, FormEvent } from "react";
 import Link                    from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mail, Coins, AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { forgotPassword } from "@/lib/api";
 
+function toErrorMessage(detail: unknown, fallback: string): string {
+  if (typeof detail === "string" && detail.trim()) return detail;
+
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (item && typeof item === "object" && "msg" in item && typeof (item as { msg?: unknown }).msg === "string") {
+          return (item as { msg: string }).msg;
+        }
+        return "";
+      })
+      .filter(Boolean);
+
+    if (messages.length) return messages.join(" · ");
+  }
+
+  if (detail && typeof detail === "object") {
+    const candidate = detail as { detail?: unknown; msg?: unknown; message?: unknown };
+    if (typeof candidate.detail === "string" && candidate.detail.trim()) return candidate.detail;
+    if (candidate.detail && typeof candidate.detail === "object") {
+      const nested = candidate.detail as { msg?: unknown };
+      if (typeof nested.msg === "string" && nested.msg.trim()) return nested.msg;
+    }
+    if (typeof candidate.msg === "string" && candidate.msg.trim()) return candidate.msg;
+    if (typeof candidate.message === "string" && candidate.message.trim()) return candidate.message;
+  }
+
+  return fallback;
+}
+
 export default function ForgotPasswordForm() {
+  const t = useTranslations("ForgotPassword");
   const [email,   setEmail]   = useState("");
   const [loading, setLoading] = useState(false);
   const [sent,    setSent]    = useState(false);
@@ -35,8 +67,8 @@ export default function ForgotPasswordForm() {
     try {
       await forgotPassword(email);
       setSent(true);
-    } catch {
-      setError("Something went wrong. Please try again or contact support.");
+    } catch (err: unknown) {
+      setError(toErrorMessage(err, t("err_submit")));
     } finally {
       setLoading(false);
     }
@@ -61,10 +93,10 @@ export default function ForgotPasswordForm() {
           <Coins size={28} style={{ color: "var(--brand-gold)" }} />
         </div>
         <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
-          Reset your password
+          {t("title")}
         </h1>
         <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-          Enter your email and we&rsquo;ll send you a reset link
+          {t("subtitle")}
         </p>
       </div>
 
@@ -88,21 +120,25 @@ export default function ForgotPasswordForm() {
               </div>
               <div>
                 <p className="font-semibold text-sm" style={{ color: "var(--text-primary)" }}>
-                  Check your inbox
+                  {t("success_title")}
                 </p>
                 <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                  If <strong>{email}</strong> is associated with an account,
-                  a password reset link has been sent. It expires in 1 hour.
-                </p>
-              </div>
+                  {t("success_message_prefix")} <strong>{email}</strong>{t("success_message_mid")}
+                  {t("success_message_suffix")}
+                </p>              <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
+                <span className="text-[10px] block">{t("tips_title")}</span>
+                {t("tip_spam")}  <br/>
+                {t("tip_verify")}  <br/>
+                {t("tip_support")}
+              </p>              </div>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                Didn&rsquo;t receive it?{" "}
+                {t("didnt_receive")} {" "}
                 <button
                   onClick={() => { setSent(false); setEmail(""); }}
                   className="underline hover:opacity-80"
                   style={{ color: "var(--brand-gold)" }}
                 >
-                  Try a different email
+                  {t("try_different")}
                 </button>
               </p>
             </motion.div>
@@ -136,7 +172,7 @@ export default function ForgotPasswordForm() {
               {/* Email field */}
               <div className="space-y-1.5">
                 <label className="block text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
-                  Email address
+                  {t("email_address")}
                 </label>
                 <div className="relative">
                   <Mail
@@ -151,7 +187,7 @@ export default function ForgotPasswordForm() {
                     required
                     autoComplete="email"
                     autoFocus
-                    placeholder="you@example.com"
+                    placeholder={t("email_placeholder")}
                     className="w-full pl-9 pr-4 py-2.5 rounded-lg text-sm outline-none transition-colors"
                     style={{
                       background: "var(--surface-2)",
@@ -172,8 +208,8 @@ export default function ForgotPasswordForm() {
                 style={{ background: "var(--brand-gold)", color: "#0d1520" }}
               >
                 {loading
-                  ? <><Loader2 size={16} className="animate-spin" /> Sending link…</>
-                  : "Send reset link"}
+                  ? <><Loader2 size={16} className="animate-spin" /> {t("sending")}</>
+                  : t("send_link")}
               </button>
             </motion.form>
           )}
@@ -182,9 +218,9 @@ export default function ForgotPasswordForm() {
 
       {/* Footer links */}
       <p className="text-center text-sm mt-4" style={{ color: "var(--text-muted)" }}>
-        Remembered it?{" "}
+        {t("remembered_it")} {" "}
         <Link href="/login" className="font-medium hover:underline" style={{ color: "var(--brand-gold)" }}>
-          Sign in
+          {t("sign_in")}
         </Link>
       </p>
     </motion.div>

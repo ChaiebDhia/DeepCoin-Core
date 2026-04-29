@@ -29,6 +29,7 @@
 
 import type { NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import Google from "next-auth/providers/google";
 
 // ── FastAPI base URL for server-side auth calls ───────────────────────────────
 //
@@ -41,6 +42,19 @@ import Credentials from "next-auth/providers/credentials";
 //   This URL is server-side only (credentials authorize() runs on the server).
 //   A server-only env var is never exposed to the client bundle.
 const FASTAPI_URL = process.env.AUTH_FASTAPI_URL ?? "http://127.0.0.1:8000";
+const AUTH_BRIDGE_SECRET = process.env.AUTH_BRIDGE_SECRET ?? "";
+
+const providers: NextAuthConfig["providers"] = [];
+
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  providers.push(
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      allowDangerousEmailAccountLinking: false,
+    }),
+  );
+}
 
 export const authConfig: NextAuthConfig = {
   /**
@@ -66,6 +80,7 @@ export const authConfig: NextAuthConfig = {
   },
 
   providers: [
+    ...providers,
     /**
      * Credentials provider — delegates authentication to FastAPI.
      *
@@ -151,6 +166,60 @@ export const authConfig: NextAuthConfig = {
   ],
 
   callbacks: {
+    /**
+     * signIn callback — bridge Google OAuth identities to FastAPI token authority.
+     */
+    async signIn({ user, account }) {
+      if (account?.provider !== "google") return true;
+
+      if (!AUTH_BRIDGE_SECRET) {
+        return false;
+      }
+
+      try {
+        const res = await fetch(`${FASTAPI_URL}/auth/oauth/google`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Auth-Bridge": AUTH_BRIDGE_SECRET,
+          },
+          body: JSON.stringify({
+            email: user.email,
+            display_name: user.name,
+            google_sub: account.providerAccountId,
+          }),
+          signal: AbortSignal.timeout(10_000),
+        });
+
+        if (!res.ok) return false;
+
+        const data = await res.json() as {
+          access_token: string;
+          expires_in: number;
+          user: {
+            id: string;
+            email: string;
+            role: string;
+            display_name: string | null;
+            created_at: string;
+          };
+        };
+
+        user.id = data.user.id;
+        user.email = data.user.email;
+        user.name = data.user.display_name ?? data.user.email.split("@")[0];
+        (user as { role?: string }).role = data.user.role;
+        (user as { display_name?: string | null }).display_name = data.user.display_name;
+        (user as { access_token?: string }).access_token = data.access_token;
+        (user as { expires_in?: number }).expires_in = data.expires_in;
+        (user as { created_at?: string }).created_at = data.user.created_at;
+
+        return true;
+      } catch {
+        return false;
+      }
+    },
+
     /**
      * jwt callback — called when the JWT is created or updated.
      *
