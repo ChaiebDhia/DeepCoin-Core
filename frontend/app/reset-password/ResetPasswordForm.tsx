@@ -24,9 +24,42 @@ import { useSearchParams, useRouter }      from "next/navigation";
 import Link                               from "next/link";
 import { motion, AnimatePresence }        from "framer-motion";
 import { Lock, Coins, AlertCircle, Loader2, CheckCircle2, Eye, EyeOff } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { resetPassword } from "@/lib/api";
 
+function toErrorMessage(detail: unknown, fallback: string): string {
+  const clean = (msg: string) => msg.replace(/^Value error,\s*/i, "").trim();
+  if (typeof detail === "string" && detail.trim()) return clean(detail);
+
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (item && typeof item === "object" && "msg" in item && typeof (item as { msg?: unknown }).msg === "string") {
+          return (item as { msg: string }).msg;
+        }
+        return "";
+      })
+      .filter(Boolean);
+
+    if (messages.length) return clean(messages.join(" · "));
+  }
+
+  if (detail && typeof detail === "object") {
+    const candidate = detail as { detail?: unknown; msg?: unknown; message?: unknown };
+    if (typeof candidate.detail === "string" && candidate.detail.trim()) return clean(candidate.detail);
+    if (candidate.detail && typeof candidate.detail === "object") {
+      const nested = candidate.detail as { msg?: unknown };
+      if (typeof nested.msg === "string" && nested.msg.trim()) return clean(nested.msg);
+    }
+    if (typeof candidate.msg === "string" && candidate.msg.trim()) return clean(candidate.msg);
+    if (typeof candidate.message === "string" && candidate.message.trim()) return clean(candidate.message);
+  }
+
+  return fallback;
+}
+
 export default function ResetPasswordForm() {
+  const t = useTranslations("ResetPassword");
   const searchParams = useSearchParams();
   const router       = useRouter();
   const token        = searchParams.get("token") ?? "";
@@ -50,9 +83,9 @@ export default function ResetPasswordForm() {
     return (
       <div className="w-full max-w-sm mx-auto text-center space-y-4 py-16">
         <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-          No reset token found. Please{" "}
+          {t("no_token")} {" "}
           <Link href="/forgot-password" className="underline" style={{ color: "var(--brand-gold)" }}>
-            request a new password reset
+            {t("request_new")}
           </Link>
           .
         </p>
@@ -65,11 +98,11 @@ export default function ResetPasswordForm() {
     setError(null);
 
     if (password !== confirm) {
-      setError("Passwords do not match.");
+      setError(t("err_passwords_match"));
       return;
     }
     if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
+      setError(t("err_password_length"));
       return;
     }
 
@@ -78,11 +111,11 @@ export default function ResetPasswordForm() {
       await resetPassword(token, password);
       setDone(true);
     } catch (err: unknown) {
-      // FastAPI returns 400 with a detail string for invalid/expired tokens
+      // FastAPI may return either a string detail or a validation object/array.
       const detail =
-        (err as { response?: { data?: { detail?: string } } })
+        (err as { response?: { data?: { detail?: unknown } } })
           ?.response?.data?.detail;
-      setError(detail ?? "Reset failed. The link may have expired.");
+      setError(toErrorMessage(detail ?? err, t("err_reset_failed")));
     } finally {
       setLoading(false);
     }
@@ -107,10 +140,10 @@ export default function ResetPasswordForm() {
           <Coins size={28} style={{ color: "var(--brand-gold)" }} />
         </div>
         <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
-          Set a new password
+          {t("title")}
         </h1>
         <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-          Choose something strong — at least 8 characters
+          {t("subtitle")}
         </p>
       </div>
 
@@ -136,10 +169,10 @@ export default function ResetPasswordForm() {
               </div>
               <div>
                 <p className="font-semibold text-sm" style={{ color: "var(--text-primary)" }}>
-                  Password updated successfully!
+                  {t("success_title")}
                 </p>
                 <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                  Redirecting you to sign in&hellip;
+                  {t("success_redirect")}
                 </p>
               </div>
             </motion.div>
@@ -175,7 +208,7 @@ export default function ResetPasswordForm() {
                       className="ml-6 text-xs underline underline-offset-2 hover:opacity-80"
                       style={{ color: "#fcd34d" }}
                     >
-                      Request a new reset link →
+                      {t("request_new_link")}
                     </Link>
                   )}
                 </motion.div>
@@ -184,7 +217,7 @@ export default function ResetPasswordForm() {
               {/* New password */}
               <div className="space-y-1.5">
                 <label className="block text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
-                  New password
+                  {t("new_password")}
                 </label>
                 <div className="relative">
                   <Lock
@@ -199,7 +232,7 @@ export default function ResetPasswordForm() {
                     required
                     autoComplete="new-password"
                     autoFocus
-                    placeholder="Minimum 8 characters"
+                    placeholder={t("min_chars")}
                     className="w-full pl-9 pr-10 py-2.5 rounded-lg text-sm outline-none transition-colors"
                     style={{
                       background: "var(--surface-2)",
@@ -219,12 +252,15 @@ export default function ResetPasswordForm() {
                     {showPwd ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
+                <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                  {t("policy_hint")}
+                </p>
               </div>
 
               {/* Confirm password */}
               <div className="space-y-1.5">
                 <label className="block text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
-                  Confirm new password
+                  {t("confirm_password")}
                 </label>
                 <div className="relative">
                   <Lock
@@ -238,7 +274,7 @@ export default function ResetPasswordForm() {
                     onChange={e => setConfirm(e.target.value)}
                     required
                     autoComplete="new-password"
-                    placeholder="Repeat password"
+                    placeholder={t("repeat_password")}
                     className="w-full pl-9 pr-4 py-2.5 rounded-lg text-sm outline-none transition-colors"
                     style={{
                       background: "var(--surface-2)",
@@ -252,7 +288,7 @@ export default function ResetPasswordForm() {
                   />
                 </div>
                 {confirm && confirm !== password && (
-                  <p className="text-xs" style={{ color: "#fca5a5" }}>Passwords don&rsquo;t match</p>
+                  <p className="text-xs" style={{ color: "#fca5a5" }}>{t("mismatch")}</p>
                 )}
               </div>
 
@@ -264,8 +300,8 @@ export default function ResetPasswordForm() {
                 style={{ background: "var(--brand-gold)", color: "#0d1520" }}
               >
                 {loading
-                  ? <><Loader2 size={16} className="animate-spin" /> Updating password…</>
-                  : "Update password"}
+                  ? <><Loader2 size={16} className="animate-spin" /> {t("updating")}</>
+                  : t("update_password")}
               </button>
             </motion.form>
           )}
@@ -274,7 +310,7 @@ export default function ResetPasswordForm() {
 
       <p className="text-center text-sm mt-4" style={{ color: "var(--text-muted)" }}>
         <Link href="/login" className="font-medium hover:underline" style={{ color: "var(--brand-gold)" }}>
-          Back to sign in
+          {t("back_signin")}
         </Link>
       </p>
     </motion.div>
