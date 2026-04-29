@@ -145,3 +145,115 @@ class HistoryListResponse(BaseModel):
     total: int  = Field(..., description="Total records (before pagination)")
     skip:  int  = Field(..., description="Offset applied")
     limit: int  = Field(..., description="Page size applied")
+
+
+# ── Admin coin inventory models ──────────────────────────────────────────────
+
+class AdminCoinGalleryImage(BaseModel):
+    """One gallery image attached to a curated coin inventory record."""
+    filename: str
+    url:      str
+    caption:  Optional[str] = None
+    source:   Optional[str] = None
+    is_primary: bool = False
+
+
+class AdminCoinBase(BaseModel):
+    """Shared editable fields for admin coin inventory records."""
+    title:           Optional[str] = None
+    denomination:    Optional[str] = None
+    authority:       Optional[str] = None
+    region:          Optional[str] = None
+    mint:            Optional[str] = None
+    date_range:      Optional[str] = None
+    material:        Optional[str] = None
+    obverse:         Optional[str] = None
+    reverse:         Optional[str] = None
+    provenance:      Optional[str] = None
+    discoverer_name: Optional[str] = None
+    source_name:     Optional[str] = None
+    source_url:      Optional[str] = None
+    source_type:     str = Field("manual", description="manual | kb | ai | import | museum | publication")
+    cartography:     Optional[str] = None
+    latitude:        Optional[float] = None
+    longitude:       Optional[float] = None
+    in_training_set: bool = False
+    ai_prefilled:    bool = False
+    ai_confidence:   Optional[float] = Field(None, ge=0.0, le=1.0)
+    notes:           Optional[str] = None
+    gallery_images:  list[AdminCoinGalleryImage] = Field(default_factory=list)
+
+
+class AdminCoinCreateRequest(AdminCoinBase):
+    """Create a new admin coin inventory record."""
+    type_id: Optional[str] = Field(None, description="CN type ID or internal coin identifier (auto-generated when empty)")
+
+
+class AdminCoinUpdateRequest(AdminCoinBase):
+    """Patch an existing admin coin inventory record."""
+    pass
+
+
+class AdminCoinItem(AdminCoinBase):
+    """Full admin coin inventory record returned by the API."""
+    id:                str
+    type_id:           str
+    created_at:        str
+    updated_at:        str
+    created_by_email:  Optional[str] = None
+    updated_by_email:  Optional[str] = None
+
+
+class AdminCoinListResponse(BaseModel):
+    items: list[AdminCoinItem]
+    total: int
+    skip:  int
+    limit: int
+    pages: int
+
+
+class AdminCoinStatCount(BaseModel):
+    label: str
+    count: int
+
+
+class AdminCoinStatPoint(BaseModel):
+    layer:     str
+    color:     str
+    region:    Optional[str] = None
+    mint:      Optional[str] = None
+    latitude:  Optional[float] = None
+    longitude: Optional[float] = None
+    count:     int
+
+
+class AdminCoinStatsResponse(BaseModel):
+    total:            int
+    kb_total:         int
+    kb_training_total: int
+    kb_rag_only_total: int
+    user_total:       int
+    manual_count:     int
+    ai_prefilled:     int
+    in_training_set:  int
+    with_gallery:     int
+    by_source_type:   list[AdminCoinStatCount]
+    by_region:        list[AdminCoinStatCount]
+    by_mint:          list[AdminCoinStatCount]
+    map_points:       list[AdminCoinStatPoint]
+
+
+class AdminCoinPrefillRequest(BaseModel):
+    """Request the backend to draft a curated coin record from KB data."""
+    type_id: Optional[str] = Field(None, description="Exact CN type ID")
+    query:   Optional[str] = Field(None, description="Free-text search query")
+
+
+class AdminCoinPrefillResponse(BaseModel):
+    """Backend-generated prefill suggestion for the admin coin editor."""
+    source:          str
+    matched_type_id:  Optional[str] = None
+    confidence:      Optional[float] = None
+    duplicate_exists: bool = False
+    warnings:        list[str] = Field(default_factory=list)
+    coin:            AdminCoinCreateRequest

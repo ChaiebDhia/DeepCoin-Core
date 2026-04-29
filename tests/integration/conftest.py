@@ -114,7 +114,7 @@ class _MockGatekeeper:
         }
     """
 
-    def analyze(self, image_path: str, tta: bool = True) -> dict:
+    def analyze(self, image_path: str, tta: bool = True, language: str = "en") -> dict:
         return {
             "state": {
                 "cnn_prediction": {

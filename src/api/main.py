@@ -56,6 +56,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from dotenv import load_dotenv
 
 from src.api._store          import ensure_store, count as history_count
 from src.api.auth            import require_api_key
@@ -67,6 +68,7 @@ from src.api.routes.history      import router as history_router
 from src.api.routes.subscribers  import router as subscribers_router
 from src.api.routes.explore      import router as explore_router
 from src.api.routes.admin        import router as admin_router
+from src.api.routes.admin_coins  import router as admin_coins_router
 from src.api.routes.chat         import router as chat_router
 from src.api.routes.chat_sessions import router as chat_sessions_router
 from src.api.routes.kb            import router as kb_router
@@ -79,6 +81,8 @@ logger = logging.getLogger(__name__)
 
 # ── paths (used by health + PDF serving) ──────────────────────────────────────
 _ROOT         = Path(__file__).resolve().parent.parent.parent
+# Load environment file now that _ROOT is defined
+load_dotenv(str(_ROOT / ".env"))
 _MODEL_PATH   = _ROOT / "models" / "best_model.pth"
 _MAPPING_PATH = _ROOT / "models" / "class_mapping.pth"
 _CHROMA_DIR   = _ROOT / "data" / "metadata" / "chroma_db_rag"
@@ -272,6 +276,7 @@ app.include_router(history_router,    prefix="/api", tags=["History"])          
 app.include_router(subscribers_router)                                          # /api/subscribers
 app.include_router(explore_router)                                              # /api/explore  (public)
 app.include_router(admin_router)                                                # /api/admin/*  (privileged)
+app.include_router(admin_coins_router)                                          # /api/admin/coins/* (privileged)
 app.include_router(chat_router)                                                 # /api/chat     (AI Q&A)
 app.include_router(chat_sessions_router)                                        # /api/chat/sessions (history)
 app.include_router(kb_router)                                                   # /api/kb/types      (KB browser)
