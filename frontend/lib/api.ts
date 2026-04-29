@@ -27,18 +27,22 @@ import axios, { type AxiosError } from "axios";
 import type {
   ClassifyResponse,
   HistoryListResponse,
-  HistorySummary,
   HealthResponse,
   ExploreListResponse,
   AdminFeedbackResponse,
   AdminAnalysesResponse,
   AdminUsersResponse,
+  AdminCoinListResponse,
+  AdminCoinItem,
+  AdminCoinStatsResponse,
+  AdminCoinPrefillRequest,
+  AdminCoinPrefillResponse,
+  AdminCoinUpsertPayload,
   ChatResponse,
   ChatSource,
   ChatMessageRecord,
   ChatSessionDetail,
   ChatSessionListResponse,
-  KbTypeItem,
   KbBrowseResponse,
 } from "@/types/api";
 
@@ -317,10 +321,37 @@ export class ApiError extends Error {
   }
 }
 
+function normaliseErrorDetail(detail: unknown, fallback: string): string {
+  if (typeof detail === "string" && detail.trim()) return detail;
+
+  if (Array.isArray(detail)) {
+    const joined = detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object" && "msg" in item && typeof (item as { msg?: unknown }).msg === "string") {
+          return (item as { msg: string }).msg;
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join(" · ");
+    if (joined) return joined;
+  }
+
+  if (detail && typeof detail === "object") {
+    const candidate = detail as { detail?: unknown; message?: unknown; msg?: unknown };
+    if (typeof candidate.detail === "string" && candidate.detail.trim()) return candidate.detail;
+    if (typeof candidate.message === "string" && candidate.message.trim()) return candidate.message;
+    if (typeof candidate.msg === "string" && candidate.msg.trim()) return candidate.msg;
+  }
+
+  return fallback;
+}
+
 function toApiError(err: unknown): ApiError {
-  const axiosErr = err as AxiosError<{ detail?: string }>;
+  const axiosErr = err as AxiosError<{ detail?: unknown }>;
   const status  = axiosErr.response?.status ?? 0;
-  const detail  = axiosErr.response?.data?.detail ?? axiosErr.message ?? "Unknown error";
+  const detail  = normaliseErrorDetail(axiosErr.response?.data?.detail, axiosErr.message ?? "Unknown error");
   return new ApiError(status, detail);
 }
 
@@ -461,6 +492,19 @@ export async function getHealth(): Promise<HealthResponse> {
     const { data } = await apiClient.get<HealthResponse>("/health");
     return data;
   } catch (err) {
+    if (axios.isAxiosError(err) && err.response?.data) {
+      const data = err.response.data as Partial<HealthResponse>;
+      if (typeof data.status === "string") {
+        return {
+          status: (data.status as HealthResponse["status"]) ?? "degraded",
+          version: typeof data.version === "string" ? data.version : "unknown",
+          components: typeof data.components === "object" && data.components !== null
+            ? (data.components as Record<string, string>)
+            : {},
+          uptime_s: typeof data.uptime_s === "number" ? data.uptime_s : undefined,
+        };
+      }
+    }
     throw toApiError(err);
   }
 }
@@ -528,6 +572,28 @@ export function gradcamDisplayUrl(gradcamUrl: string): string {
     return `${_DIRECT_API_BASE}${prefix}${filename}`;
   }
   return `${_DIRECT_API_BASE}${gradcamUrl}`;
+}
+
+/**
+ * coinImageDisplayUrl — build a robust URL for admin coin gallery images.
+ *
+ * WHY:
+ *   Coin images are served by FastAPI at /api/admin/coins/images/{filename}.
+ *   In some local dev proxy states, plain relative URLs can fail in <img> tags.
+ *   This mirrors the defensive pattern used for PDF / Grad-CAM URLs.
+ */
+export function coinImageDisplayUrl(imageUrl: string): string {
+  if (!imageUrl) return imageUrl;
+  if (imageUrl.startsWith("http")) return imageUrl;
+
+  let cleanUrl = imageUrl.replace(/\\/g, "/");
+  const prefix = "/api/admin/coins/images/";
+  if (cleanUrl.startsWith(prefix)) {
+    const filename = cleanUrl.slice(prefix.length).split("/").pop()!;
+    cleanUrl = `${prefix}${filename}`;
+  }
+
+  return `${_DIRECT_API_BASE}${cleanUrl}`;
 }
 // ── Public explore ────────────────────────────────────────────────────────────
 
@@ -723,6 +789,147 @@ export async function deleteSubscriber(email: string): Promise<void> {
   }
 }
 
+// ── Admin coin inventory ──────────────────────────────────────────────────────
+
+/**
+ * GET /api/admin/coins
+ *
+ * Fetch the curated admin coin inventory with optional filters.
+ */
+export async function getAdminCoins(
+  skip = 0,
+  limit = 20,
+  search?: string,
+  region?: string,
+  sourceType?: string,
+  inTrainingSet?: boolean,
+): Promise<AdminCoinListResponse> {
+  try {
+    const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
+    if (search && search.trim()) params.set("search", search.trim());
+    if (region && region.trim()) params.set("region", region.trim());
+    if (sourceType && sourceType.trim()) params.set("source_type", sourceType.trim());
+    if (typeof inTrainingSet === "boolean") params.set("in_training_set", String(inTrainingSet));
+    const { data } = await apiClient.get<AdminCoinListResponse>(`/admin/coins?${params}`);
+    return data;
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+/**
+ * GET /api/admin/coins/stats
+ *
+ * Fetch admin inventory analytics for the dashboard.
+ */
+export async function getAdminCoinStats(): Promise<AdminCoinStatsResponse> {
+  try {
+    const { data } = await apiClient.get<AdminCoinStatsResponse>("/admin/coins/stats");
+    return data;
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+/**
+ * POST /api/admin/coins/prefill
+ *
+ * Ask the backend to draft a coin record from Corpus Nummorum data.
+ */
+export async function prefillAdminCoin(body: AdminCoinPrefillRequest): Promise<AdminCoinPrefillResponse> {
+  try {
+    const { data } = await apiClient.post<AdminCoinPrefillResponse>("/admin/coins/prefill", body);
+    return data;
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+/**
+ * POST /api/admin/coins/prefill-image
+ *
+ * Ask the backend to analyse an uploaded coin image and draft a record.
+ */
+export async function prefillAdminCoinFromImage(file: File): Promise<AdminCoinPrefillResponse> {
+  try {
+    const form = new FormData();
+    form.append("file", file);
+    const { data } = await apiClient.post<AdminCoinPrefillResponse>("/admin/coins/prefill-image", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 180_000,
+    });
+    return data;
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+/**
+ * POST /api/admin/coins
+ *
+ * Create a new curated admin coin record.
+ */
+export async function createAdminCoin(payload: AdminCoinUpsertPayload): Promise<AdminCoinItem> {
+  try {
+    const { data } = await apiClient.post<AdminCoinItem>("/admin/coins", payload);
+    return data;
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+/**
+ * PATCH /api/admin/coins/{id}
+ *
+ * Update an existing curated coin record.
+ */
+export async function updateAdminCoin(coinId: string, payload: Partial<AdminCoinUpsertPayload>): Promise<AdminCoinItem> {
+  try {
+    const { data } = await apiClient.patch<AdminCoinItem>(`/admin/coins/${coinId}`, payload);
+    return data;
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+/**
+ * DELETE /api/admin/coins/{id}
+ */
+export async function deleteAdminCoin(coinId: string): Promise<void> {
+  try {
+    await apiClient.delete(`/admin/coins/${coinId}`);
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+/**
+ * POST /api/admin/coins/{id}/images
+ *
+ * Upload and attach a gallery image to a curated coin record.
+ */
+export async function uploadAdminCoinImage(
+  coinId: string,
+  file: File,
+  caption = "",
+  source = "",
+  primary = false,
+): Promise<AdminCoinItem> {
+  try {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("caption", caption);
+    form.append("source", source);
+    form.append("primary", String(primary));
+    const { data } = await apiClient.post<AdminCoinItem>(`/admin/coins/${coinId}/images`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return data;
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
 // ── AI Chat ─── (continues below) ────────────────────────────────────────────
 
 /**
@@ -810,8 +1017,8 @@ export interface ChatStreamCallbacks {
  */
 export async function chatQueryStream(
   query:               string,
-  nSources             = 5,
-  top5Labels:          string[]                                   = [],
+  _nSources            = 5,
+  _top5Labels:         string[]                                   = [],
   conversationHistory: Array<{ role: string; content: string }>  = [],
   callbacks:           ChatStreamCallbacks,
   signal?:             AbortSignal,

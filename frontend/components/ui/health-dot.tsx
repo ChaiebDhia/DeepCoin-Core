@@ -36,9 +36,9 @@ export function HealthDot() {
                    "bg-slate-600";   // no data yet — neutral
 
   const label =  isError      ? "Backend unreachable" :
-                 isHealthy   ? `ll systems OK` :
-                 data?.status === "degraded" ? `API degraded — check components` :
-                 "Connecting…";
+                 isHealthy   ? "All systems healthy" :
+                 data?.status === "degraded" ? `System degraded` :
+                 "Checking…";
 
   return (
     <div

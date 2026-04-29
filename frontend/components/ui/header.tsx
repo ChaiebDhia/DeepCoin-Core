@@ -32,23 +32,25 @@ export function Header() {
       className="sticky top-0 z-50 w-full border-b border-[var(--nav-bg)]"
       style={{ backgroundColor: "var(--nav-bg)", color: "var(--nav-text)" }}
     >
-      <div className="mx-auto max-w-6xl px-5 h-14 flex items-center justify-between gap-4">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-6">
         {/* Brand */}
         <Link
           href="/"
-          className="flex items-center gap-2 text-[var(--nav-text)] hover:text-[#fbbf24] transition-colors"
+          className="flex items-center gap-2 text-[var(--nav-text)] hover:text-[#fbbf24] transition-colors flex-shrink-0"
         >
-          <Coins size={22} className="text-[var(--brand-gold)]" />
-          <span className="font-bold tracking-tight text-base">
+          <Coins size={24} className="text-[var(--brand-gold)]" />
+          <span className="font-bold tracking-tight text-lg hidden sm:inline">
             Deep<span style={{ color: "var(--brand-gold)" }}>Coin</span>
           </span>
         </Link>
 
-        {/* Nav — auth-aware client island */}
-        <NavLinks />
+        {/* Nav — auth-aware client island, centered */}
+        <div className="flex-1 flex justify-center">
+          <NavLinks />
+        </div>
 
         {/* Right cluster: health dot + auth menu + mobile hamburger */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3 flex-shrink-0">
           {/* Health indicator — left of the auth buttons */}
           <HealthDot />
           {/* Language and Theme Toggles */}

@@ -61,7 +61,7 @@ export default function Providers({ children, locale = "en", messages = {} }: Pr
   );
 
   return (
-    <NextIntlClientProvider locale={locale} messages={messages}>
+    <NextIntlClientProvider locale={locale} messages={messages} timeZone="Europe/Paris">
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
         <SessionProvider>
           {/* Keeps the module-level auth token cache in lib/api.ts in sync.

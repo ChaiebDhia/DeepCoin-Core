@@ -32,13 +32,12 @@ function isActive(href: string, pathname: string): boolean {
 }
 
 const baseCls =
-  "flex items-center gap-1 px-2 py-1.5 sm:px-1.5 md:px-2 lg:px-3 rounded-md text-sm transition-all relative";
+  "flex items-center gap-1.5 px-3 py-2 sm:px-4 rounded-lg text-sm font-medium transition-all duration-200";
 const inactiveCls =
-  "text-[var(--nav-text)] opacity-70 hover:opacity-100 hover:bg-white/10";
-/** Active: white bold text + subtle surface background so it's visually
- *  unmistakable even if the 2px gold underline is missed at a glance. */
+  "text-[var(--nav-text)] opacity-70 hover:opacity-100 hover:bg-white/8";
+/** Active: white bold text + subtle surface background + gold bottom border */
 const activeCls =
-  "text-white font-semibold bg-white/15";
+  "text-white font-semibold bg-white/12 border-b-2 border-[#d4a853]";
 
 export const NAV_LINKS = [
   { href: "/",          labelKey: "home", icon: Home },
@@ -63,13 +62,6 @@ export function NavLinks() {
           >
             {l.icon && <l.icon size={16} />}
             <span>{t(l.labelKey)}</span>
-            {/* Gold underline bar for active page */}
-            {active && (
-              <span
-                className="absolute bottom-0 left-3 right-3 h-[2px] rounded-full"
-                style={{ background: "var(--brand-gold, #d4a853)" }}
-              />
-            )}
           </Link>
         );
       })}

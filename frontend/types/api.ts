@@ -200,6 +200,103 @@ export interface AdminUsersResponse {
   pages: number;
 }
 
+// ── Admin coin inventory types ───────────────────────────────────────────────
+
+export interface AdminCoinGalleryImage {
+  filename:   string;
+  url:        string;
+  caption:    string | null;
+  source:     string | null;
+  is_primary: boolean;
+}
+
+export interface AdminCoinUpsertPayload {
+  type_id:        string;
+  title:          string | null;
+  denomination:   string | null;
+  authority:      string | null;
+  region:         string | null;
+  mint:           string | null;
+  date_range:     string | null;
+  material:       string | null;
+  obverse:        string | null;
+  reverse:        string | null;
+  provenance:     string | null;
+  discoverer_name: string | null;
+  source_name:    string | null;
+  source_url:     string | null;
+  source_type:    string;
+  cartography:    string | null;
+  latitude:       number | null;
+  longitude:      number | null;
+  in_training_set: boolean;
+  ai_prefilled:   boolean;
+  ai_confidence:  number | null;
+  notes:          string | null;
+  gallery_images: AdminCoinGalleryImage[];
+}
+
+export interface AdminCoinItem extends AdminCoinUpsertPayload {
+  id:                string;
+  created_at:        string;
+  updated_at:        string;
+  created_by_email:  string | null;
+  updated_by_email:  string | null;
+}
+
+export interface AdminCoinListResponse {
+  items: AdminCoinItem[];
+  total: number;
+  skip:  number;
+  limit: number;
+  pages: number;
+}
+
+export interface AdminCoinStatCount {
+  label: string;
+  count: number;
+}
+
+export interface AdminCoinStatPoint {
+  layer:     string;
+  color:     string;
+  region:    string | null;
+  mint:      string | null;
+  latitude:  number | null;
+  longitude: number | null;
+  count:     number;
+}
+
+export interface AdminCoinStatsResponse {
+  total:           number;
+  kb_total:        number;
+  kb_training_total: number;
+  kb_rag_only_total: number;
+  user_total:      number;
+  manual_count:    number;
+  ai_prefilled:    number;
+  in_training_set: number;
+  with_gallery:    number;
+  by_source_type:  AdminCoinStatCount[];
+  by_region:       AdminCoinStatCount[];
+  by_mint:         AdminCoinStatCount[];
+  map_points:      AdminCoinStatPoint[];
+}
+
+export interface AdminCoinPrefillRequest {
+  type_id?: string | null;
+  query?:   string | null;
+}
+
+export interface AdminCoinPrefillResponse {
+  source:          string;
+  matched_type_id: string | null;
+  confidence:      number | null;
+  duplicate_exists: boolean;
+  warnings:        string[];
+  coin:            AdminCoinUpsertPayload;
+}
+
 // ── Chat types ────────────────────────────────────────────────────────────────
 
 export interface ChatSource {
