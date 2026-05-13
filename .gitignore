@@ -59,6 +59,10 @@ NOTES.md
 *.md
 !README.md
 !ENGINEERING_JOURNAL.md
+!CLAUDE.md
+!UML Diagrams.md
+!AI_LEAD_MEMORY.md
+!technical_review_master.md
 
 data/raw/
 data/processed/
