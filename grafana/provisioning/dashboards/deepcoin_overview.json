@@ -1,0 +1,42 @@
+{
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "type": "text",
+      "title": "DeepCoin Overview",
+      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
+      "options": { "content": "# DeepCoin Observability\n\nPrometheus (scraping `/api/metrics`) + Grafana overview dashboard.", "mode": "markdown" }
+    },
+    {
+      "type": "graph",
+      "title": "API Request Rate (per second)",
+      "targets": [
+        { "expr": "rate(http_requests_total[1m])", "legendFormat": "req/s" }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 3 }
+    },
+    {
+      "type": "graph",
+      "title": "API Latency (p95)",
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95" }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 3 }
+    },
+    {
+      "type": "graph",
+      "title": "Prometheus Targets Up",
+      "targets": [ { "expr": "up", "legendFormat": "up" } ],
+      "gridPos": { "h": 4, "w": 12, "x": 0, "y": 11 }
+    },
+    {
+      "type": "graph",
+      "title": "ChromaDB Disk Usage (bytes)",
+      "targets": [ { "expr": "node_filesystem_bytes_used{mountpoint=\"/app/data\"}", "legendFormat": "used" } ],
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 11 }
+    }
+  ],
+  "schemaVersion": 27,
+  "title": "DeepCoin Overview",
+  "version": 1
+}

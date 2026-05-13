@@ -1,0 +1,17 @@
+global:
+  resolve_timeout: 5m
+route:
+  group_by: ['alertname']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 12h
+  receiver: 'placeholder-notifications'
+receivers:
+  - name: 'placeholder-notifications'
+    webhook_configs:
+      - url: 'http://127.0.0.1:65535/alerts'
+        send_resolved: false
+
+# NOTE: Update the receiver settings to use your production alerting integration
+# (Slack webhook, PagerDuty, OpsGenie, or SMTP provider). Do not commit real
+# credentials into the repo; use Docker secrets or environment injection instead.

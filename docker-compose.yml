@@ -373,10 +373,11 @@ services:
     restart: unless-stopped
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/rules.yml:/etc/prometheus/rules.yml:ro
       - prometheus_data:/prometheus
     # We pass the env var to a file to be read as bearer token for /api/metrics
     entrypoint: >
-      /bin/sh -c "mkdir -p /var/run/secrets && echo 'Bearer '$$DEEPCOIN_API_KEY > /var/run/secrets/api_token && /bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus"
+      /bin/sh -c "mkdir -p /tmp/prometheus && echo 'Bearer '$$DEEPCOIN_API_KEY > /tmp/prometheus/api_token && /bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus"
     environment:
       DEEPCOIN_API_KEY: ${DEEPCOIN_API_KEY:-}
     ports:
@@ -384,6 +385,18 @@ services:
     depends_on:
       api:
         condition: service_healthy
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "9093:9093"
+    environment:
+      - TZ=UTC
+    depends_on:
+      - prometheus
 
   grafana:
     image: grafana/grafana:11.2.0

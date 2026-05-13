@@ -1,0 +1,32 @@
+groups:
+  - name: deepcoin-alerts
+    rules:
+      - alert: APIErrorRateHigh
+        expr: |
+          (increase(http_requests_total{job="api",status=~"5.."}[5m])
+           / increase(http_requests_total{job="api"}[5m])) > 0.01
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "API 5xx error rate > 1% (5m)"
+          description: "The API is returning a high fraction of 5xx errors for the last 5 minutes."
+
+      - alert: APIP95High
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job="api"}[5m])) by (le)) > 5
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "API p95 latency > 5s"
+          description: "The 95th percentile latency for the API exceeded 5 seconds over 5 minutes."
+
+      - alert: PrometheusTargetDown
+        expr: up{job="api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Prometheus target api:8000 is down"
+          description: "Prometheus reports the API target is down; check docker compose and API logs."

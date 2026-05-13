@@ -120,7 +120,7 @@ USER nextjs
 EXPOSE 3000
 
 HEALTHCHECK --interval=15s --timeout=5s --retries=3 --start-period=15s \
-    CMD wget -qO- http://localhost:3000/ || exit 1
+    CMD wget -qO- http://127.0.0.1:3000/ || exit 1
 
 # Start the standalone Next.js server.
 # next/standalone builds output a self-contained server.js — no `next start` needed.
