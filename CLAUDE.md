@@ -1,2 +1,568 @@
-﻿‣䱃啁䕄洮⁤胢ₔ敄灥潃湩䌭牯⁥敐獲獩整瑮倠潲敪瑣䴠浥牯൹ഊ䰊獡⁴灵慤整㩤㈠㈰ⴶ㔰ㄭള圊牯獫慰散爠潯㩴怠㩃啜敳獲䅜浤湩獩牴瑡牯摜敥捰楯恮਍牐浩牡⁹敲潰›䍠慨敩䑢楨⽡敄灥潃湩䌭牯恥⠠牢湡档›浠楡恮ഩഊⴊⴭ਍਍⌣〠 畐灲獯⁥景琠楨⁳楦敬਍਍桔獩映汩⁥獩琠敨⨠猪湩汧ⵥ敳獳潩⁮潢瑯瑳慲⁰敭潭祲⨪映牯愠祮䄠⁉獡楳瑳湡⁴牯挠湯牴扩瑵牯മ䤊⁴慣瑰牵獥ഺⴊ匠獹整⁭牡档瑩捥畴敲਍‭牐橯捥⁴瑳畲瑣牵൥ⴊ䐠汥癩牥⁹牰杯敲獳戠⁹慬敹൲ⴊ䬠祥攠杮湩敥楲杮搠捥獩潩獮਍‭畂⽧楦⁸敬杤牥⠠牣瑩捩污椠獳敵⁳湯祬ഩⴊ删湵潢歯挠浯慭摮൳ⴊ圠慨⁴獩搠湯⁥獶眠慨⁴獩瀠湥楤杮਍਍潆⁲⨪畦汬氠湩ⵥ祢氭湩⁥楨瑳牯⩹Ⱚ甠敳ഺⴊ怠久䥇䕎剅义彇佊剕䅎⹌摭⁠洨獡整⁲楨瑳牯㭹ㄠ㤹‫敳瑣潩獮ഩⴊ怠朮瑩畨⽢潣楰潬⵴湩瑳畲瑣潩獮洮恤⠠数獲獩整瑮漠数慲楴湯污挠湯整瑸ഩⴊ怠䕒䑁䕍洮恤⠠異汢捩愠捲楨整瑣牵⁥‫敳畴⁰‫瑳瑡獵ഩഊⴊⴭ਍਍⌣ㄠ 楍獳潩⁮湡⁤牰摯捵⁴敤楦楮楴湯਍਍敄灥潃湩䌭牯⁥獩愠⁮湥ⵤ潴攭摮䄠⁉祳瑳浥琠慨㩴਍⸱䌠慬獳晩敩⁳湡愠据敩瑮挠楯⁮牦浯漠敮椠慭敧⠠乃⥎മ㈊‮潒瑵獥愠慮祬楳⁳桴潲杵⁨灳捥慩楬敺⁤条湥獴戠⁹潣普摩湥散മ㌊‮片畯摮⁳楨瑳牯捩污漠瑵異⁴楷桴删䝁⠠票牢摩䈠㉍‵‫敶瑣牯⬠删䙒⸩਍⸴䜠湥牥瑡獥愠瀠潲敦獳潩慮⁬䑐⁆敲潰瑲眠瑩⁨硥汰楡慮楢楬祴മ㔊‮慈摮敬⁳湵湫睯⽮畯⵴景搭獩牴扩瑵潩⁮湩異獴朠慲散畦汬⁹渨癥牥攠灭祴漠瑵異⥴മഊ䄊慣敤業⁣潣瑮硥㩴਍‭䙐⁅䘨湩污夠慥⁲湅楧敮牥湩⁧湉整湲桳灩ഩⴊ䔠偓䥒⁔韃夠䉅䥎਍‭瑓摵湥㩴䐠楨⁡桃楡扥਍਍ⴭഭഊ⌊‣⤲䌠牵敲瑮猠慴畴⁳湳灡桳瑯⠠楨桧氭癥汥ഩഊ⌊⌣䐠汥癩牥⁹瑳瑡獵਍‭潃敲戠極摬⠠慌敹獲〠胢㖓㨩⨠椪灭敬敭瑮摥⨪਍‭慌敹⁲‶䐨捯敫⽲湩牦⥡›⨪浩汰浥湥整⁤慢敳楬敮‬湥整灲楲敳栠牡敤楮杮瀠湥楤杮⨪਍‭慌敹⁲‷䌨⽉䑃㨩⨠䌪⁉浩汰浥湥整Ɽ䌠⽄敤汰祯敭瑮愠瑵浯瑡潩⁮数摮湩⩧പⴊ䄠⬫‫畱污瑩⁹灵牧摡獥›⨪⼵‶潣灭敬整⨪⠠䱍汦睯‬片摡䌭䵁⬫‬捁楴敶䰠慥湲湩Ⱨ䐠捯敫⁲楷楲杮‬扏敳癲扡汩瑩⁹慤桳潢牡⁤潣灭敬整※牁䙣捡⁥牴捡⁫敲慭湩⁳潲摡慭⁰瑩浥ഩⴊ䄠癤湡散⁤敆瑡牵獥›⨪浉汰浥湥整⁤ㅩ游⠠牆湥档䔯杮楬桳琠杯汧⥥‬摁業⁮潃湩䤠癮湥潴祲圠牯晫潬ⱷ倠潲敭桴略⁳…汁牥浴湡条牥传獢牥慶楢楬祴匠慴正⨪਍਍⌣‣潃敲洠瑥楲獣⠠慬整瑳搠捯浵湥整⥤਍‭乃⁎捡畣慲祣›⨪〸〮┳⨪⠠呔⥁਍‭汃獡敳⁳湩䌠乎›⨪㌴⨸പⴊ䬠⁂潣敶慲敧›⨪ⰹ㐵‱ ⰹㄷ⨶‪祴数൳ⴊ䌠牨浯⁡敶瑣牯㩳⨠㐪ⰷ〷⨵‪㔨挠畨歮⁳数⁲祴数ഩⴊ吠獥獴›⨪㈱′楤捳癯牥摥瘠慩瀠瑹獥⁴潣汬捥⵴湯祬⨪਍‭片摡䌭䵁⬫›⨪㤱韃㤱琠牡敧⁴慭⩰‪湩整牧瑡潩⁮湩爠灥牯獴唯൉ഊ⌊⌣倠潲畤瑣挠慨慲瑣牥獩楴獣਍‭畆汬猭慴正愠捲楨整瑣牵⁥浩汰浥湥整⁤湡⁤畲湮扡敬氠捯污祬਍‭敓畣楲祴栠牡敤楮杮瀠敲敳瑮⠠畡桴‬慲整氠浩瑩ⱳ栠慥敤獲‬慳敦氠慯楤杮ഩⴊ䜠慲散畦⁬敤牧摡瑡潩⁮捡潲獳爠畯整൳ⴊ䄠瑣癩⁥敬牡楮杮映敥扤捡⁫潬灯椠灭敬敭瑮摥਍‭湅整灲楲敳漠数慲楴湯⁳慭畴楲祴猠楴汬椠⁮牰杯敲獳⠠敤汰祯敭瑮‬扯敳癲扡汩瑩ⱹ椠慭敧栠牡敤楮杮ഩഊⴊⴭ਍਍⌣㌠ 牁档瑩捥畴敲⠠畡桴牯瑩瑡癩⁥畳浭牡⥹਍਍⌣匠慴敧䄠钀嘠獩潩⁮湩敦敲据൥ㄊ‮湉異⁴浩条൥㈊‮牐灥潲散獳湩㩧愠瑵ⵯ牣灯⬠䌠䅌䕈⠠䅌⁂ⵌ档湡敮⥬⬠愠灳捥⵴牰獥牥楶杮爠獥穩⁥㈨㤹㉸㤹ഩ㌊‮晅楦楣湥乴瑥䈭″湩敦敲据൥㐊‮畏灴瑵›潴⁰慬敢⁬‫潣普摩湥散⬠琠灯㔭⬠漠瑰潩慮⁬片摡䌭䵁⬫਍਍⌣匠慴敧䈠钀䄠敧瑮捩漠捲敨瑳慲楴湯⠠慌杮片灡⥨਍潒瑵湩⁧桴敲桳汯獤ഺⴊ怠潣普摩湥散㸠〠㠮怵銆䠠獩潴楲湡瀠瑡൨ⴊ怠⸰〴㰠‽潣普摩湥散㰠‽⸰㔸⁠蛢ₒ慖楬慤潴⁲‫楨瑳牯慩⁮慰桴਍‭捠湯楦敤据⁥‼⸰〴⁠蛢ₒ湉敶瑳杩瑡牯瀠瑡൨ഊ䄊敧瑮㩳਍‭杠瑡步敥数⹲祰㩠漠捲敨瑳慲楴湯‬楴業杮‬敲牴ⱹ朠慲散畦⁬敤牧摡瑡潩൮ⴊ怠楨瑳牯慩⹮祰㩠朠潲湵敤⁤楨瑳牯捩污猠湹桴獥獩瘠慩删䝁挠湯整瑸൳ⴊ怠慶楬慤潴⹲祰㩠传数䍮⁖慭整楲污挠湯楳瑳湥祣愠慮祬楳൳ⴊ怠湩敶瑳杩瑡牯瀮恹›潬⵷潣普摩湥散瘠獩慵⁬湡污獹獩⬠戠潲摡䬠⁂潬歯灵਍‭獠湹桴獥獩瀮恹›潮浲污穩摥映湩污渠牡慲楴敶⬠倠䙄朠湥牥瑡潩൮ഊ⌊‣瑓条⁥⁃胢ₔ敒潰瑲湩⁧湡⁤敤楬敶祲਍‭瑓畲瑣牵摥爠獥潰獮⁥偁⁉‫数獲獩整⁤湡污獹獩਍‭䑐⁆敲潰瑲椠⁮牠灥牯獴怯਍‭牆湯整摮瘠獩慵楬慺楴湯⠠湩汣摵湩⁧片摡䌭䵁挠牡⥤਍਍ⴭഭഊ⌊‣⤴删䝁愠捲楨整瑣牵⁥瀨潲畤瑣潩⁮桳灡⥥਍਍湅楧敮ഺⴊ怠牳⽣潣敲爯条敟杮湩⹥祰ൠഊ䐊瑡⁡潭敤㩬਍‭潃灲獵爠捥牯獤猠汰瑩椠瑮⁯‵敳慭瑮捩挠畨歮㩳਍†‭楠敤瑮瑩恹਍†‭潠癢牥敳ൠ ⴠ怠敲敶獲恥਍†‭浠瑡牥慩恬਍†‭捠湯整瑸ൠഊ䤊摮硥湩㩧਍‭敖瑣牯椠摮硥›桃潲慭䉄⠠污⵬楍楮䵌䰭ⴶ㉶攠扭摥楤杮⥳਍‭敋睹牯⁤湩敤㩸䈠㉍വⴊ䴠牥敧猠牴瑡来㩹删捥灩潲慣⁬慒歮䘠獵潩⁮刨䙒ഩഊ刊瑥楲癥污戠桥癡潩㩲਍‭楈瑳牯慩㩮甠畳污祬琠灹ⵥ潣獮牴楡敮⁤敲牴敩慶⁬‫潣瑮硥⁴汢捯獫਍‭慖楬慤潴㩲洠瑡牥慩⵬潦畣敳⁤楳湧污൳ⴊ䤠癮獥楴慧潴㩲戠潲摡挠牯異⁳敲牴敩慶⁬潦⁲湵湫睯獮਍਍畇牡湡整㩥਍‭䱌⁍慮牲瑡癩⁥獩朠潲湵敤⁤獵湩⁧潣瑮硥⁴汢捯獫※慦汬慢正洠摯獥攠楸瑳眠敨⁮潭敤⽬牰癯摩牥甠慮慶汩扡敬മഊⴊⴭ਍਍⌣㔠 敄灥䰠慥湲湩⁧楰数楬敮猠浵慭祲਍਍潍敤㩬਍‭晅楦楣湥乴瑥䈭″琨慲獮敦⁲敬牡楮杮ഩⴊ䌠獵潴⁭汣獡楳楦慣楴湯栠慥⁤潦⁲㌴‸汣獡敳൳ഊ吊慲湩湩⁧档牡捡整楲瑳捩⁳搨捯浵湥整⁤敳畴⥰ഺⴊ䄠慤坭⬠挠獯湩⁥湡敮污湩൧ⴊ氠扡汥猠潭瑯楨杮਍‭汁畢敭瑮瑡潩獮愠杵敭瑮瑡潩൮ⴊ洠硩灵਍‭䵁⽐捳污牥਍‭敷杩瑨摥猠浡汰湩⁧潦⁲汣獡⁳浩慢慬据൥ⴊ攠牡祬猠潴灰湩൧ഊ䐊瑡⁡慦瑣㩳਍‭慒㩷ㄠ㔱ㄬ〶椠慭敧⁳ ⰹㄷ‶祴数൳ⴊ䘠汩整敲⁤牴楡楮杮猠扵敳⁴㸨ㄽ‰浩条獥振慬獳㨩㜠㘬㜷椠慭敧⁳ ㌴‸汣獡敳൳ഊ䤊普牥湥散焠慵楬祴ഺⴊ吠䅔攠慮汢摥瀠瑡൨ⴊ瀠敲牰捯獥楳杮瀠牡瑩⁹楦數⁳灡汰敩⁤䌨䅌䕈愠楬湧敭瑮ഩⴊ䜠慲ⵤ䅃⁍灵牧摡摥琠⁯片摡䌭䵁⬫愠摮映湩牥琠牡敧⁴慬敹⁲敲潳畬楴湯਍਍ⴭഭഊ⌊‣⤶䈠捡敫摮猠浵慭祲⠠慆瑳偁⥉਍਍敋⁹楦敬㩳਍‭獠捲愯楰洯楡⹮祰ൠⴊ怠牳⽣灡⽩潲瑵獥振慬獳晩⹹祰ൠⴊ怠牳⽣灡⽩潲瑵獥栯獩潴祲瀮恹਍‭獠捲愯楰爯畯整⽳捡楴敶江慥湲湩⹧祰ൠⴊ怠牳⽣灡⽩畡桴瀮恹਍‭獠捲愯楰氯浩瑩牥瀮恹਍‭獠捲愯楰弯瑳牯⹥祰ൠഊ䌊灡扡汩瑩敩㩳਍‭汣獡楳祦攠摮潰湩⁴楷桴爠畯楴杮⬠爠灥牯⁴敧敮慲楴湯਍‭楨瑳牯⁹敲牴敩慶⽬敤慴汩搯汥瑥⽥敦摥慢正映潬獷਍‭捡楴敶氠慥湲湩⁧慣摮摩瑡⽥慭歲支灸牯⁴湥灤楯瑮൳ⴊ愠瑵⁨潣瑮潲獬⠠坊⁔ 偁⁉敫⁹敤数摮湩⁧湯爠畯整ഩⴊ爠瑡⁥楬業楴杮愠摮爠煥敵瑳猠晡瑥⁹潣瑮潲獬਍‭敨污桴愠摮洠瑥楲獣攠摮潰湩獴਍਍慈摲湥湩⁧桴浥獥ഺⴊ猠晡⁥潭敤⁬潬摡湩⁧怨敷杩瑨彳湯祬吽畲恥眠敨敲爠汥癥湡⥴਍‭潣瑮潲汬摥映汩⁥敳癲湩⁧湡⁤汣慥畮൰ⴊ猠捥牵瑩⁹敨摡牥ⱳ䌠剏⁓楤捳灩楬敮‬敲畱獥⁴䑉ⱳ氠杯楧杮਍਍ⴭഭഊ⌊‣⤷䘠潲瑮湥⁤畳浭牡⁹丨硥⹴獪ㄠ⤵਍਍潌慣楴湯ഺⴊ怠牦湯整摮怯਍਍慍潪⁲獵牥猠牵慦散㩳਍‭湁污穹⁥汦睯਍‭楈瑳牯⁹楬瑳搯瑥楡൬ⴊ䔠灸潬敲术污敬祲਍‭桃瑡਍‭潄獣䄯潢瑵਍‭摁業⁮慤桳潢牡獤਍਍潎慴汢⁥塕支杮湩敥楲杮映慥畴敲㩳਍‭業獳潩⵮潣瑮潲⁬楰数楬敮瘠獩慵楬慺楴湯਍‭ⴳ瑳瑡⁥潣普摩湥散瀠敲敳瑮瑡潩൮ⴊ挠湡散⽬扡牯⁴汦睯映牯氠湯⁧湡污獹獥਍‭片摡䌭䵁搠獩汰祡挠牡൤ⴊ映敥扤捡⽫捡楴敶氭慥湲湩⁧潨歯൳ⴊ愠瑵⽨敳獳潩⁮敲牦獥⁨浩牰癯浥湥獴਍਍ⴭഭഊ⌊‣⤸䤠普慲瑳畲瑣牵⁥‫䥃䌯ൄഊ䌊湯慴湩牥穩瑡潩㩮਍‭潄正牥⬠䐠捯敫⁲潃灭獯⁥敳畴⁰洨汵楴猭牥楶散猠慴正ഩⴊ丠楧确爠癥牥敳瀠潲祸਍‭潐瑳牧卥䱑‬敒楤ⱳ䴠晌潬ⱷ䰠捯污瑓捡⁫湩整牧瑡潩⁮湩猠慴正搠獥杩൮ഊ刊湵楴敭猠慴正⠠潣灭獯⥥ഺⴊ怠潰瑳牧獥⁠倨獯杴敲兓⁌㜱ഩⴊ怠敲楤恳⠠敒楤⁳⤷਍‭慠楰⁠䘨獡䅴䥐ഩⴊ怠敷恢⠠敎瑸樮⁳㔱ഩⴊ怠杮湩恸⠠敲敶獲⁥牰硯⥹਍‭浠晬潬恷⠠牴捡楫杮猠牥敶⥲਍‭池捯污瑳捡恫⠠㍓猠浩汵瑡潩⥮਍਍畑污瑩⁹慧整㩳਍‭湕瑩⬠椠瑮来慲楴湯琠獥獴਍‭楇䡴扵䄠瑣潩獮䌠൉ⴊ䰠湩⽴潦浲瑡琯獥⁴潷歲汦睯൳ഊ伊獢牥敶⁤整瑳湩⁧慢敳楬敮ഺⴊㄠ㈲琠獥獴瀠獡楳杮⠠潤畣敭瑮摥ഩഊⴊⴭ਍਍⌣㤠 牐橯捥⁴瑳畲瑣牵⁥瀨慲瑣捩污洠灡ഩഊⴊ怠牳⽣慤慴灟灩汥湩⽥⁠胢ₔ牰灥潲散獳湩⁧潣灭湯湥獴਍‭獠捲振牯⽥⁠胢ₔ潭敤⁬慦瑣牯ⱹ椠普牥湥散‬䉋刯䝁挠牯൥ⴊ怠牳⽣条湥獴怯钀朠瑡步敥数⁲‫‴灳捥慩楬瑳愠敧瑮⁳‫祳瑮敨楳൳ⴊ怠牳⽣灡⽩⁠胢ₔ慆瑳偁⁉灡Ɒ爠畯整ⱳ愠瑵ⱨ猠潴敲਍‭獠牣灩獴怯钀琠慲湩湩Ⱨ攠慶ⱬ䬠⁂畢汩Ɽ瀠灩汥湩⁥整瑳ⱳ愠瑣癩⁥敬牡楮杮਍‭瑠獥獴怯钀甠楮⽴湩整牧瑡潩⁮潣敶慲敧਍‭晠潲瑮湥⽤⁠胢ₔ敎瑸樮⁳灡൰ⴊ怠慤慴怯钀瀠潲散獳摥爯睡洯瑥摡瑡⁡瑳牯獥਍‭浠摯汥⽳⁠胢ₔ牴楡敮⁤敷杩瑨⁳‫汣獡⁳慭灰湩൧ⴊ怠敲潰瑲⽳⁠胢ₔ敧敮慲整⁤䑐獆愠摮攠灸慬湩扡汩瑩⁹牡楴慦瑣൳ⴊ怠朮瑩畨⽢潷歲汦睯⽳⁠胢ₔ䥃瀠灩汥湩獥਍਍ⴭഭഊ⌊‣〱 畂⁧湡⁤楦⁸敬杤牥⠠牣瑩捩污挠湯敤獮摥洠浥牯⥹਍਍桔獩椠⁳⁡潣摮湥敳⁤楬瑳漠⁦慭潪⁲楦數⁳敲数瑡摥祬爠晥牥湥散⁤畤楲杮搠癥汥灯敭瑮മ䘊牯映汵⁬畢⁧档潲潮潬祧愠摮爠潯⵴慣獵⁥慮牲瑡癩獥‬敳⁥䕠䝎义䕅䥒䝎䩟問乒䱁洮恤愠摮怠朮瑩畨⽢潣楰潬⵴湩瑳畲瑣潩獮洮恤മഊㄊ‮敄楶散猠牴湩⁧畢⁧怨愢瑵≯⥠椠⁮湩敦敲据⁥慰桴銆攠灸楬楣⁴畣慤振異爠獥汯瑵潩⹮਍⸲䠠獩潴楲湡瘯污摩瑡牯琠灹ⵥ摩洠獩慭捴⁨怨汣獡彳摩⁠獶琠畲⁥乃氠扡汥 蛢ₒ睳瑩档摥琠⁯慬敢⁬瑳楲杮映牯䬠⁂潬歯灵മ㌊‮䑐⁆敲摮牥湩⁧敤敦瑣㩳਍†ⴠ洠汵楴挭汥⁬⁸牤晩൴ †‭畤汰捩瑡⁥潦瑯牥瀠条⁥牡楴慦瑣൳ †‭片敥⁫牴湡汳瑩牥瑡潩⁮慨摮楬杮਍†ⴠ猠杩慮畴敲洠獩慭捴⁨敢睴敥⁮慧整敫灥牥猯湹桴獥獩਍⸴匠牣灡牥䬯⁂湩敧瑳潩⁮獩畳獥ഺ †‭卓⽌散瑲栠湡汤湩൧ †‭潮獩⁹捳慲数⁤档牡捡整獲挠敬湡灵਍†ⴠ洠湩⽴敲楧湯瀠牡楳杮挠湯慴業慮楴湯਍†ⴠ映汩整敲⁤牥潲⁲敲潣摲൳㔊‮呅⁁敲潰瑲湩⁧畢⁧湩映汵⁬捳慲数挠浯慭摮挠牯敲瑣摥മ㘊‮湉敶瑳杩瑡牯洠瑥污瀠牡楳杮瀠楲牯瑩⁹楦數⁤戨潲穮⽥楳癬牥瀠牨獡⁥浡楢畧瑩⥹മ㜊‮湉敶瑳杩瑡牯删䙒猠潣敲欠祥洠獩慭捴⁨楦數⁤怨牲彦捳牯恥瘠⁳獠潣敲⥠മ㠊‮牔楡⽮湩敦敲据⁥楤瑳楲畢楴湯洠獩慭捴⁨楦數⁤祢愠摤湩⁧䱃䡁⁅慰楲祴椠⁮湩敦敲据⹥਍⸹怠朮瑩杩潮敲⁠慰桴愠据潨楲杮戠杵映硩摥琠⁯癡楯⁤硥汣摵湩⁧晠潲瑮湥⽤楬⽢⹠਍〱‮慖楬慤潴⁲慰楴慮映污敳洠獩慭捴⁨楦數㩤਍††‭楳癬牥猠瑡牵瑡潩⁮桴敲桳汯⁤楷敤敮൤ †ⴠ甠据牥慴湩祴⬠挠湯敳獮獵漠敶牲摩⁥潬楧ൣㄊ⸱匠捥牵瑩⁹慨摲湥湩㩧਍††‭睠楥桧獴潟汮㵹牔敵⁠潬摡猠晡来慵摲൳ †ⴠ猠湩汧瑥湯爠捡⁥牰瑯捥楴湯氠捯獫਍††‭浩潰瑲挠敬湡灵椠⁮潨⁴慰桴൳ㄊ⸲䘠潲瑮湥⽤畲瑮浩⁥敲楬扡汩瑩⁹楦數㩳਍††‭牰硯⽹偉㙶琠浩潥瑵爠畯楴杮਍††‭瑳污⁥瑳瑡ⱥ洠摯污映潬ⱷ挠湡散汬瑡潩⁮楷楲杮਍††‭千⁐湡⁤敲潳牵散氠慯楤杮椠獳敵൳ㄊ⸳䌠慨⽴敳畣楲祴映硩獥ഺ †ⴠ爠汯⁥慶楬慤楴湯映牯瀠潲灭⁴湩敪瑣潩⁮畧牡൤ †ⴠ匠䕓猠牴慥業杮愠捲楨整瑣牵⁥湡⁤瑳扡汩瑩൹ㄊ⸴䄠瑵⽨敳獳潩⁮敲楬扡汩瑩㩹਍††‭坊⁔敲牦獥⁨汦睯愠摮爠瑥祲焠敵敵湩൧ †ⴠ爠畯整瀯潲祸漠摲牥湩⁧潣牲捥楴湯൳ㄊ⸵䴠汵楴汰⁥摡業⽮楨瑳牯⽹敲潰瑲瀠瑡⁨湡⁤塕挠湯楳瑳湥祣搠晥捥獴爠獥汯敶⹤਍਍ⴭഭഊ⌊‣ㄱ 敋⁹湥楧敮牥湩⁧敤楣楳湯⁳眨票琠敨猠獹整⁭潬歯⁳楬敫琠楨⥳਍਍‭晅楦楣湥乴瑥䈭″档獯湥映牯瀠牥潦浲湡散嘯䅒⁍慢慬据⹥਍‭䱃䡁⁅湩䰠䉁⠠ⵌ档湡敮⁬湯祬 潴瀠敲敳癲⁥慰楴慮爭汥癥湡⁴潣潬⁲敳慭瑮捩⹳਍‭獁数瑣瀭敲敳癲湩⁧敲楳敺瀯摡琠⁯癡楯⁤敧浯瑥楲⁣楤瑳牯楴湯漠⁦潣湩⹳਍‭慌杮片灡⁨敳敬瑣摥映牯搠瑥牥業楮瑳捩爠畯楴杮愠摮猠慴整畦⁬牯档獥牴瑡潩⹮਍‭祈牢摩爠瑥楲癥污⠠䵂㔲⬠瘠捥潴⁲‫剒⥆挠潨敳⁮癯牥瀠牵⁥敶瑣牯映牯戠瑥整⁲敬楸慣⁬敲慣汬മⴊ㔠挭畨歮猠浥湡楴⁣潤畣敭瑮搠獥杩⁮浩牰癯獥爠瑥楲癥污猠数楣楦楣祴愠摮瀠潲灭⁴牧畯摮湩⹧਍‭片捡晥汵搠来慲慤楴湯椠⁳慭摮瑡牯㩹渠癥牥爠瑥牵⁮胢溜瑯楨杮甠敳畦⹬胢ඝഊⴊⴭ਍਍⌣ㄠ⤲䔠癮物湯敭瑮愠獳浵瑰潩獮愠摮挠浯慭摮൳ഊ䔊癮物湯敭瑮愠獳浵瑰潩獮ഺⴊ传㩓圠湩潤獷਍‭桓汥㩬倠睯牥桓汥⁬⸵റⴊ倠瑹潨⁮敶癮›䍠尺獕牥屳摁業楮瑳慲潴屲敤灥潣湩癜湥屶ൠഊ吊灹捩污猠慴瑲ഺ怊恠潰敷獲敨汬਍…㩃啜敳獲䅜浤湩獩牴瑡牯摜敥捰楯屮敶癮卜牣灩獴䅜瑣癩瑡⹥獰റ怊恠਍਍潃浭湯爠湵琠牡敧獴ഺ怊恠潰敷獲敨汬਍‣楐数楬敮琠獥൴☊䌠尺獕牥屳摁業楮瑳慲潴屲敤灥潣湩癜湥屶捓楲瑰屳祰桴湯攮數猠牣灩獴琯獥彴楰数楬敮瀮൹ഊ⌊䄠䥐਍癵捩牯⁮牳⹣灡⹩慭湩愺灰ⴠ瀭牯⁴〸〰ⴠ氭杯氭癥汥椠普൯ഊ⌊䘠潲瑮湥⁤椨獮摩⁥牦湯整摮⤯਍灮⁭畲⁮敤൶怊恠਍਍ⴭഭഊ⌊‣㌱ 桗牥⁥敷愠敲渠睯⼠渠硥⁴牰潩楲楴獥਍਍⌣‣桓灩数⁤慢敳楬敮਍‭湅ⵤ潴攭摮猠獹整⁭獩瀠潲畤瑣潩⵮桳灡摥愠牣獯⁳潣敲瀠潲畤瑣挠灡扡汩瑩敩⹳਍‭潄畣敭瑮瑡潩⁮潣灲獵椠⁳硥整獮癩⁥刨䅅䵄⁅‫湅楧敮牥湩⁧潊牵慮⁬‫数獲獩整瑮挠湯整瑸⸩਍‭畁桴湥楴慣楴湯映潬獷椠据畬敤爠来獩整Ⱳ瘠牥晩ⱹ爠晥敲桳‬潦杲瑯瀠獡睳牯Ɽ愠摮爠獥瑥瀠獡睳牯⁤湥灤楯瑮⹳਍髢辸†⨪剃呉䍉䱁䐠卉佃䕖奒⨪›慐獳潷摲爠獥瑥攠慭汩⁳潤丠呏眠牯⁫湩瀠潲畤瑣潩⹮਍†敓⁥䕠呎剅剐卉彅啁䥄⹔摭⁠敳瑣潩⁮‵潦⁲畦汬愠慮祬楳⹳਍†潒瑯挠畡敳›潎攠牲牯栠湡汤湩⁧桷湥删卅久彄偁彉䕋⁙獩洠獩楳杮മ 䤠灭捡㩴删来獩牴瑡潩⁮湡⁤慰獳潷摲爠獥瑥挠浯汰瑥汥⁹牢歯湥椠⁮牰摯捵楴湯മ⌊⌣传杮楯杮瀠楲牯瑩敩⁳䈨佌䭃义⁇剐䑏䍕䥔乏ഩഊ⨊倪‰胢ₔ剃呉䍉䱁⠠䱂䍏䥋䝎䐠偅佌䵙久⥔⨺പㄊ‮⨪浅楡⁬敤楬敶祲猠獹整⁭慨摲湥湩⩧‪猨敥䔠呎剅剐卉彅啁䥄⹔摭술₧⤶਍†ⴠ䄠摤攠牲牯搠瑥捥楴湯眠敨⁮䕒䕓䑎䅟䥐䭟奅椠⁳業獳湩൧ †‭摁⁤浥楡彬潬⁧慴汢⁥潦⁲畡楤⁴牴楡൬ †‭慆汩爠来獩牴瑡潩⁮晩攠慭汩猠湥⁤慦汩⁳湩瀠潲畤瑣潩൮ †‭浉汰浥湥⁴敲牴⁹潬楧⁣楷桴攠灸湯湥楴污戠捡潫晦਍†ⴠ䄠摤删獥湥⁤敷桢潯⁫慨摮敬⁲潦⁲敤楬敶祲挠湯楦浲瑡潩൮ഊ⨊倪‱胢ₔ䥈䡇⠠潄眠瑩楨⁮‱敷步㨩⨪਍⸲传獢牥慶楢楬祴搠獡扨慯摲椠灭敬敭瑮瑡潩⁮倨潲敭桴略⽳片晡湡⁡‫污牥⁴畲敬⥳਍⸳䌠⁉蛢ₒ䑃瀠潲潭楴湯⠠畢汩⽤異桳搯灥潬⁹楰数楬敮‬潲汬慢正猠牴瑡来⥹਍⸴䌠湯慴湩牥栠牡敤楮杮⠠敲潳癬⁥畣牲湥⁴潎敤椠慭敧瘠汵敮慲楢楬祴映湩楤杮⥳਍⸵䔠慭汩爠瑡⁥楬業楴杮⠠牰癥湥⁴敲敳⁴灳浡ഩ㘊‮摁業⁮浥楡⁬潬獧搠獡扨慯摲਍਍⨪㉐钀䴠䑅啉⁍䐨⁯楷桴湩㈠眠敥獫㨩⨪਍⸷䔠摮琭ⵯ湥⁤敲牧獥楳湯琠獥獴映牯愠瑵⽨敲潰瑲振慨⁴慰桴൳㠊‮浅楡⁬整灭慬整瘠牥楳湯湩⁧洨癯⁥牦浯栠牡ⵤ潣敤⁤潴䐠⥂਍⸹匠湥䝤楲⁤‫坁⁓䕓⁓慦汬慢正瀠潲楶敤獲਍〱‮灏楴湯污洠摯汥椠灭潲敶敭瑮⁳䄨捲慆散攠灸牥浩湥⁴牴捡⥫਍਍ⴭഭഊ⌊‣㐱 潈⁷潴爠獥浵⁥慳敦祬椠⁮⁡敮⁷敳獳潩൮ഊㄊ‮敒摡琠楨⁳楦敬⠠䍠䅌䑕⹅摭⥠映物瑳മ㈊‮⨪剃呉䍉䱁⨪›敒摡怠久䕔偒䥒䕓䅟䑕呉洮恤猠捥楴湯㔠⠠浥楡⽬慰獳潷摲爠獥瑥朠灡⥳മ㌊‮敒摡怠䕒䑁䕍洮恤映牯愠捲楨整瑣牵⁥湡⁤畲⁮湩瑳畲瑣潩獮മ㐊‮敒摡怠久䥇䕎剅义彇佊剕䅎⹌摭⁠敲敬慶瑮猠捥楴湯⁳潦⁲敤灥栠獩潴祲മ㔊‮桃捥⁫⹠楧桴扵振灯汩瑯椭獮牴捵楴湯⹳摭⁠潦⁲数獲獩整瑮挠湯瑳慲湩獴振湯整瑸മ㘊‮慖楬慤整爠湵楴敭猠慴整焠極正祬ഺ †‭湥⁶捡楴慶楴湯਍†ⴠ䄠䥐栠慥瑬⁨湥灤楯瑮਍†ⴠ漠敮瀠灩汥湩⁥浳歯⁥整瑳਍†ⴠ⨠个坅⨪›敖楲祦删卅久彄偁彉䕋⁙獩猠瑥椠⁮攮癮⠠牣瑩捩污映牯愠瑵⥨਍਍ⴭഭഊ⌊‣㔱 牔瑵⁨楨牥牡档⁹愨瑮⵩牤晩⥴਍਍晉愠祮挠湯汦捩⁴灡数牡⁳敢睴敥⁮楦敬ⱳ琠畲瑳椠⁮桴獩漠摲牥ഺㄊ‮潃敤椠⁮獠捲怯⬠琠獥獴椠⁮瑠獥獴怯਍⸲怠久䥇䕎剅义彇佊剕䅎⹌摭⁠昨汵⁬档潲潮潬祧ഩ㌊‮⹠楧桴扵振灯汩瑯椭獮牴捵楴湯⹳摭⁠瀨牥楳瑳湥⁴灯牥瑡湩⁧敭潭祲ഩ㐊‮剠䅅䵄⹅摭⁠瀨扵楬ⵣ慦楣杮猠浵慭祲ഩ㔊‮䍠䅌䑕⹅摭⁠琨楨⁳灯牥瑡潩慮⁬畱捩⵫敭潭祲映汩⥥਍਍ⴭഭഊ⌊‣㘱 桃湡敧氠杯映牯琠楨⁳楦敬਍਍‭〲㘲〭ⴳ〲›湉瑩慩⁬牣慥楴湯漠⁦䍠䅌䑕⹅摭⁠獡瀠牥楳瑳湥⁴牡档瑩捥畴敲瀯潲牧獥⽳畢⁧敭潭祲猠浵慭祲‬污杩敮⁤潴挠牵敲瑮瀠潲敪瑣挠牯異⹳਍‭〲㘲〭ⴳ〲›湅整灲楲敳栠牡敤楮杮瀠獡⁳胢ₔ摡敤⁤慬敹⁲慭牴硩‬楴敭楬敮‬湥灤楯瑮洠灡‬牡楴慦瑣椠癮湥潴祲‬楲歳爠来獩整Ⱳ戠潯獴牴灡瀠潲灭ⱴ洠楡瑮湥湡散瀠潲潴潣ⱬ愠摮爠捥湯楣楬瑡潩⁮潮整⹳਍‭〲㘲〭ⴳ〲›敒污瑩⁹畡楤⁴慰獳钀搠睯杮慲敤⁤癯牥瑳瑡摥挠浯汰瑥潩⁮汣楡獭‬汣牡晩敩⁤䥃瘠⁳䑃‬摡敤⁤湥整灲楲敳戠捡汫杯愠摮爠獩⁫瑩浥⁳潦⁲敤汰祯敭瑮漯獢牥慶楢楬祴猯捥牵瑩⁹慧獰മഊⴊⴭ਍਍⌣ㄠ⤷䰠祡牥挠浯汰瑥潩⁮慭牴硩⠠灯牥瑡潩慮⁬牴瑵⥨਍਍⁼慌敹⁲⁼瑓瑡獵簠䬠祥漠瑵異獴簠嘠牥晩捩瑡潩⁮楳湧污簠਍⵼ⴭ⵼ⴭ⵼ⴭ⵼ⴭർ簊〠钀䌠乎琠慲湩湩⁧⁼浉汰浥湥整⁤⁼晅楦楣湥乴瑥䈭″潭敤⁬‫汣獡⁳慭灰湩⁧⁼〸〮┳吠䅔搠捯浵湥整⁤ർ簊ㄠ钀䤠普牥湥散簠䤠灭敬敭瑮摥簠吠䅔椠普牥湥散⬠䌠䅌䕈瀠牡瑩⁹‫片摡䌭䵁⬫簠䔠摮琭ⵯ湥⁤汣獡楳祦⬠栠慥浴灡簠਍⁼′胢ₔ䉋刯䝁簠䤠灭敬敭瑮摥簠㤠㔬ㄴ琠灹獥‬㜴㜬㔰瘠捥潴獲‬票牢摩爠瑥楲癥污簠䌠湯整瑸札潲湵敤⁤楨瑳牯慩⁮畯灴瑵簠਍⁼″胢ₔ杁湥⁴牧灡⁨⁼浉汰浥湥整⁤⁼慇整敫灥牥⬠㐠猠数楣污獩⁴条湥獴⬠猠湹桴獥獩簠㌠爭畯整戠桥癡潩⁲浩汰浥湥整⁤ർ簊㐠钀䘠獡䅴䥐簠䤠灭敬敭瑮摥簠䄠瑵ⱨ氠浩瑩ⱳ洠瑥楲獣‬楨瑳牯ⱹ愠瑣癩⁥敬牡楮杮‬档瑡猠牴慥⁭⁼㈱′整瑳⁳楤捳癯牥摥戠⁹祰整瑳簠਍⁼‵胢ₔ牆湯整摮簠䤠灭敬敭瑮摥簠䄠慮祬敺栯獩潴祲支灸潬敲振慨⽴潤獣愯潢瑵愯浤湩愯瑵⁨慰敧⁳⁼協戯極摬挠敨正⁳牰獥湥⁴湩䌠⁉ർ簊㘠钀䐠捯敫⁲湩牦⁡⁼浉汰浥湥整⁤栨牡敤楮杮瀠湥楤杮 ⁼ⴷ敳癲捩⁥潣灭獯⁥瑳捡⁫‫杮湩⁸潲瑵湩⁧⁼敓畣楲祴猠慣湮湩⁧畣牲湥汴⁹汦条⁳潎敤椠慭敧瘠汵獮簠਍⁼‷胢ₔ䥃䌯⁄‫整瑳⁳⁼䥃挠浯汰瑥ⱥ䌠⁄数摮湩⁧⁼楇䡴扵䄠瑣潩獮䌠⁉‫整瑳洠瑡楲⁸⁼䥃眠牯晫潬⁷牰獥湥㭴搠灥潬⁹畡潴慭楴湯渠瑯礠瑥眠物摥簠਍਍ⴭഭഊ⌊‣㠱 楍敬瑳湯⁥楴敭楬敮⠠潣摮湥敳⥤਍਍獕⁥桴獩眠敨⁮潳敭湯⁥獡獫鲀潨⁷楤⁤敷朠瑥栠牥㽥胢₝楷桴畯⁴敲摡湩⁧污⁬潪牵慮⁬敳瑣潩獮മഊㄊ‮慄慴敳⁴畡楤⁴湡⁤楦瑬牥湩⁧㤨㜬㘱銆㐠㠳琠慲湩扡敬挠慬獳獥ഩ㈊‮䱃䡁⁅‫敲楳敺瀠敲牰捯獥楳杮瀠灩汥湩⁥瑳扡汩穩摥਍⸳䔠晦捩敩瑮敎⵴㍂琠慲湩湩⁧瑳捡⁫楦慮楬敺⁤䄨偍‬業畸Ɒ眠楥桧整⁤慳灭楬杮ഩ㐊‮〸〮┳吠䅔戠湥档慭歲愠档敩敶⁤湯㐠㠳挠慬獳獥਍⸵䰠来捡⁹䉋戠極瑬⠠浳污⁬捳灯⥥‬桴湥攠瑮牥牰獩⁥䅒⁇敲敤楳湧猠慴瑲摥਍⸶䘠汵⁬潣灲獵猠牣灡⁥硥慰摮摥琠⁯ⰹ㐵‱祴数൳㜊‮䅒⁇湥楧敮挠敲瑡摥眠瑩⁨䵂㔲⬠瘠捥潴⁲‫剒⁆票牢摩爠湡楫杮਍⸸䌠牨浯⁡湩敤⁸敲畢汩⁴潴㐠ⰷ〷‵敶瑣牯⁳㔨猠浥湡楴⁣档湵獫瀠牥琠灹⥥਍⸹䠠獩潴楲湡瘯污摩瑡牯椯癮獥楴慧潴⁲灵牧摡摥琠⁯牴敵删䝁愠摮爠扯獵⁴慦汬慢正൳ㄊ⸰䜠瑡步敥数⁲慨摲湥摥⠠潬杧湩Ⱨ琠浩湩Ⱨ爠瑥祲‬牧捡晥汵搠来慲慤楴湯ഩㄊ⸱䘠獡䅴䥐瀠潲畤瑣潩⁮慨摲湥湩⁧愨瑵ⱨ爠瑡⁥楬業楴杮‬敭牴捩ⱳ猠捥牵瑩⁹敨摡牥⥳਍㈱‮敎瑸樮⁳湥整灲楲敳映潲瑮湥⁤洨獩楳湯挠湯牴汯唠ⱘ栠獩潴祲愯浤湩振慨⽴潤獣瀠条獥ഩㄊ⸳䜠慲ⵤ䅃⭍‫灵牧摡摥琠⁯㤱韃㤱爠獥汯瑵潩⁮湡⁤浥敢摤摥椠⁮敲潰瑲⽳䥕਍㐱‮捁楴敶氠慥湲湩⁧敦摥慢正氠潯⁰浩汰浥湥整⁤湥ⵤ潴攭摮਍㔱‮潄正牥㜠猭牥楶散猠慴正眠物摥※䥃猠慴楢楬敺⁤瑡ㄠ㈲琠獥獴搠獩潣敶敲൤ㄊ⸶䌠牵敲瑮瀠慨敳›湥整灲楲敳漠数慲楴湯⁳慨摲湥湩⁧䌨ⱄ漠獢牥慶楢楬祴‬當湬牥扡汩瑩⁹敲敭楤瑡潩⥮਍਍ⴭഭഊ⌊‣㤱 湅灤楯瑮洠灡⠠楨桧瘭污敵䄠䥐猠牵慦散ഩഊ倊楲慭祲朠潲灵㩳਍‭汃獡楳楦慣楴湯爯灥牯楴杮›汣獡楳祦⬠爠灥牯⁴敳癲湩⁧‫牧摡慣⁭敳癲湩൧ⴊ䠠獩潴祲›楬瑳搯瑥楡⽬敤敬整是敥扤捡⁫潷歲汦睯൳ⴊ䠠慥瑬⽨灯㩳栠慥瑬⁨‫敭牴捩൳ⴊ䄠瑣癩⁥敬牡楮杮›慣摮摩瑡⁥敲牴敩慶ⱬ挠牯敲瑣潩⁮慭歲湩Ⱨ攠灸牯⽴敲牴楡⁮畳灰牯൴ⴊ䄠瑵⽨敳獳潩㩮氠杯湩爯来獩整⽲敲牦獥⽨畡桴湥楴慣整⁤獵牥映潬獷਍‭桃瑡爯獥慥捲㩨猠湹档潲潮獵挠慨⁴‫卓⁅瑳敲浡湩⁧档瑡਍਍敄楳湧渠瑯㩥਍‭敋灥愠瑵⵨牰瑯捥整⁤湡⁤異汢捩攠摮潰湩獴挠敬牡祬猠灥牡瑡摥※癡楯⁤捡楣敤瑮污攠灸獯牵⁥桴潲杵⁨牰硯⁹敲牷瑩獥മഊⴊⴭ਍਍⌣㈠⤰䴠摯汥愠摮搠瑡⁡牡楴慦瑣⁳湩敶瑮牯൹ഊ䌊牯⁥牡楴慦瑣㩳਍‭浠摯汥⽳敢瑳浟摯汥瀮桴⁠胢ₔ牰浩牡⁹乃⁎敷杩瑨൳ⴊ怠潭敤獬振慬獳浟灡楰杮瀮桴⁠胢ₔ慬敢⽬湩敤⁸慭൰ⴊ怠慤慴洯瑥摡瑡⽡档潲慭摟形慲⽧⁠胢ₔ牰摯捵楴湯瘠捥潴⁲湩敤൸ⴊ怠慤慴洯瑥摡瑡⽡湣瑟灹獥浟瑥摡瑡彡畦汬樮潳恮⠠牯攠畱癩污湥⁴畦汬洠瑥摡瑡⁡畤灭ഩⴊ怠敲潰瑲⽳⁠胢ₔ敧敮慲整⁤䑐獆愠摮䜠慲ⵤ䅃⁍浩条獥਍਍灏牥瑡潩慮⁬潣獮牴楡瑮㩳਍‭潍敤⁬湡⁤敭慴慤慴愠敲椠瑮湥楴湯污祬氠牡敧愠摮朠湥牥污祬攠捸畬敤⁤牦浯朠瑩മⴊ删湵楴敭爠煥極敲⁳潬慣⁬癡楡慬楢楬祴漠⁦潭敤⁬‫敭慴慤慴洠畯瑮⁳潦⁲畦汬挠灡扡汩瑩⹹਍਍ⴭഭഊ⌊‣ㄲ 楒歳爠来獩整⁲眨慨⁴慣⁮瑳汩⁬牢慥⥫਍਍⸱⨠䐪瑡⁡楤瑳楲畢楴湯猠楨瑦爠獩⩫പ †ⴠ䌠瑡污杯瀭潨潴猠祴敬洠獩慭捴⁨慣⁮敤牰獥⁳潣普摩湥散搠獥楰整椠⵮牴楡楮杮氠扡汥⹳਍††‭楍楴慧楴湯›慷湲湩⁧塕⬠瀠敲牰捯獥楳杮瀠牡瑩⁹‫潣普摩湥散愭慷敲洠獥慳楧杮മഊ㈊‮⨪䱌⁍牰癯摩牥瘠汯瑡汩瑩⁹楲歳⨪਍††‭偁⁉畱瑯⽡慲整愯慶汩扡汩瑩⁹慣⁮慶祲മ †ⴠ䴠瑩杩瑡潩㩮瀠潲楶敤⁲慦汬慢正挠慨湩⬠氠捯污䌠⁖慦汬慢正⬠爠瑥祲氠杯捩മഊ㌊‮⨪湉牦⁡牤晩⁴楲歳⨪਍††‭潄獣洠祡氠条戠桥湩⁤敲潰猠慴整മ †ⴠ䴠瑩杩瑡潩㩮琠畲桴栠敩慲捲票⬠瀠牥潩楤⁣潣瑮硥⁴敲牦獥⁨牰瑯捯汯മഊ㐊‮⨪灏牥瑡潩慮⁬敳牣瑥栠杹敩敮爠獩⩫പ †ⴠ圠潲杮祬洠湡条摥怠攮癮⁠慣⁮敬歡琠歯湥⹳਍††‭楍楴慧楴湯›⹠湥⹶硥浡汰恥‬楧楴湧牯⁥楤捳灩楬敮‬畲瑮浩⁥湥⁶湩敪瑣潩⹮਍਍⸵⨠倪牥潦浲湡散爠来敲獳潩⁮楲歳⨪਍††‭敆瑡牵⁥摡楤楴湯⁳慣⁮敤牧摡⁥慬整据⹹਍††‭楍楴慧楴湯›敫灥琠浩湩⁧潬獧‬慷捴⁨潲瑵ⵥ灳捥晩捩爠湵楴敭‬牰獥牥敶琠獥⁴慧整⹳਍਍⸶⨠䌪湯慴湩牥猠捥牵瑩⁹牤晩⁴楲歳⨪਍††‭慂敳椠慭敧⁳慭⁹捡畣畭慬整栠杩⁨當湬牥扡汩瑩敩⁳癯牥琠浩⹥਍††‭楍楴慧楴湯›楰⁮慰捴敨⁤慴獧搯杩獥獴‬摡⁤浩条⁥捳湡楮杮朠瑡⁥湩䌠ⱉ爠扥極摬映敲畱湥汴⹹਍਍⸷⨠䌪⽉䑃猠潣数朠灡爠獩⩫പ †ⴠ䌠⁉慶楬慤整⁳潣敤戠瑵渠⁯畡潴慭楴⁣敤汰祯敭瑮瀠瑡⁨硥獩獴മ †ⴠ䴠瑩杩瑡潩㩮愠摤猠慴楧杮瀯潲⁤䑃眠牯晫潬⁷楷桴洠杩慲楴湯⬠栠慥瑬⵨档捥⁫慧整⹳਍਍ⴭഭഊ⌊‣㈲ 敓獳潩⁮潢瑯瑳慲⁰牰浯瑰⠠潣祰瀯獡整ഩഊ唊敳琠楨⁳湩愠渠睥䄠⁉敳獳潩⁮潴爠獥潴敲挠湯整瑸焠極正祬ഺഊ∊敒摡怠䱃啁䕄洮恤‬剠䅅䵄⹅摭Ⱡ怠久䥇䕎剅义彇佊剕䅎⹌摭Ⱡ愠摮怠朮瑩畨⽢潣楰潬⵴湩瑳畲瑣潩獮洮恤‮畓浭牡穩⁥畣牲湥⁴牡档瑩捥畴敲‬桳灩数⁤慬敹獲‬湵敲潳癬摥爠獩獫‬慬整瑳戠杵映硩獥‬湡⁤浩敭楤瑡⁥敮瑸瀠楲牯瑩敩⹳吠敨⁮牰灯獯⁥⁡業楮慭⁬慳敦瀠慬⁮潦⁲桴⁥敲畱獥整⁤慴歳愠摮甠摰瑡⁥䍠䅌䑕⹅摭⁠档湡敧氠杯愠瑦牥椠灭敬敭瑮瑡潩⹮ഢഊⴊⴭ਍਍⌣㈠⤳䌠湯整瑸洠楡瑮湥湡散瀠潲潴潣൬ഊ䄊瑦牥攠敶祲洠橡牯挠慨杮⁥敳㩴਍⸱唠摰瑡⁥牰橯捥⁴潣敤琯獥獴映物瑳മ㈊‮灕慤整怠䕒䑁䕍洮恤椠⁦硥整湲污昭捡湩⁧敢慨楶牯挠慨杮摥മ㌊‮灁数摮爠汥癥湡⁴敳瑣潩⡮⥳椠⁮䕠䝎义䕅䥒䝎䩟問乒䱁洮恤映牯映汵⁬档潲潮潬祧മ㐊‮敒牦獥⁨⹠楧桴扵振灯汩瑯椭獮牴捵楴湯⹳摭⁠数獲獩整瑮挠湯整瑸മ㔊‮灕慤整怠䱃啁䕄洮恤猠慮獰潨⁴敳瑣潩獮ഺ †ⴠ猠慴畴ⱳ洠瑥楲獣‬楴敭楬敮‬楲歳ⱳ渠硥⁴牰潩楲楴獥਍⸶䄠摤漠敮氠湩⁥湩怠䱃啁䕄洮恤挠慨杮⁥潬⁧楷桴搠瑡⁥‫捳灯⹥਍਍桔獩瀠敲敶瑮⁳洢浥牯⁹牤晩≴戠瑥敷湥椠灭敬敭瑮瑡潩⁮湡⁤慮牲瑡癩⁥潤畣敭瑮⹳਍਍ⴭഭഊ⌊‣㐲 敒潣据汩慩楴湯渠瑯獥⠠浩潰瑲湡⥴਍਍‭潓敭栠獩潴楲慣⁬潤畣敭瑮⁳慭⁹瑳汩⁬潣瑮楡⁮慥汲敩⁲瀢湥楤杮•瑳瑡浥湥獴映牯氠祡牥⁳桴瑡愠敲渠睯挠浯汰瑥⹥਍‭桗湥挠湯汦捩獴愠灰慥Ⱳ搠⁯潮⁴敤敬整栠獩潴祲※湩瑳慥⁤牰獥牥敶挠牨湯汯杯⁹湡⁤敲祬漠⁮桴⁥牴瑵⁨楨牥牡档⁹湩匠捥楴湯ㄠ⸵਍‭䍠䅌䑕⹅摭⁠獩愠猠慮獰潨ⱴ渠瑯愠爠灥慬散敭瑮映牯琠敨樠畯湲污മഊⴊⴭ਍਍⌣㈠⤵传数慲楴湯污猠潭敫挠敨正楬瑳⠠畱捩⁫潣普摩湥散爠湵ഩഊ刊湵琠楨⁳敳畱湥散愠瑦牥洠橡牯洠牥敧⁳牯攠癮物湯敭瑮挠慨杮獥ഺഊㄊ‮捁楴慶整攠癮物湯敭瑮਍††‭♠䌠尺獕牥屳摁業楮瑳慲潴屲敤灥潣湩癜湥屶捓楲瑰屳捁楴慶整瀮ㅳൠഊ㈊‮偁⁉敨污桴਍††‭畠楶潣湲猠捲愮楰洮楡㩮灡⁰ⴭ潰瑲㠠〰‰ⴭ潬ⵧ敬敶⁬湩潦ൠ †ⴠ䌠敨正怠䕇⁔愯楰栯慥瑬恨਍਍⸳䘠潲瑮湥⁤潢瑯਍††‭湉怠牦湯整摮怯›湠浰爠湵搠癥ൠ †ⴠ嘠污摩瑡⁥灵潬摡映潬⁷湡⁤湯⁥楨瑳牯⁹敤慴汩瀠条൥ഊ㐊‮楐数楬敮猠湡瑩൹ †ⴠ怠…㩃啜敳獲䅜浤湩獩牴瑡牯摜敥捰楯屮敶癮卜牣灩獴灜瑹潨⹮硥⁥捳楲瑰⽳整瑳灟灩汥湩⹥祰ൠഊ㔊‮敔瑳⁳慢敳楬敮਍††‭灠瑹獥⁴整瑳⽳湵瑩ⴠ恱਍††‭灠瑹獥⁴整瑳⽳湩整牧瑡潩⁮焭ൠഊ㘊‮晉愠祮洠獩慭捴⁨灡数牡൳ †ⴠ唠摰瑡⁥䕠䝎义䕅䥒䝎䩟問乒䱁洮恤映物瑳⠠档潲潮潬祧ഩ †ⴠ吠敨⁮敲牦獥⁨⹠楧桴扵振灯汩瑯椭獮牴捵楴湯⹳摭⁠湡⁤䍠䅌䑕⹅摭ൠഊⴊⴭ਍਍⌣㈠⤶䔠瑮牥牰獩⁥慢正潬⁧愨瑵潨楲慴楴敶渠硥⁴捡楴湯⥳਍਍牐潩楲祴倠㨰਍‭敒潳癬⁥潤畣敭瑮瑡潩⁮牤晩㩴欠敥⁰剠䅅䵄⹅摭Ⱡ怠朮瑩畨⽢潣楰潬⵴湩瑳畲瑣潩獮洮恤‬湡⁤䍠䅌䑕⹅摭⁠污杩敮⁤晡整⁲慥档洠汩獥潴敮മഊ倊楲牯瑩⁹ㅐ⠠畭瑳栭癡⁥潦⁲湥整灲楲敳爠慥楤敮獳㨩਍‭摁⁤䑃瀠灩汥湩⁥戨極摬椠慭敧‬捳湡‬異桳‬敤汰祯‬潲汬慢正栠潯獫⸩਍‭摁⁤扯敳癲扡汩瑩⁹瑳捡⁫楷楲杮⠠牐浯瑥敨獵猠牣灡湩⁧‫片晡湡⁡慤桳潢牡獤⬠愠敬瑲琠牨獥潨摬⥳മⴊ䘠硩挠湯慴湩牥瘠汵敮慲楢楬祴映湩楤杮⁳湩映潲瑮湥⁤浩条⁥湡⁤湥潦捲⁥捳湡朠瑡⁥湩䌠⹉਍‭摁⁤慢正灵爯獥潴敲爠湵潢歯映牯倠獯杴敲兓⁌湡⁤敲潰瑲愠瑲晩捡獴മഊ倊楲牯瑩⁹㉐⠠畱污瑩⽹潣灭楬湡散㨩਍‭摁⁤畦汬䔠䔲琠獥⁴畳瑩⁥潣敶楲杮愠瑵⁨昨牯潧⽴敲敳⁴慰獳潷摲Ⱙ挠慬獳晩ⱹ爠灥牯⁴潤湷潬摡‬湡⁤档瑡猠牴慥⹭਍‭摁⁤䅓呓猯捥敲⁴捳湡楮杮椠⁮䥃⠠灠灩愭摵瑩Ⱡ怠灮⁭畡楤恴‬瑠楲祶Ⱡ猠捥敲⁴捳湡敮⥲മⴊ䄠摤爠汥慥敳挠敨正楬瑳眠瑩⁨敳慭瑮捩瘠牥楳湯琠条楧杮愠摮挠慨杮汥杯愠瑵浯瑡潩⹮਍
+# CLAUDE.md — DeepCoin-Core Persistent Project Memory
+
+Last updated: 2026-05-13
+Workspace root: `C:\Users\Administrator\deepcoin`
+Primary repo: `ChaiebDhia/DeepCoin-Core` (branch: `main`)
+
+---
+
+## 0) Purpose of this file
+
+This file is the **single-session bootstrap memory** for any AI assistant or contributor.
+It captures:
+- System architecture
+- Project structure
+- Delivery progress by layer
+- Key engineering decisions
+- Bug/fix ledger (critical issues only)
+- Runbook commands
+- What is done vs what is pending
+
+For **full line-by-line history**, use:
+- `ENGINEERING_JOURNAL.md` (master history; 199+ sections)
+- `.github/copilot-instructions.md` (persistent operational context)
+- `README.md` (public architecture + setup + status)
+
+---
+
+## 1) Mission and product definition
+
+DeepCoin-Core is an end-to-end AI system that:
+1. Classifies an ancient coin from one image (CNN).
+2. Routes analysis through specialized agents by confidence.
+3. Grounds historical output with RAG (hybrid BM25 + vector + RRF).
+4. Generates a professional PDF report with explainability.
+5. Handles unknown/out-of-distribution inputs gracefully (never empty output).
+
+Academic context:
+- PFE (Final Year Engineering Internship)
+- ESPRIT × YEBNI
+- Student: Dhia Chaieb
+
+---
+
+## 2) Current status snapshot (high-level)
+
+### Delivery status
+- Core build (Layers 0–5): **implemented**
+- Layer 6 (Docker/infra): **implemented baseline, enterprise hardening pending**
+- Layer 7 (CI/CD): **CI implemented, CD/deployment automation pending**
+- A+++ quality upgrades: **5/6 complete** (MLflow, Grad-CAM++, Active Learning, Docker wiring, Observability dashboard complete; ArcFace track remains roadmap item)
+- Advanced Features: **Implemented i18n (French/English toggle), Admin Coin Inventory Workflow, Prometheus & Alertmanager Observability Stack**
+
+### Core metrics (latest documented)
+- CNN accuracy: **80.03%** (TTA)
+- Classes in CNN: **438**
+- KB coverage: **9,541 / 9,716** types
+- Chroma vectors: **47,705** (5 chunks per type)
+- Tests: **122 discovered via pytest collect-only**
+- Grad-CAM++: **19×19 target map** integration in reports/UI
+
+### Product characteristics
+- Full-stack architecture implemented and runnable locally
+- Security hardening present (auth, rate limits, headers, safe loading)
+- Graceful degradation across routes
+- Active learning feedback loop implemented
+- Enterprise operations maturity still in progress (deployment, observability, image hardening)
+
+---
+
+## 3) Architecture (authoritative summary)
+
+## Stage A — Vision inference
+1. Input image
+2. Preprocessing: auto-crop + CLAHE (LAB L-channel) + aspect-preserving resize (299x299)
+3. EfficientNet-B3 inference
+4. Output: top label + confidence + top-5 + optional Grad-CAM++
+
+## Stage B — Agentic orchestration (LangGraph)
+Routing thresholds:
+- `confidence > 0.85` → Historian path
+- `0.40 <= confidence <= 0.85` → Validator + historian path
+- `confidence < 0.40` → Investigator path
+
+Agents:
+- `gatekeeper.py`: orchestration, timing, retry, graceful degradation
+- `historian.py`: grounded historical synthesis via RAG contexts
+- `validator.py`: OpenCV material consistency analysis
+- `investigator.py`: low-confidence visual analysis + broad KB lookup
+- `synthesis.py`: normalized final narrative + PDF generation
+
+## Stage C — Reporting and delivery
+- Structured response API + persisted analysis
+- PDF report in `reports/`
+- Frontend visualization (including Grad-CAM card)
+
+---
+
+## 4) RAG architecture (production shape)
+
+Engine:
+- `src/core/rag_engine.py`
+
+Data model:
+- Corpus records split into 5 semantic chunks:
+  - `identity`
+  - `obverse`
+  - `reverse`
+  - `material`
+  - `context`
+
+Indexing:
+- Vector index: ChromaDB (all-MiniLM-L6-v2 embeddings)
+- Keyword index: BM25
+- Merge strategy: Reciprocal Rank Fusion (RRF)
+
+Retrieval behavior:
+- Historian: usually type-constrained retrieval + context blocks
+- Validator: material-focused signals
+- Investigator: broad corpus retrieval for unknowns
+
+Guarantee:
+- LLM narrative is grounded using context blocks; fallback modes exist when model/provider unavailable.
+
+---
+
+## 5) Deep Learning pipeline summary
+
+Model:
+- EfficientNet-B3 (transfer learning)
+- Custom classification head for 438 classes
+
+Training characteristics (documented setup):
+- AdamW + cosine annealing
+- label smoothing
+- Albumentations augmentation
+- mixup
+- AMP/scaler
+- weighted sampling for class imbalance
+- early stopping
+
+Data facts:
+- Raw: 115,160 images / 9,716 types
+- Filtered training subset (>=10 images/class): 7,677 images / 438 classes
+
+Inference quality:
+- TTA enabled path
+- preprocessing parity fixes applied (CLAHE alignment)
+- Grad-CAM upgraded to Grad-CAM++ and finer target layer resolution
+
+---
+
+## 6) Backend summary (FastAPI)
+
+Key files:
+- `src/api/main.py`
+- `src/api/routes/classify.py`
+- `src/api/routes/history.py`
+- `src/api/routes/active_learning.py`
+- `src/api/auth.py`
+- `src/api/limiter.py`
+- `src/api/_store.py`
+
+Capabilities:
+- classify endpoint with routing + report generation
+- history retrieval/detail/delete/feedback flows
+- active learning candidate/mark/export endpoints
+- auth controls (JWT / API key depending on route)
+- rate limiting and request safety controls
+- health and metrics endpoints
+
+Hardening themes:
+- safe model loading (`weights_only=True` where relevant)
+- controlled file serving and cleanup
+- security headers, CORS discipline, request IDs, logging
+
+---
+
+## 7) Frontend summary (Next.js 15)
+
+Location:
+- `frontend/`
+
+Major user surfaces:
+- Analyze flow
+- History list/detail
+- Explore/gallery
+- Chat
+- Docs/About
+- Admin dashboards
+
+Notable UX/engineering features:
+- mission-control pipeline visualization
+- 3-state confidence presentation
+- cancel/abort flow for long analyses
+- Grad-CAM display card
+- feedback/active-learning hooks
+- auth/session refresh improvements
+
+---
+
+## 8) Infrastructure + CI/CD
+
+Containerization:
+- Docker + Docker Compose setup (multi-service stack)
+- Nginx reverse proxy
+- PostgreSQL, Redis, MLflow, LocalStack integration in stack design
+
+Runtime stack (compose):
+- `postgres` (PostgreSQL 17)
+- `redis` (Redis 7)
+- `api` (FastAPI)
+- `web` (Next.js 15)
+- `nginx` (reverse proxy)
+- `mlflow` (tracking server)
+- `localstack` (S3 simulation)
+
+Quality gates:
+- Unit + integration tests
+- GitHub Actions CI
+- Lint/format/test workflows
+
+Observed testing baseline:
+- 122 tests passing (documented)
+
+---
+
+## 9) Project structure (practical map)
+
+- `src/data_pipeline/` — preprocessing components
+- `src/core/` — model factory, inference, KB/RAG core
+- `src/agents/` — gatekeeper + 4 specialist agents + synthesis
+- `src/api/` — FastAPI app, routes, auth, store
+- `scripts/` — training, eval, KB build, pipeline tests, active learning
+- `tests/` — unit/integration coverage
+- `frontend/` — Next.js app
+- `data/` — processed/raw/metadata stores
+- `models/` — trained weights + class mapping
+- `reports/` — generated PDFs and explainability artifacts
+- `.github/workflows/` — CI pipelines
+
+---
+
+## 10) Bug and fix ledger (critical condensed memory)
+
+This is a condensed list of major fixes repeatedly referenced during development.
+For full bug chronology and root-cause narratives, see `ENGINEERING_JOURNAL.md` and `.github/copilot-instructions.md`.
+
+1. Device string bug (`"auto"`) in inference path → explicit cuda/cpu resolution.
+2. Historian/validator type-id mismatch (`class_id` vs true CN label) → switched to label string for KB lookup.
+3. PDF rendering defects:
+   - multi-cell x drift
+   - duplicate footer page artifacts
+   - Greek transliteration handling
+   - signature mismatch between gatekeeper/synthesis
+4. Scraper/KB ingestion issues:
+   - SSL/cert handling
+   - noisy scraped characters cleanup
+   - mint/region parsing contamination
+   - filtered error records
+5. ETA reporting bug in full scrape command corrected.
+6. Investigator metal parsing priority fixed (bronze/silver phrase ambiguity).
+7. Investigator RRF score key mismatch fixed (`rrf_score` vs `score`).
+8. Train/inference distribution mismatch fixed by adding CLAHE parity in inference.
+9. `.gitignore` path anchoring bug fixed to avoid excluding `frontend/lib/`.
+10. Validator patina false mismatch fixed:
+    - silver saturation threshold widened
+    - uncertainty + consensus override logic
+11. Security hardening:
+    - `weights_only=True` load safeguards
+    - singleton race protection locks
+    - import cleanup in hot paths
+12. Frontend/runtime reliability fixes:
+    - proxy/IPv6 timeout routing
+    - stale state, modal flow, cancellation wiring
+    - CSP and resource loading issues
+13. Chat/security fixes:
+    - role validation for prompt injection guard
+    - SSE streaming architecture and stability
+14. Auth/session reliability:
+    - JWT refresh flow and retry queueing
+    - route/proxy ordering corrections
+15. Multiple admin/history/report path and UX consistency defects resolved.
+
+---
+
+## 11) Key engineering decisions (why the system looks like this)
+
+- EfficientNet-B3 chosen for performance/VRAM balance.
+- CLAHE in LAB (L-channel only) to preserve patina-relevant color semantics.
+- Aspect-preserving resize/pad to avoid geometric distortion of coins.
+- LangGraph selected for deterministic routing and stateful orchestration.
+- Hybrid retrieval (BM25 + vector + RRF) chosen over pure vector for better lexical recall.
+- 5-chunk semantic document design improves retrieval specificity and prompt grounding.
+- Graceful degradation is mandatory: never return “nothing useful.”
+
+---
+
+## 12) Environment assumptions and commands
+
+Environment assumptions:
+- OS: Windows
+- Shell: PowerShell 5.1
+- Python venv: `C:\Users\Administrator\deepcoin\venv\`
+
+Typical start:
+```powershell
+& C:\Users\Administrator\deepcoin\venv\Scripts\Activate.ps1
+```
+
+Common run targets:
+```powershell
+# Pipeline test
+& C:\Users\Administrator\deepcoin\venv\Scripts\python.exe scripts/test_pipeline.py
+
+# API
+uvicorn src.api.main:app --port 8000 --log-level info
+
+# Frontend (inside frontend/)
+npm run dev
+```
+
+---
+
+## 13) Where we are now / next priorities
+
+### Shipped baseline
+- End-to-end system is production-shaped across core product capabilities.
+- Documentation corpus is extensive (README + Engineering Journal + persistent context).
+- Authentication flows include register, verify, refresh, forgot password, and reset password endpoints.
+⚠️  **CRITICAL DISCOVERY**: Password reset emails do NOT work in production.
+  See `ENTERPRISE_AUDIT.md` section 5 for full analysis.
+  Root cause: No error handling when RESEND_API_KEY is missing.
+  Impact: Registration and password reset completely broken in production.
+### Ongoing priorities (BLOCKING PRODUCTION)
+
+**P0 — CRITICAL (BLOCKING DEPLOYMENT):**
+1. **Email delivery system hardening** (see ENTERPRISE_AUDIT.md § 6)
+   - Add error detection when RESEND_API_KEY is missing
+   - Add email_log table for audit trail
+   - Fail registration if email send fails in production
+   - Implement retry logic with exponential backoff
+   - Add Resend webhook handler for delivery confirmation
+
+**P1 — HIGH (Do within 1 week):**
+2. Observability dashboard implementation (Prometheus/Grafana + alert rules)
+3. CI → CD promotion (build/push/deploy pipeline, rollback strategy)
+4. Container hardening (resolve current Node image vulnerability findings)
+5. Email rate limiting (prevent reset spam)
+6. Admin email logs dashboard
+
+**P2 — MEDIUM (Do within 2 weeks):**
+7. End-to-end regression tests for auth/report/chat paths
+8. Email template versioning (move from hard-coded to DB)
+9. SendGrid + AWS SES fallback providers
+10. Optional model improvements (ArcFace experiment track)
+
+---
+
+## 14) How to resume safely in a new session
+
+1. Read this file (`CLAUDE.md`) first.
+2. **CRITICAL**: Read `ENTERPRISE_AUDIT.md` section 5 (email/password reset gaps).
+3. Read `README.md` for architecture and run instructions.
+4. Read `ENGINEERING_JOURNAL.md` relevant sections for deep history.
+5. Check `.github/copilot-instructions.md` for persistent constraints/context.
+6. Validate runtime state quickly:
+   - env activation
+   - API health endpoint
+   - one pipeline smoke test
+   - **NEW**: Verify RESEND_API_KEY is set in .env (critical for auth)
+
+---
+
+## 15) Truth hierarchy (anti-drift)
+
+If any conflict appears between files, trust in this order:
+1. Code in `src/` + tests in `tests/`
+2. `ENGINEERING_JOURNAL.md` (full chronology)
+3. `.github/copilot-instructions.md` (persistent operating memory)
+4. `README.md` (public-facing summary)
+5. `CLAUDE.md` (this operational quick-memory file)
+
+---
+
+## 16) Change log for this file
+
+- 2026-03-20: Initial creation of `CLAUDE.md` as persistent architecture/progress/bug memory summary, aligned to current project corpus.
+- 2026-03-20: Enterprise hardening pass — added layer matrix, timeline, endpoint map, artifact inventory, risk register, bootstrap prompt, maintenance protocol, and reconciliation notes.
+- 2026-03-20: Reality audit pass — downgraded overstated completion claims, clarified CI vs CD, added enterprise backlog and risk items for deployment/observability/security gaps.
+
+---
+
+## 17) Layer completion matrix (operational truth)
+
+| Layer | Status | Key outputs | Verification signal |
+|---|---|---|---|
+| 0 — CNN training | Implemented | EfficientNet-B3 model + class mapping | 80.03% TTA documented |
+| 1 — Inference | Implemented | TTA inference + CLAHE parity + Grad-CAM++ | End-to-end classify + heatmap |
+| 2 — KB/RAG | Implemented | 9,541 types, 47,705 vectors, hybrid retrieval | Context-grounded historian output |
+| 3 — Agent graph | Implemented | Gatekeeper + 4 specialist agents + synthesis | 3-route behavior implemented |
+| 4 — FastAPI | Implemented | Auth, limits, metrics, history, active learning, chat stream | 122 tests discovered by pytest |
+| 5 — Frontend | Implemented | Analyze/history/explore/chat/docs/about/admin/auth pages | TS/build checks present in CI |
+| 6 — Docker infra | Implemented (hardening pending) | 7-service compose stack + nginx routing | Security scanning currently flags Node image vulns |
+| 7 — CI/CD + tests | CI complete, CD pending | GitHub Actions CI + test matrix | CI workflow present; deploy automation not yet wired |
+
+---
+
+## 18) Milestone timeline (condensed)
+
+Use this when someone asks “how did we get here?” without reading all journal sections.
+
+1. Dataset audit and filtering (9,716 → 438 trainable classes)
+2. CLAHE + resize preprocessing pipeline stabilized
+3. EfficientNet-B3 training stack finalized (AMP, mixup, weighted sampling)
+4. 80.03% TTA benchmark achieved on 438 classes
+5. Legacy KB built (small scope), then enterprise RAG redesign started
+6. Full corpus scrape expanded to 9,541 types
+7. RAG engine created with BM25 + vector + RRF hybrid ranking
+8. Chroma index rebuilt to 47,705 vectors (5 semantic chunks per type)
+9. Historian/validator/investigator upgraded to true RAG and robust fallbacks
+10. Gatekeeper hardened (logging, timing, retry, graceful degradation)
+11. FastAPI production hardening (auth, rate limiting, metrics, security headers)
+12. Next.js enterprise frontend (mission control UX, history/admin/chat/docs pages)
+13. Grad-CAM++ upgraded to 19×19 resolution and embedded in reports/UI
+14. Active learning feedback loop implemented end-to-end
+15. Docker 7-service stack wired; CI stabilized at 122 tests discovered
+16. Current phase: enterprise operations hardening (CD, observability, vulnerability remediation)
+
+---
+
+## 19) Endpoint map (high-value API surface)
+
+Primary groups:
+- Classification/reporting: classify + report serving + gradcam serving
+- History: list/detail/delete/feedback workflows
+- Health/ops: health + metrics
+- Active learning: candidate retrieval, correction marking, export/retrain support
+- Auth/session: login/register/refresh/authenticated user flows
+- Chat/research: synchronous chat + SSE streaming chat
+
+Design note:
+- Keep auth-protected and public endpoints clearly separated; avoid accidental exposure through proxy rewrites.
+
+---
+
+## 20) Model and data artifacts inventory
+
+Core artifacts:
+- `models/best_model.pth` — primary CNN weights
+- `models/class_mapping.pth` — label/index map
+- `data/metadata/chroma_db_rag/` — production vector index
+- `data/metadata/cn_types_metadata_full.json` (or equivalent full metadata dump)
+- `reports/` — generated PDFs and Grad-CAM images
+
+Operational constraints:
+- Model and metadata are intentionally large and generally excluded from git.
+- Runtime requires local availability of model + metadata mounts for full capability.
+
+---
+
+## 21) Risk register (what can still break)
+
+1. **Data distribution shift risk**
+    - Catalog-photo style mismatch can depress confidence despite in-training labels.
+    - Mitigation: warning UX + preprocessing parity + confidence-aware messaging.
+
+2. **LLM provider volatility risk**
+    - API quota/rate/availability can vary.
+    - Mitigation: provider fallback chain + local CV fallback + retry logic.
+
+3. **Infra drift risk**
+    - Docs may lag behind repo state.
+    - Mitigation: truth hierarchy + periodic context refresh protocol.
+
+4. **Operational secret hygiene risk**
+    - Wrongly managed `.env` can leak tokens.
+    - Mitigation: `.env.example`, gitignore discipline, runtime env injection.
+
+5. **Performance regression risk**
+    - Feature additions can degrade latency.
+    - Mitigation: keep timing logs, watch route-specific runtime, preserve test gates.
+
+6. **Container security drift risk**
+    - Base images may accumulate high vulnerabilities over time.
+    - Mitigation: pin patched tags/digests, add image scanning gate in CI, rebuild frequently.
+
+7. **CI/CD scope gap risk**
+    - CI validates code but no automatic deployment path exists.
+    - Mitigation: add staging/prod CD workflow with migration + health-check gates.
+
+---
+
+## 22) Session bootstrap prompt (copy/paste)
+
+Use this in a new AI session to restore context quickly:
+
+"Read `CLAUDE.md`, `README.md`, `ENGINEERING_JOURNAL.md`, and `.github/copilot-instructions.md`. Summarize current architecture, shipped layers, unresolved risks, latest bug fixes, and immediate next priorities. Then propose a minimal safe plan for the requested task and update `CLAUDE.md` change log after implementation."
+
+---
+
+## 23) Context maintenance protocol
+
+After every major change set:
+1. Update project code/tests first.
+2. Update `README.md` if external-facing behavior changed.
+3. Append relevant section(s) in `ENGINEERING_JOURNAL.md` for full chronology.
+4. Refresh `.github/copilot-instructions.md` persistent context.
+5. Update `CLAUDE.md` snapshot sections:
+    - status, metrics, timeline, risks, next priorities
+6. Add one line in `CLAUDE.md` change log with date + scope.
+
+This prevents "memory drift" between implementation and narrative documents.
+
+---
+
+## 24) Reconciliation notes (important)
+
+- Some historical documents may still contain earlier "pending" statements for layers that are now complete.
+- When conflicts appear, do not delete history; instead preserve chronology and rely on the truth hierarchy in Section 15.
+- `CLAUDE.md` is a snapshot, not a replacement for the journal.
+
+---
+
+## 25) Operational smoke checklist (quick confidence run)
+
+Run this sequence after major merges or environment changes:
+
+1. Activate environment
+    - `& C:\Users\Administrator\deepcoin\venv\Scripts\Activate.ps1`
+
+2. API health
+    - `uvicorn src.api.main:app --port 8000 --log-level info`
+    - Check `GET /api/health`
+
+3. Frontend boot
+    - In `frontend/`: `npm run dev`
+    - Validate upload flow and one history detail page
+
+4. Pipeline sanity
+    - `& C:\Users\Administrator\deepcoin\venv\Scripts\python.exe scripts/test_pipeline.py`
+
+5. Tests baseline
+    - `pytest tests/unit -q`
+    - `pytest tests/integration -q`
+
+6. If any mismatch appears
+    - Update `ENGINEERING_JOURNAL.md` first (chronology)
+    - Then refresh `.github/copilot-instructions.md` and `CLAUDE.md`
+
+---
+
+## 26) Enterprise backlog (authoritative next actions)
+
+Priority P0:
+- Resolve documentation drift: keep `README.md`, `.github/copilot-instructions.md`, and `CLAUDE.md` aligned after each milestone.
+
+Priority P1 (must-have for enterprise readiness):
+- Add CD pipeline (build image, scan, push, deploy, rollback hooks).
+- Add observability stack wiring (Prometheus scraping + Grafana dashboards + alert thresholds).
+- Fix container vulnerability findings in frontend image and enforce scan gate in CI.
+- Add backup/restore runbook for PostgreSQL and report artifacts.
+
+Priority P2 (quality/compliance):
+- Add full E2E test suite covering auth (forgot/reset password), classify, report download, and chat stream.
+- Add SAST/secret scanning in CI (`pip-audit`, `npm audit`, `trivy`, secret scanner).
+- Add release checklist with semantic version tagging and changelog automation.
+
 - **Latest Capabilities**: i18n localization (FR/EN) on frontend, full observability stack (Alertmanager + Grafana), and complete UML architecture diagrams.
