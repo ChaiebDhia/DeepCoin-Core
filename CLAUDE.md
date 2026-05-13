@@ -564,3 +564,6 @@ Priority P2 (quality/compliance):
 - Add full E2E test suite covering auth (forgot/reset password), classify, report download, and chat stream.
 - Add SAST/secret scanning in CI (`pip-audit`, `npm audit`, `trivy`, secret scanner).
 - Add release checklist with semantic version tagging and changelog automation.
+
+ -   * * L a t e s t   C a p a b i l i t i e s * * :   i 1 8 n   l o c a l i z a t i o n   ( F R / E N )   o n   f r o n t e n d ,   f u l l   o b s e r v a b i l i t y   s t a c k   ( A l e r t m a n a g e r   +   G r a f a n a ) ,   a n d   c o m p l e t e   U M L   a r c h i t e c t u r e   d i a g r a m s .  
+ 

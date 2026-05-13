@@ -918,3 +918,9 @@ MIT -- see [LICENSE](LICENSE) for details.
 
 *DeepCoin-Core -- Where 2,300-year-old coins meet production AI engineering.*
 *Dhia Chaieb . ESPRIT . YEBNI . 2026*
+
+ # #   R e c e n t   U p d a t e s 
+ -   * * i 1 8 n   L o c a l i z a t i o n * * :   N e x t . j s   f r o n t e n d   n o w   s u p p o r t s   F r e n c h / E n g l i s h   t o g g l e . 
+ -   * * O b s e r v a b i l i t y * * :   P r o m e t h e u s ,   A l e r t m a n a g e r ,   a n d   G r a f a n a   p r o v i s i o n i n g   c o n f i g u r e d . 
+ -   * * U M L   D i a g r a m s * * :   1 5   c o m p r e h e n s i v e   a r c h i t e c t u r a l   d i a g r a m s   g e n e r a t e d   i n   U M L   D i a g r a m s . m d .  
+ 
