@@ -287,7 +287,7 @@ async def send_password_reset_email(to_email: str, token: str, db: AsyncSession 
           
           <p style="color: #334155; line-height: 1.6; margin: 0 0 16px 0; font-size: 15px;">
             We received a request to reset your DeepCoin password.
-            Click the button below to set a new password. <strong style="color: #0f172a;">This link expires in {{ _PASSWORD_RESET_EXPIRE_HOURS }} hour.</strong>
+            Click the button below to set a new password. <strong style="color: #0f172a;">This link expires in {_PASSWORD_RESET_EXPIRE_HOURS} hour(s).</strong>
           </p>
           
           <!-- Action Button -->
