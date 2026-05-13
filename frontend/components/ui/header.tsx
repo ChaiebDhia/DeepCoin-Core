@@ -21,18 +21,19 @@
 
 import Link           from "next/link";
 import { Coins }      from "lucide-react";
-import { HealthDot }   from "@/components/ui/health-dot";
 import { UserMenu }    from "@/components/auth/UserMenu";
 import { NavLinks }    from "@/components/ui/NavLinks";
 import { MobileNav }   from "@/components/ui/MobileNav";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { LanguageToggle } from "@/components/ui/LanguageToggle";
 
 export function Header() {
   return (
     <header
-      className="sticky top-0 z-50 w-full border-b border-[var(--nav-bg)]"
-      style={{ backgroundColor: "var(--nav-bg)", color: "var(--nav-text)" }}
+      className="fixed top-0 left-0 right-0 z-50 w-full border-b backdrop-blur-xl transition-all duration-300"
+      style={{ backgroundColor: "var(--nav-bg-glass)", borderColor: "var(--border)", color: "var(--nav-text)" }}
     >
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-6">
+      <div className="mx-auto max-w-[1400px] px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4 sm:gap-6">
         {/* Brand */}
         <Link
           href="/"
@@ -49,15 +50,17 @@ export function Header() {
           <NavLinks />
         </div>
 
-        {/* Right cluster: health dot + auth menu + mobile hamburger */}
-        <div className="flex items-center gap-3 flex-shrink-0">
-          {/* Health indicator — left of the auth buttons */}
-          <HealthDot />
-          {/* Language and Theme Toggles */}
-                              {/* Auth: avatar dropdown when logged in, Sign In / Register otherwise */}
+        {/* Right cluster: auth menu + mobile hamburger */}
+        <div className="flex items-center gap-4 flex-shrink-0">
+          <div className="hidden lg:flex items-center gap-2">
+            <LanguageToggle />
+            <ThemeToggle />
+          </div>
+
+          {/* Auth: avatar dropdown when logged in, Sign In otherwise */}
           <UserMenu />
 
-          {/* Mobile hamburger — far right, only renders below md */}
+          {/* Mobile hamburger — far right, only renders below lg */}
           <MobileNav />
         </div>
       </div>

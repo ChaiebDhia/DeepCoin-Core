@@ -98,22 +98,13 @@ export function UserMenu() {
   // ── unauthenticated ────────────────────────────────────────────────────────
   if (!session) {
     return (
-      <div className="hidden md:flex items-center gap-3">
-        <LanguageToggle />
-        <ThemeToggle />
+      <div className="hidden lg:flex items-center gap-3">
         <Link
           href="/login"
-          className="px-4 py-1.5 rounded-xl whitespace-nowrap text-sm font-semibold transition-opacity hover:opacity-80"
-          style={{ background: "var(--brand-gold)", color: "#0d1520" }}
+          className="px-5 py-2 rounded-full whitespace-nowrap text-sm font-semibold transition-all shadow hover:shadow-lg"
+          style={{ background: "var(--brand-gold)", color: "#000000" }}
         >
-          {t("sign_in")}
-        </Link>
-        <Link
-          href="/register"
-          className="px-4 py-1.5 rounded-xl whitespace-nowrap text-sm font-medium transition-colors border"
-          style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}
-        >
-          {t("create_account")}
+          {t("sign_in", { fallback: "Sign In" })}
         </Link>
       </div>
     );
@@ -131,22 +122,21 @@ export function UserMenu() {
       {/* Trigger button */}
       <button
         onClick={() => setOpen(v => !v)}
-        className="flex items-center gap-2 px-2 py-1 rounded-lg transition-colors hover:bg-slate-100 bg-white shadow-sm ring-1 ring-slate-200"
+        className="flex items-center gap-2 pr-2 pl-1 py-1 rounded-full transition-all bg-white/5 hover:bg-white/10 border border-white/10 shadow-sm"
       >
         {/* Avatar circle */}
-        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 shadow-inner ring-1 ring-black/20"
              style={{ background: bg, color: "#fff" }}>
           {abbrev}
         </div>
 
         {/* Name + role — hidden on small screens */}
-        <div className="hidden sm:flex flex-col items-start leading-tight">
-          <span className="text-sm font-medium truncate max-w-[120px] text-slate-900">
+        <div className="hidden lg:flex flex-col items-start leading-tight">
+          <span className="text-sm font-semibold truncate max-w-[120px] text-white">
             {label}
           </span>
           <span
-            className="text-xs px-1.5 py-0 rounded-full cursor-default text-slate-700"
-            style={{ background: ROLE_COLOURS[role] }}
+            className="text-[10px] px-1.5 py-0.5 rounded-full cursor-default tracking-wide font-medium mt-0.5 bg-white/10 text-white/70"
             title={role === "analyst" ? "All new accounts start as Analyst. Contact an admin to upgrade." : undefined}
           >
             {ROLE_LABELS[role] ?? role}
@@ -155,7 +145,7 @@ export function UserMenu() {
 
         <ChevronDown
           size={14}
-          className="transition-transform text-slate-500"
+          className="transition-transform text-white/50 ml-1"
           style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
         />
       </button>

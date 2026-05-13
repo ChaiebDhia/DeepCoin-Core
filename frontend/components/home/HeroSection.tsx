@@ -19,16 +19,16 @@ import Link         from "next/link";
 import { ArrowRight, ChevronDown, Cpu, Database, Zap, FileText } from "lucide-react";
 import { useTranslations } from "next-intl";
 
-/* ── Floating coin rings ────────────────────────────────────────────────── */
+/* ── Floating 3D metallic elements ─────────────────────────────────────── */
 const COINS = [
-  { size: 110, top: "7%",  left:  "3%",  delay: 0,   dur: 7  },
-  { size:  60, top: "65%", left:  "2%",  delay: 1.5, dur: 9  },
-  { size: 148, top: "10%", right: "3%",  delay: 0.7, dur: 8  },
-  { size:  70, top: "68%", right: "5%",  delay: 2.1, dur: 6  },
-  { size:  46, top: "42%", left:  "12%", delay: 3.0, dur: 11 },
-  { size:  76, top: "32%", right: "14%", delay: 1.2, dur: 10 },
-  { size:  40, top: "80%", left:  "20%", delay: 2.4, dur: 8  },
-  { size:  54, top: "76%", right: "20%", delay: 0.9, dur: 9  },
+  { size: 110, top: "7%",  left:  "3%",  delay: 0,   dur: 7,  rotateX: 10, rotateY: 15 },
+  { size:  60, top: "65%", left:  "2%",  delay: 1.5, dur: 9,  rotateX: -20, rotateY: 30 },
+  { size: 148, top: "10%", right: "3%",  delay: 0.7, dur: 8,  rotateX: 25, rotateY: -10 },
+  { size:  70, top: "68%", right: "5%",  delay: 2.1, dur: 6,  rotateX: 5, rotateY: -25 },
+  { size:  46, top: "42%", left:  "12%", delay: 3.0, dur: 11, rotateX: 15, rotateY: 5 },
+  { size:  76, top: "32%", right: "14%", delay: 1.2, dur: 10, rotateX: -10, rotateY: -20 },
+  { size:  40, top: "80%", left:  "20%", delay: 2.4, dur: 8,  rotateX: 30, rotateY: 10 },
+  { size:  54, top: "76%", right: "20%", delay: 0.9, dur: 9,  rotateX: -15, rotateY: 20 },
 ];
 
 /* ── Neural-net SVG lines ───────────────────────────────────────────────── */
@@ -290,11 +290,12 @@ export function HeroSection() {
           className="text-base sm:text-lg max-w-2xl mx-auto leading-relaxed mb-10"
           style={{ color: "var(--text-secondary)" }}
         >
-          {t("subtitle_1")}{" "}
-          <strong style={{ color: "var(--text-primary)" }}>{t("subtitle_efficientnet")}</strong>{" "}
-          {t("subtitle_2")}{" "}
-          <strong style={{ color: "var(--text-primary)" }}>{t("subtitle_rag")}</strong>{" "}
-          {t("subtitle_3")}</motion.p>
+          {t("subtitle_1")} {" "}
+          <strong style={{ color: "var(--text-primary)" }}>{t("subtitle_efficientnet")}</strong> {" "}
+          {t("subtitle_2")} {" "}
+          <strong style={{ color: "var(--text-primary)" }}>{t("subtitle_rag")}</strong> {" "}
+          {t("subtitle_3")}
+        </motion.p>
 
         {/* CTAs */}
         <motion.div
@@ -305,29 +306,28 @@ export function HeroSection() {
         >
           <Link
             href="/analyse"
-            className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-bold text-sm transition-all duration-200 hover:scale-105 active:scale-100"
+            className="inline-flex items-center gap-2 px-10 py-4 rounded-full font-extrabold text-sm transition-all duration-300 hover:scale-[1.03] active:scale-95 hover:-translate-y-1 hover:shadow-2xl hover:shadow-yellow-600/30"
             style={{
               background:
                 "linear-gradient(135deg, var(--brand-gold) 0%, color-mix(in srgb, var(--brand-gold) 75%, #000) 100%)",
               color:     "var(--surface-0)",
-              boxShadow: "0 4px 18px color-mix(in srgb, var(--brand-gold) 35%, transparent)",
+              boxShadow: "0 4px 24px color-mix(in srgb, var(--brand-gold) 45%, transparent)",
             }}
           >
             {t("cta_analyse")}
-            <ArrowRight size={16} />
+            <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
           </Link>
           <Link
             href="#how-it-works"
-            className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-bold text-sm border transition-all duration-200 hover:scale-105"
+            className="inline-flex items-center gap-2 px-10 py-4 rounded-full font-bold text-sm border-2 transition-all duration-300 hover:scale-[1.03] hover:-translate-y-1 hover:bg-black/5 dark:hover:bg-white/5"
             style={{
-              borderColor:     "var(--border-strong, var(--border))",
+              borderColor:     "var(--brand-gold)",
               color:           "var(--text-secondary)",
-              backgroundColor: "color-mix(in srgb, var(--surface-1) 80%, transparent)",
-              backdropFilter:  "blur(6px)",
+              backdropFilter:  "blur(12px)",
             }}
           >
             {t("cta_how")}
-            <ChevronDown size={16} />
+            <ChevronDown size={18} className="transition-transform group-hover:translate-y-1" />
           </Link>
         </motion.div>
 
@@ -361,5 +361,3 @@ export function HeroSection() {
     </section>
   );
 }
-
-

@@ -604,7 +604,7 @@
     "tip_spam": "• Check your spam/promotions folder",
     "tip_verify": "• Verify your email address is correct",
     "tip_support": "• Contact support if you still don't receive it",
-    "didnt_receive": "Didn’t receive it?",
+    "didnt_receive": "Didn\u0019t receive it?",
     "try_different": "Try a different email",
     "email_address": "Email address",
     "email_placeholder": "you@example.com",
@@ -664,6 +664,7 @@
     "manage_system": "Manage users, view all analyses, and monitor the live feed"
   },
   "AdminDashboard": {
+    "loading_components": "Loading components...",
     "overview": "Overview",
     "coins": "Coins",
     "analyses": "Analyses",

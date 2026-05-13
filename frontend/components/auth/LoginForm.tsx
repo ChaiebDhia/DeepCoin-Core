@@ -122,27 +122,11 @@ export function LoginForm() {
     setError(null);
     setGoogleLoading(true);
     try {
-      const result = await signIn("google", { callbackUrl, redirect: false });
-
-      if (!result) {
-        setError(t("err_google_signin"));
-        return;
-      }
-
-      if (result.error) {
-        setError(t("err_google_signin"));
-        return;
-      }
-
-      if (result.url) {
-        router.push(result.url);
-        return;
-      }
-
-      setError(t("err_google_signin"));
+      // For OAuth providers like Google, we MUST allow redirect. 
+      // NextAuth will handle the HTTP navigation to accounts.google.com.
+      await signIn("google", { callbackUrl });
     } catch {
       setError(t("err_google_signin"));
-    } finally {
       setGoogleLoading(false);
     }
   }

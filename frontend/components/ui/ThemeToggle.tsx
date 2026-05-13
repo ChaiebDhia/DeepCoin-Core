@@ -37,28 +37,18 @@ export function ThemeToggle() {
 
   const isDark = theme === "dark" || resolvedTheme === "dark";
 
-
-
-  const iconColor = isDark ? "#fbbf24" : "#1f2937"; // Gold in dark mode, dark gray in light mode
-
+  // Since the navbar and mobile dropdown are now context-aware (light in light mode, dark in dark mode),
+  // we use a deep slate color for light mode and gold for dark mode.
+  const iconColor = isDark ? "#fbbf24" : "#0f172a"; 
   return (
-
     <button
-
       onClick={() => setTheme(isDark ? "light" : "dark")}
-
-      className="relative flex items-center justify-center w-8 h-8 rounded-md transition-colors hover:bg-white/10"
-
-      style={{ color: iconColor, opacity: 0.9 }}
-
+      className="relative flex items-center justify-center w-8 h-8 rounded-md transition-colors hover:bg-[var(--surface-2)]"
+      style={{ color: iconColor, opacity: 1 }}
       aria-label="Toggle theme"
-
     >
-
-      {isDark ? <Sun size={18} /> : <Moon size={18} />}
-
+      {isDark ? <Sun size={20} /> : <Moon size={20} />}
     </button>
-
   );
 
 }

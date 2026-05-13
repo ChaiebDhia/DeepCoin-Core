@@ -38,13 +38,38 @@
   --border-strong:  #6f8676;
   --border:         #6f8676; /* darker border in light mode */
   --ring-focus:     rgba(22, 101, 52, 0.28); /* dark-green focus ring */
+    --brand-mid:       #1a5f41; /* Refined forest green */
+    --brand-light:     #059669; /* Emerald accent */
+    --brand-primary:   #065f46; /* Rich forest green */
+    --brand-gold:      #b8956a; /* Warm antique bronze */
+    --brand-gold-soft: #fef3e2; /* Soft cream highlight */
 
-  /* --- 5. Anchor Surfaces (Navbar & Footer) --- */
-  /* Option A: The "Classy Navy" (Keeps brand identity strong) */
-  --nav-bg:         #020617;
+    /* --- 2. Surface & Background (The "Depth" Layers - LIGHT MODE) --- */
+    /* Professional cool-neutral palette: soft off-white to refined grays. No greenish tint. */
+    --surface-0: #f8f9fa; /* page background - soft white-gray */
+    --surface-1: #f0f1f5; /* cards - light gray */
+    --surface-2: #e8eaef; /* nested containers - refined gray */
+    --surface-3: #d4d9e3; /* strongest layer - cool gray */
+
+    /* --- 3. Typography (High Readability) --- */
+    /* Using Slate tones prevents the "harsh" look of pure black */
+    --text-primary:   #08111f; /* Main headings - high contrast */
+    --text-secondary: #243244; /* Body text */
+    --text-muted:     #53657d; /* Captions and labels */
+    --text-on-navy:   #f8fafc;
+
+    /* --- 4. Interactive & Borders --- */
+    --border-subtle:  #d4d9e3;
+    --border-strong:  #b8bcc8;
+    --border:         #b8bcc8; /* refined cool border in light mode */
+    --ring-focus:     rgba(6, 95, 70, 0.24); /* forest-green focus ring */
+
+  /* Anchor Surfaces (Navbar & Footer) */
+  --nav-bg:         #0f172a;
+  --nav-bg-glass:   rgba(15, 23, 42, 0.85); /* Slightly darker slate in light mode */
   --nav-text:       #f8fafc;
-  --footer-bg:      #020617;
-  --footer-text:    #f8fafc;
+  --footer-bg:      #0f172a;
+  --footer-text:    #94a3b8;
 }
 .dark {
   /* DeepCoin brand palette */
@@ -61,10 +86,11 @@
   --surface-3:      #1e2f42;   /* input / table row */
 
   /* Anchor Surfaces (NavBar & Footer) - DARK MODE */
-  --nav-bg:         #0a1628;   /* Default deep brand navy */
-  --nav-text:       #E2E8F0;
-  --footer-bg:      #0a1628;
-  --footer-text:    #94A3B8;
+  --nav-bg:         #020617;
+  --nav-bg-glass:   rgba(2, 6, 23, 0.75);
+  --nav-text:       #f8fafc;
+  --footer-bg:      #020617;
+  --footer-text:    #94a3b8;
 
   /* Border */
   --border:         #243447;

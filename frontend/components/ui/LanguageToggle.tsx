@@ -27,8 +27,9 @@ export function LanguageToggle() {
   if (!mounted) return null;
 
   return (
-    <div className="flex items-center gap-2 p-1 rounded-full bg-zinc-900 border border-zinc-800 shadow-inner">
-      <div className="flex items-center justify-center pl-2 pr-1 text-zinc-500">
+    <div className="flex items-center gap-1 p-0.5 rounded-full border shadow-inner transition-colors duration-300"
+         style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
+      <div className="flex items-center justify-center pl-2 pr-1" style={{ color: "var(--text-muted)" }}>
         <Globe size={14} />
       </div>
       <div className="relative flex items-center">
@@ -36,7 +37,8 @@ export function LanguageToggle() {
           <button
             key={l}
             onClick={() => handleSetLocale(l)}
-            className={"relative z-10 px-3 py-1 text-[10px] font-semibold uppercase tracking-widest transition-colors duration-200 " + (locale === l ? 'text-white' : 'text-zinc-500 hover:text-zinc-300')}
+            className={`relative z-10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest transition-colors duration-200`}
+            style={{ color: locale === l ? "var(--text-primary)" : "var(--text-muted)" }}
           >
             {l}
             {locale === l && (
@@ -44,7 +46,8 @@ export function LanguageToggle() {
                 layoutId="active-language"
                 initial={false}
                 transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                className="absolute inset-0 bg-zinc-700/50 rounded-full -z-10 border border-zinc-600 shadow-sm"
+                className="absolute inset-0 rounded-full -z-10 shadow-sm border"
+                style={{ background: "var(--surface-1)", borderColor: "var(--border)" }}
               />
             )}
           </button>
@@ -52,5 +55,7 @@ export function LanguageToggle() {
       </div>
     </div>
   );
-}
-
+}
+
+
+

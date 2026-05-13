@@ -6,7 +6,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   const isChat = pathname === "/chat";
   
   return (
-    <main className={`flex-1 w-full mx-auto ${!isChat ? "max-w-6xl px-5" : ""}`}>
+    <main className={`flex-1 w-full mx-auto pt-16 mt-2 ${!isChat ? "max-w-6xl px-5" : ""}`}>
       {children}
     </main>
   );

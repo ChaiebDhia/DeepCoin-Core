@@ -34,10 +34,10 @@ function isActive(href: string, pathname: string): boolean {
 const baseCls =
   "flex items-center gap-1.5 px-3 py-2 sm:px-4 rounded-lg text-sm font-medium transition-all duration-200";
 const inactiveCls =
-  "text-[var(--nav-text)] opacity-70 hover:opacity-100 hover:bg-white/8";
-/** Active: white bold text + subtle surface background + gold bottom border */
+  "text-[var(--nav-text)] opacity-70 hover:opacity-100 hover:bg-white/10";
+/** Active: highly visible bold text + subtle surface background + gold bottom border */
 const activeCls =
-  "text-white font-semibold bg-white/12 border-b-2 border-[#d4a853]";
+  "text-white font-bold bg-white/10 border-b-2 border-[#d4a853]";
 
 export const NAV_LINKS = [
   { href: "/",          labelKey: "home", icon: Home },

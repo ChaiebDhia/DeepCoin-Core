@@ -120,17 +120,17 @@ export function ValueCards() {
               initial={initial}
               animate={inView ? { x: 0, y: 0, opacity: 1 } : {}}
               transition={{ duration: 0.55, delay: i * 0.12 }}
-              className="relative rounded-2xl border p-7 flex flex-col gap-5 transition-shadow hover:shadow-lg dark:hover:shadow-none hover:shadow-indigo-500/10"
+              className="relative rounded-3xl border border-opacity-50 p-8 flex flex-col gap-6 transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl dark:hover:shadow-none hover:shadow-blue-900/10 backdrop-blur-md"
               style={{
-                borderColor:     featured ? `${color}60` : "var(--border)",
-                backgroundColor: featured ? `${color}06` : "var(--surface-1)",
-                boxShadow:       featured ? `0 0 36px ${color}10` : undefined,
+                borderColor:     featured ? `${color}80` : "var(--border)",
+                backgroundColor: featured ? `${color}08` : "color-mix(in srgb, var(--surface-1) 70%, transparent)",
+                boxShadow:       featured ? `0 0 45px ${color}15` : undefined,
               }}
             >
               {/* Core innovation badge for featured card */}
               {featured && (
                 <span
-                  className="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full"
+                  className="absolute -top-3.5 left-1/2 -translate-x-1/2 text-[11px] font-black uppercase tracking-widest px-4 py-1.5 rounded-full shadow-lg"
                   style={{ backgroundColor: color, color: "var(--brand-navy)" }}
                 >
                   {t("core_innovation")}
@@ -139,10 +139,10 @@ export function ValueCards() {
 
               {/* Icon */}
               <div
-                className="w-12 h-12 rounded-xl flex items-center justify-center animate-glow-pulse"
-                style={{ background: `${color}1a`, color }}
+                className="w-14 h-14 rounded-full flex items-center justify-center shadow-inner animate-glow-pulse"
+                style={{ background: `linear-gradient(135deg, ${color}20, ${color}40)`, color }}
               >
-                <Icon size={22} />
+                <Icon size={26} />
               </div>
 
               {/* Content */}
