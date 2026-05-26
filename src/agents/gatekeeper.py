@@ -118,7 +118,12 @@ class Gatekeeper:
         self._save_pdf   = save_pdf
         self._graph      = self._build_graph()
         logger.info("Gatekeeper ready.")
-
+    def reload_cnn_model(self) -> None:
+        """
+        Triggers a hot-swap of the underlying CNN model for Active Learning ZERO downtime.
+        """
+        logger.info("[Gatekeeper] Delegating hot-reload to CoinInference...")
+        self._cnn.reload_model()
     # ── public ────────────────────────────────────────────────────────────────
 
     def analyze(self, image_path: str, tta: bool = True, language: str = "en") -> dict:

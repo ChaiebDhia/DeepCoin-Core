@@ -25,6 +25,7 @@ Output contract (what every agent receives from this class):
 
 import logging
 import time
+import threading
 import cv2
 import torch
 import numpy as np
@@ -275,8 +276,13 @@ class CoinInference:
             device if device else ("cuda" if torch.cuda.is_available() else "cpu")
         )
         logger.info("CoinInference: device=%s", self.device)
+        
+        self._inference_lock = threading.Lock()
+        self._model_path = model_path
+        self._mapping_path = mapping_path
 
-        # ── Load class mapping ─────────────────────────────────────────────────
+        # ── Load class mapping ────────────────────────────────────────────────────────
+
         # class_mapping.pth contains {class_to_idx, idx_to_class, n_classes}
         # WHY weights_only=True:
         #   torch.load with weights_only=False can execute arbitrary Python code
@@ -342,7 +348,17 @@ class CoinInference:
         val_acc = checkpoint.get("val_acc", "unknown")
         epoch   = checkpoint.get("epoch", "unknown")
         logger.info("CoinInference: model loaded — epoch=%s  val_acc=%s", epoch, val_acc)
-
+    def reload_model(self) -> None:
+        """
+        Hot-swaps the model weights in RAM (Zero-Downtime Pipeline).
+        Uses a threading.Lock to ensure no queries crash during the swap.
+        """
+        logger.info("CoinInference: Hot-reloading model weights...")
+        with self._inference_lock:
+            checkpoint = torch.load(self._model_path, map_location=self.device, weights_only=True)
+            self.model.load_state_dict(checkpoint["model_state_dict"])
+            self.model.eval()
+        logger.info("CoinInference: Model hot-swap complete.")
     # ── Private helpers ────────────────────────────────────────────────────────
 
     def _load_image(self, image_path: str | Path) -> np.ndarray:
@@ -470,11 +486,12 @@ class CoinInference:
         pushing the dominant class to a higher probability.
         When T = 1.0 (default, no temperature.pth loaded): no effect.
         """
-        with torch.no_grad():
-            logits = self.model(tensor)                       # [1, num_classes]
-            if self._temperature != 1.0:
-                logits = logits / self._temperature           # scale before softmax
-            probs = torch.softmax(logits, dim=1)             # [1, num_classes]
+        with self._inference_lock:
+            with torch.no_grad():
+                logits = self.model(tensor)                       # [1, num_classes]
+                if self._temperature != 1.0:
+                    logits = logits / self._temperature           # scale before softmax
+                probs = torch.softmax(logits, dim=1)             # [1, num_classes]
         return probs.squeeze(0)                              # [num_classes]
 
     def _build_result(
@@ -665,14 +682,15 @@ class CoinInference:
                 gradcam_tensor   = self._preprocess(img_rgb)          # [1,3,299,299]
                 original_bgr     = _cv2.cvtColor(img_rgb, _cv2.COLOR_RGB2BGR)
                 gcam_save_path   = str(Path(image_path).with_suffix("")) + "_gradcam.png"
-                gcam_path        = generate_gradcam(
-                    model        = self.model,
-                    image_tensor = gradcam_tensor,
-                    original_bgr = original_bgr,
-                    class_idx    = result["class_id"],
-                    save_path    = gcam_save_path,
-                    device       = self.device,
-                )
+                with self._inference_lock:
+                    gcam_path        = generate_gradcam(
+                        model        = self.model,
+                        image_tensor = gradcam_tensor,
+                        original_bgr = original_bgr,
+                        class_idx    = result["class_id"],
+                        save_path    = gcam_save_path,
+                        device       = self.device,
+                    )
                 result["gradcam_path"] = str(gcam_path) if gcam_path else None
             except Exception as _gcam_err:
                 logger.warning("predict: Grad-CAM failed (non-fatal): %s", _gcam_err)

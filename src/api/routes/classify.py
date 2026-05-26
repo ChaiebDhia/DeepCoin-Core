@@ -347,4 +347,14 @@ async def classify(
         Path(pdf_path).name if pdf_path else "none",
     )
 
+    
+    # ── Prometheus Metrics ──────────────────────────────────────────────────────────
+    try:
+        from src.api.prometheus import CLASSIFY_REQUESTS, CNN_CONFIDENCE, HTTP_REQUEST_DURATION
+        CLASSIFY_REQUESTS.labels(route_taken=route).inc()
+        CNN_CONFIDENCE.set(cnn.confidence * 100)
+        HTTP_REQUEST_DURATION.labels(method="POST", endpoint="/api/classify").observe(elapsed_s)
+    except ImportError:
+        pass # Handle case if not correctly loaded yet
+
     return response

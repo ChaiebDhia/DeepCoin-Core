@@ -1298,3 +1298,27 @@ export async function verifyEmail(token: string): Promise<{ message: string }> {
   );
   return data;
 }
+
+/**
+ * POST /api/admin/active-learning/train
+ */
+export async function triggerTraining(): Promise<{ message: string; status: string }> {
+  try {
+    const res = await apiClient.post<{ message: string; status: string }>("/admin/active-learning/train");
+    return res.data;
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+/**
+ * POST /api/admin/active-learning/reload
+ */
+export async function reloadModel(): Promise<{ message: string; status: string }> {
+  try {
+    const res = await apiClient.post<{ message: string; status: string }>("/admin/active-learning/reload");
+    return res.data;
+  } catch (err) {
+    throw toApiError(err);
+  }
+}

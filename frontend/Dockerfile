@@ -70,7 +70,7 @@ COPY . .
 # Build-time environment variables.
 # NEXT_PUBLIC_* vars are inlined at build time — they must be set NOW.
 # Auth secrets are runtime-only — never set them as build args.
-ARG NEXT_PUBLIC_CLASSIFY_URL=http://nginx/api
+ARG NEXT_PUBLIC_CLASSIFY_URL=http://localhost/api
 ARG NEXT_PUBLIC_API_KEY=""
 ENV NEXT_PUBLIC_CLASSIFY_URL=${NEXT_PUBLIC_CLASSIFY_URL} \
     NEXT_PUBLIC_API_KEY=${NEXT_PUBLIC_API_KEY} \
@@ -114,6 +114,7 @@ RUN addgroup --system --gid 1001 nodejs \
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static    ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public          ./public
+COPY --from=builder --chown=nextjs:nodejs /app/messages        ./messages
 
 USER nextjs
 

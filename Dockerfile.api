@@ -94,6 +94,7 @@ WORKDIR /app
 # Copy application source code.
 # .dockerignore excludes: venv/, data/, models/, .env, __pycache__, *.pth
 COPY src/      ./src/
+COPY scripts/  ./scripts/
 COPY alembic/  ./alembic/
 COPY alembic.ini .
 

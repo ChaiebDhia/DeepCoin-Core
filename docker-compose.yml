@@ -1,4 +1,4 @@
-﻿# DeepCoin  Docker Compose full-stack service manifest
+# DeepCoin  Docker Compose full-stack service manifest
 # =======================================================
 #
 # Gap 4 (March 2026)  7 always-running services + 1 profile-triggered helper:
@@ -64,7 +64,7 @@ x-common-env: &common-env
   DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-deepcoin}:${POSTGRES_PASSWORD:-deepcoin}@postgres:5432/${POSTGRES_DB:-deepcoin}
   REDIS_URL:    redis://redis:6379/0
   TORCH_HOME: /tmp/torch
-  ENV:          production
+  ENV:          development
 
 services:
 
@@ -103,7 +103,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-      start_period: 10s
+      start_period: 90s
 
   #  2. Redis 7 
   #
@@ -208,7 +208,7 @@ services:
       interval: 15s
       timeout: 10s
       retries: 3
-      start_period: 45s   # EfficientNet-B3 weights take ~30s to load on first start
+      start_period: 180s   # EfficientNet-B3 weights take ~30s to load on first start
 
   #  4. Next.js 15 frontend 
   #
@@ -219,7 +219,7 @@ services:
   #
   # NEXT_PUBLIC_CLASSIFY_URL:
   #   Direct browser  Nginx  FastAPI path for classification calls.
-  #   Using http://nginx/api instead of http://api:8000 because the browser
+  #   Using http://localhost/api instead of http://api:8000 because the browser
   #   runs outside Docker and cannot resolve the internal DNS name "api".
   #   Nginx proxies the request on the correctly-timed 600s proxy_read_timeout.
   #
@@ -239,13 +239,15 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL:      http://nginx/api
-      NEXT_PUBLIC_CLASSIFY_URL: http://nginx/api
+      NEXT_PUBLIC_API_URL:      http://localhost/api
+      NEXT_PUBLIC_CLASSIFY_URL: http://localhost/api
       NEXTAUTH_URL:             ${NEXTAUTH_URL:-http://localhost}
       NEXTAUTH_SECRET:          ${NEXTAUTH_SECRET:-change_me_in_production}
       AUTH_SECRET:              ${NEXTAUTH_SECRET:-change_me_in_production}
+      AUTH_TRUST_HOST:          "true"
       # Server-side  FastAPI via Docker DNS (avoids Nginx routing loop)
       AUTH_FASTAPI_URL:         http://api:8000
+      DEEPCOIN_API_URL:         http://api:8000
       NODE_ENV:                 production
     depends_on:
       api:

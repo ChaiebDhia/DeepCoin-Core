@@ -41,9 +41,11 @@ minutes per submission.  The correct design:
 
 
 import logging
+import subprocess
+import threading
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from src.api.auth import require_api_key
@@ -208,3 +210,48 @@ def get_report() -> dict:
     except Exception as exc:
         logger.error("Failed to read export report: %s", exc)
         raise HTTPException(status_code=500, detail="Could not read report file") from exc
+
+@router.post(
+    "/train",
+    summary="Trigger Model Retraining (Background Process)",
+    dependencies=[Depends(require_api_key)],
+)
+def trigger_training() -> dict:
+    """
+    Triggers scripts/train.py as a detached background process (Zero-Downtime Pipeline).
+    Does NOT block the FastAPI event loop. 
+    """
+    logger.info("Triggering active learning training in background...")
+    try:
+        # Popen spawns a completely detached process. We don't wait for it.
+        # Ensure your GPU has enough VRAM or scripts/train.py uses AMP.
+        subprocess.Popen(
+            ["python", "scripts/train.py", "--active-learning-dir", str(_OUTPUT_DIR)],
+            cwd=str(_ROOT)
+        )
+        return {"message": "Training started in background.", "status": "running"}
+    except Exception as exc:
+        logger.error("Failed to start training process: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to start training") from exc
+
+
+@router.post(
+    "/reload",
+    summary="Hot-swap Model Weights in RAM",
+    dependencies=[Depends(require_api_key)],
+)
+def reload_model(request: Request) -> dict:
+    """
+    Hot-swap the model loaded in RAM without shutting down FastAPI.
+    Called by an admin from the dashboard OR manually via Webhook.
+    """
+    logger.info("Received request to reload model weights.")
+    if hasattr(request.app.state, "gk") and getattr(request.app.state, "gk") is not None:
+        try:
+            request.app.state.gk.reload_cnn_model()
+            return {"message": "Model hot-swapped successfully.", "status": "ok"}
+        except Exception as exc:
+            logger.error("Model hot-swap failed: %s", exc)
+            raise HTTPException(status_code=500, detail="Model hot-swap failed") from exc
+    else:
+        raise HTTPException(status_code=400, detail="Gatekeeper not initialized.")

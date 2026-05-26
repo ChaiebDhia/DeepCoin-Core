@@ -72,5 +72,5 @@ NOTES.md
 # ── Reports output directory (runtime-generated, mounted as volume)
 reports/
 
-# ── Scripts (not needed by the running API)
-scripts/
+# —— Scripts (needed by the active learning API at runtime)
+# scripts/

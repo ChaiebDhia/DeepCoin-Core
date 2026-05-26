@@ -122,7 +122,7 @@ import {
   Search, ChevronLeft, ChevronRight, LayoutDashboard, Users, Trash2,
 
 
-  FileBarChart2, ThumbsDown, UserCog, TrendingUp, Calendar, Wifi, Inbox, Coins,
+  FileBarChart2, ThumbsDown, UserCog, TrendingUp, Calendar, Wifi, Inbox, Coins, RefreshCw,
 
 
 } from "lucide-react";
@@ -145,7 +145,7 @@ import {
   getAdminStats, getAdminContacts, markContactRead, deleteContactMessage,
 
 
-  deleteCorrection, deleteSubscriber,
+  deleteCorrection, deleteSubscriber, triggerTraining, reloadModel,
 
 
 } from "@/lib/api";
@@ -2455,6 +2455,32 @@ function CorrectionsTab({ sessionStatus }: { sessionStatus: string }) {
 
 
         )}
+
+          <div className="ml-auto flex gap-3">
+            <button
+              onClick={() => {
+                triggerTraining()
+                  .then(r => alert(r.message))
+                  .catch(e => alert("Error: " + e.message));
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 transition-colors"
+            >
+              <Cpu size={14} />
+              Trigger Retraining
+            </button>
+            <button
+              onClick={() => {
+                reloadModel()
+                  .then(r => alert(r.message))
+                  .catch(e => alert("Error: " + e.message));
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 transition-colors"
+            >
+              <RefreshCw size={14} />
+              Hot-Swap Model
+            </button>
+          </div>
+
 
 
         <span className="ml-auto text-[10px]" style={{ color: "var(--text-muted)" }}>
