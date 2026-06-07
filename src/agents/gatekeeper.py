@@ -37,42 +37,42 @@ from langgraph.graph import StateGraph, END
 from typing_extensions import TypedDict
 
 from src.core.inference import CoinInference
-from src.agents.historian    import Historian
-from src.agents.validator    import Validator
+from src.agents.historian import Historian
+from src.agents.validator import Validator
 from src.agents.investigator import Investigator
-from src.agents.synthesis    import Synthesis
+from src.agents.synthesis import Synthesis
 
 logger = logging.getLogger(__name__)
 
 
 # ── paths ───────────────────────────────────────────────────────────────────────────
-_ROOT         = Path(__file__).resolve().parent.parent.parent
-_MODEL_PATH   = str(_ROOT / "models" / "best_model.pth")
+_ROOT = Path(__file__).resolve().parent.parent.parent
+_MODEL_PATH = str(_ROOT / "models" / "best_model.pth")
 _MAPPING_PATH = str(_ROOT / "models" / "class_mapping.pth")
-_REPORTS_DIR  = _ROOT / "reports"
+_REPORTS_DIR = _ROOT / "reports"
 
 
 # ── LangGraph state schema ────────────────────────────────────────────────────────
 
 class CoinState(TypedDict, total=False):
-    language:           str      # "en" or "fr"
-    language:           str      # "en" or "fr"
+    language: str      # "en" or "fr"
+    language: str      # "en" or "fr"
     """LangGraph state — travels through every node."""
     # inputs
-    image_path    : str
-    use_tta       : bool
+    image_path: str
+    use_tta: bool
     # after CNN node
     cnn_prediction: dict          # from CoinInference.predict()
-    route_taken   : Literal["historian", "validator", "investigator"]
+    route_taken: Literal["historian", "validator", "investigator"]
     # agent outputs
-    historian_result   : dict
-    validator_result   : dict
+    historian_result: dict
+    validator_result: dict
     investigator_result: dict
     # timing (seconds per node, added progressively)
-    node_timings  : dict          # {"cnn": 0.31, "historian": 12.4, ...}
+    node_timings: dict          # {"cnn": 0.31, "historian": 12.4, ...}
     # final
-    report        : str           # Markdown
-    pdf_path      : Optional[str] # path to saved PDF
+    report: str           # Markdown
+    pdf_path: Optional[str]  # path to saved PDF
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -90,10 +90,10 @@ class Gatekeeper:
 
     def __init__(
         self,
-        model_path:   str = _MODEL_PATH,
+        model_path: str = _MODEL_PATH,
         mapping_path: str = _MAPPING_PATH,
-        device:       str = "auto",
-        save_pdf:     bool = True,
+        device: str = "auto",
+        save_pdf: bool = True,
     ) -> None:
         # Configure logging once so INFO messages print to stdout
         # WHY basicConfig here and not at module level:
@@ -110,14 +110,15 @@ class Gatekeeper:
         if device == "auto":
             device = "cuda" if _torch.cuda.is_available() else "cpu"
         logger.info("Gatekeeper init: device=%s", device)
-        self._inference  = CoinInference(model_path, mapping_path, device)
-        self._historian  = Historian()
-        self._validator  = Validator()
+        self._inference = CoinInference(model_path, mapping_path, device)
+        self._historian = Historian()
+        self._validator = Validator()
         self._investigator = Investigator()
-        self._synthesis  = Synthesis()
-        self._save_pdf   = save_pdf
-        self._graph      = self._build_graph()
+        self._synthesis = Synthesis()
+        self._save_pdf = save_pdf
+        self._graph = self._build_graph()
         logger.info("Gatekeeper ready.")
+
     def reload_cnn_model(self) -> None:
         """
         Triggers a hot-swap of the underlying CNN model for Active Learning ZERO downtime.
@@ -145,13 +146,13 @@ class Gatekeeper:
         logger.info("Analyzing: %s  (tta=%s)", Path(image_path).name, tta)
         initial_state: CoinState = {
             "image_path": image_path,
-            "use_tta":    tta,
-            "language":   language,
+            "use_tta": tta,
+            "language": language,
             "node_timings": {},
         }
         final_state = self._graph.invoke(initial_state)
         timings = final_state.get("node_timings", {})
-        total   = sum(timings.values())
+        total = sum(timings.values())
         logger.info(
             "Pipeline complete — route=%s  total=%.2fs  timings=%s",
             final_state.get("route_taken", "?"),
@@ -159,9 +160,9 @@ class Gatekeeper:
             {k: f"{v:.2f}s" for k, v in timings.items()},
         )
         return {
-            "report":   final_state.get("report", ""),
+            "report": final_state.get("report", ""),
             "pdf_path": final_state.get("pdf_path"),
-            "state":    final_state,
+            "state": final_state,
         }
 
     # ── graph construction ───────────────────────────────────────────────────────────
@@ -171,12 +172,12 @@ class Gatekeeper:
         g = StateGraph(CoinState)
 
         # Bind agent instances into node functions
-        inference   = self._inference
-        historian   = self._historian
-        validator   = self._validator
+        inference = self._inference
+        historian = self._historian
+        validator = self._validator
         investigator = self._investigator
-        synthesis   = self._synthesis
-        save_pdf    = self._save_pdf
+        synthesis = self._synthesis
+        save_pdf = self._save_pdf
 
         # ─ retry helper (local to _build_graph) ─────────────────────────────────────────
         def _retry_call(fn, retries: int = 2, backoff: float = 1.5):
@@ -224,22 +225,22 @@ class Gatekeeper:
             t0 = time.perf_counter()
             result = inference.predict(
                 state["image_path"],
-                tta     = state.get("use_tta", False),
-                gradcam = True,   # always generate heatmap — synthesis embeds it in PDF
+                tta=state.get("use_tta", False),
+                gradcam=True,   # always generate heatmap — synthesis embeds it in PDF
             )
             cnn = {
-                "class_id":         result["class_id"],
-                "label":            result["label"],
-                "confidence":       result["confidence"],
-                "top5":             result["top5"],
-                "tta_used":         result["tta_used"],
-                "vote_fraction":    result.get("vote_fraction"),
-                "tta_passes":       result.get("tta_passes", 1),
-                "temperature":      result.get("temperature", 1.0),
-                "gradcam_path":     result.get("gradcam_path"),   # PNG path or None
+                "class_id": result["class_id"],
+                "label": result["label"],
+                "confidence": result["confidence"],
+                "top5": result["top5"],
+                "tta_used": result["tta_used"],
+                "vote_fraction": result.get("vote_fraction"),
+                "tta_passes": result.get("tta_passes", 1),
+                "temperature": result.get("temperature", 1.0),
+                "gradcam_path": result.get("gradcam_path"),   # PNG path or None
                 "inference_time_ms": result.get("inference_time_ms", 0),  # forward-pass ms
             }
-            conf      = cnn["confidence"]
+            conf = cnn["confidence"]
             vote_frac = cnn["vote_fraction"]
 
             # ── Vote-fraction routing override ───────────────────────────────
@@ -296,13 +297,18 @@ class Gatekeeper:
             """
             t0 = time.perf_counter()
             try:
-                result = _retry_call(lambda: historian.research(state["cnn_prediction"], language=state.get("language", "en")))
+                result = _retry_call(
+                    lambda: historian.research(
+                        state["cnn_prediction"],
+                        language=state.get(
+                            "language",
+                            "en")))
             except Exception as exc:
                 logger.error("historian_node failed: %s", exc, exc_info=True)
                 result = {
                     "narrative": f"Historical research unavailable: {exc}",
-                    "llm_used":  False,
-                    "_error":    str(exc),
+                    "llm_used": False,
+                    "_error": str(exc),
                 }
             elapsed = time.perf_counter() - t0
             logger.info(
@@ -327,20 +333,25 @@ class Gatekeeper:
             except Exception as exc:
                 logger.error("validator_node (CV) failed: %s", exc, exc_info=True)
                 val_result = {
-                    "status":               "unknown",
-                    "warning":              f"CV analysis error: {exc}",
+                    "status": "unknown",
+                    "warning": f"CV analysis error: {exc}",
                     "detection_confidence": 0.0,
-                    "uncertainty":          "high",
-                    "_error":               str(exc),
+                    "uncertainty": "high",
+                    "_error": str(exc),
                 }
             try:
-                hist_result = _retry_call(lambda: historian.research(state["cnn_prediction"], language=state.get("language", "en")))
+                hist_result = _retry_call(
+                    lambda: historian.research(
+                        state["cnn_prediction"],
+                        language=state.get(
+                            "language",
+                            "en")))
             except Exception as exc:
                 logger.error("validator_node (historian) failed: %s", exc, exc_info=True)
                 hist_result = {
                     "narrative": f"Historical research unavailable: {exc}",
-                    "llm_used":  False,
-                    "_error":    str(exc),
+                    "llm_used": False,
+                    "_error": str(exc),
                 }
             elapsed = time.perf_counter() - t0
             logger.info(
@@ -352,9 +363,9 @@ class Gatekeeper:
             timings = {**state.get("node_timings", {}), "validator": elapsed}
             return {
                 **state,
-                "validator_result":  val_result,
-                "historian_result":  hist_result,
-                "node_timings":      timings,
+                "validator_result": val_result,
+                "historian_result": hist_result,
+                "node_timings": timings,
             }
 
         # ─ node: Investigator ────────────────────────────────────────────────────────────
@@ -377,11 +388,11 @@ class Gatekeeper:
                 logger.error("investigator_node failed: %s", exc, exc_info=True)
                 result = {
                     "visual_description": f"Investigation unavailable: {exc}",
-                    "detected_features":  {},
-                    "kb_matches":         [],
-                    "suggested_type_id":  None,
-                    "llm_used":           False,
-                    "_error":             str(exc),
+                    "detected_features": {},
+                    "kb_matches": [],
+                    "suggested_type_id": None,
+                    "llm_used": False,
+                    "_error": str(exc),
                 }
             elapsed = time.perf_counter() - t0
             logger.info(
@@ -402,13 +413,13 @@ class Gatekeeper:
             but a PDF rendering failure (e.g. missing font) should NOT discard the
             already-assembled text report — we degrade to report-only output.
             """
-            t0     = time.perf_counter()
+            t0 = time.perf_counter()
             report = synthesis.synthesize(state)
             pdf_path = None
             if save_pdf:
                 _REPORTS_DIR.mkdir(exist_ok=True)
                 img_stem = Path(state["image_path"]).stem
-                ts       = __import__("datetime").datetime.now().strftime("%Y%m%d_%H%M%S")
+                ts = __import__("datetime").datetime.now().strftime("%Y%m%d_%H%M%S")
                 pdf_path = str(_REPORTS_DIR / f"report_{img_stem}_{ts}.pdf")
                 try:
                     synthesis.to_pdf(state, pdf_path)
@@ -422,11 +433,11 @@ class Gatekeeper:
             return {**state, "report": report, "pdf_path": pdf_path, "node_timings": timings}
 
         # ─ wire the graph ─────────────────────────────────────────────────────────────────
-        g.add_node("cnn",         cnn_node)
-        g.add_node("historian",   historian_node)
-        g.add_node("validator",   validator_node)
-        g.add_node("investigator",investigator_node)
-        g.add_node("synthesis",   synthesis_node)
+        g.add_node("cnn", cnn_node)
+        g.add_node("historian", historian_node)
+        g.add_node("validator", validator_node)
+        g.add_node("investigator", investigator_node)
+        g.add_node("synthesis", synthesis_node)
 
         g.set_entry_point("cnn")
 
@@ -437,16 +448,16 @@ class Gatekeeper:
             "cnn",
             _route,
             {
-                "historian":   "historian",
-                "validator":   "validator",
-                "investigator":"investigator",
+                "historian": "historian",
+                "validator": "validator",
+                "investigator": "investigator",
             },
         )
 
-        g.add_edge("historian",    "synthesis")
-        g.add_edge("validator",    "synthesis")
+        g.add_edge("historian", "synthesis")
+        g.add_edge("validator", "synthesis")
         g.add_edge("investigator", "synthesis")
-        g.add_edge("synthesis",    END)
+        g.add_edge("synthesis", END)
 
         return g.compile()
 
@@ -456,7 +467,8 @@ class Gatekeeper:
 # ══════════════════════════════════════════════════════════════════════════════
 
 _gk_instance: Gatekeeper | None = None
-_gk_lock     = threading.Lock()
+_gk_lock = threading.Lock()
+
 
 def get_gatekeeper(**kwargs) -> Gatekeeper:
     """
@@ -484,4 +496,3 @@ def get_gatekeeper(**kwargs) -> Gatekeeper:
             if _gk_instance is None:   # second check inside the lock
                 _gk_instance = Gatekeeper(**kwargs)
     return _gk_instance
-

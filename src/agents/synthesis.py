@@ -26,82 +26,82 @@ from datetime import datetime
 
 
 # ── colour palette (R, G, B) ──────────────────────────────────────────────────
-_C_BRAND_DARK  = (15,  40,  80)    # deep navy  — header/footer band
-_C_BRAND_MID   = (30,  80, 160)    # mid blue   — section rule lines
+_C_BRAND_DARK = (15, 40, 80)    # deep navy  — header/footer band
+_C_BRAND_MID = (30, 80, 160)    # mid blue   — section rule lines
 _C_BRAND_LIGHT = (220, 230, 245)   # pale blue  — table header row bg
-_C_ROW_ALT     = (245, 247, 250)   # near-white — alternating table rows
-_C_TEXT        = (30,  30,  30)    # near-black — body text
-_C_MUTED       = (110, 110, 110)   # grey       — secondary / label text
-_C_WHITE       = (255, 255, 255)
-_C_GREEN       = (30,  130,  80)   # high confidence
-_C_AMBER       = (180, 120,   0)   # medium confidence
-_C_RED_DK      = (160,  30,  30)   # low confidence
-_C_ORANGE      = (200, 100,  20)   # forensic warning
-_C_RULE        = (200, 210, 225)   # light border lines
+_C_ROW_ALT = (245, 247, 250)   # near-white — alternating table rows
+_C_TEXT = (30, 30, 30)    # near-black — body text
+_C_MUTED = (110, 110, 110)   # grey       — secondary / label text
+_C_WHITE = (255, 255, 255)
+_C_GREEN = (30, 130, 80)   # high confidence
+_C_AMBER = (180, 120, 0)   # medium confidence
+_C_RED_DK = (160, 30, 30)   # low confidence
+_C_ORANGE = (200, 100, 20)   # forensic warning
+_C_RULE = (200, 210, 225)   # light border lines
 
 # ── Route display labels ───────────────────────────────────────────────────────
 _LABELS_EN = {
-    "historian":    "Historical Analysis",
-    "validator":    "Forensic Validation",
+    "historian": "Historical Analysis",
+    "validator": "Forensic Validation",
     "investigator": "Visual Investigation",
     "report_title": "NUMISMATIC ANALYSIS REPORT",
-    "cnn_result":   "CNN CLASSIFICATION RESULT",
-    "expert_nar":   "EXPERT NARRATIVE",
+    "cnn_result": "CNN CLASSIFICATION RESULT",
+    "expert_nar": "EXPERT NARRATIVE",
     "unclassified": "UNCLASSIFIED SPECIMEN",
     "best_candidate": "BEST VISUAL CANDIDATE: CN {label}",
     "confidence_lbl": "Confidence",
-    "top5_title":   "Top-5 Model Candidates",
+    "top5_title": "Top-5 Model Candidates",
     "hist_record_title": "Corpus Nummorum Record",
     "gradcam_title": "Visual Explanation (Grad-CAM)",
-    "prepared_by":  "Prepared by: DeepCoin AI",
-    "source":       "Source: ",
-    "field":        "Field",
-    "value":        "Value",
-    "rank":         "Rank",
-    "cn_type":      "CN Type",
-    "coin_desc":    "Coin Description",
-    "conf_col":     "Confidence",
-    "region":       "Region",
-    "date":         "Date",
-    "mint":         "Mint",
-    "denom":        "Denomination",
-    "material":     "Material",
-    "obv":          "Obverse",
-    "rev":          "Reverse",
-    "period":       "Period",
-    "cn_ref":       "CN Reference"
+    "prepared_by": "Prepared by: DeepCoin AI",
+    "source": "Source: ",
+    "field": "Field",
+    "value": "Value",
+    "rank": "Rank",
+    "cn_type": "CN Type",
+    "coin_desc": "Coin Description",
+    "conf_col": "Confidence",
+    "region": "Region",
+    "date": "Date",
+    "mint": "Mint",
+    "denom": "Denomination",
+    "material": "Material",
+    "obv": "Obverse",
+    "rev": "Reverse",
+    "period": "Period",
+    "cn_ref": "CN Reference"
 }
 
 _LABELS_FR = {
-    "historian":    "Analyse Historique",
-    "validator":    "Validation Forensic",
+    "historian": "Analyse Historique",
+    "validator": "Validation Forensic",
     "investigator": "Investigation Visuelle",
     "report_title": "RAPPORT D'ANALYSE NUMISMATIQUE",
-    "cnn_result":   "RÉSULTAT DE CLASSIFICATION CNN",
-    "expert_nar":   "RÉCIT D'EXPERT",
+    "cnn_result": "RÉSULTAT DE CLASSIFICATION CNN",
+    "expert_nar": "RÉCIT D'EXPERT",
     "unclassified": "SPÉCIMEN NON CLASSIFIÉ",
     "best_candidate": "MEILLEUR CANDIDAT VISUEL: CN {label}",
     "confidence_lbl": "Confiance",
-    "top5_title":   "Top-5 Candidats du Modèle",
+    "top5_title": "Top-5 Candidats du Modèle",
     "hist_record_title": "Dossier Corpus Nummorum",
     "gradcam_title": "Explication Visuelle (Grad-CAM)",
-    "prepared_by":  "Préparé par: DeepCoin AI",
-    "source":       "Source: ",
-    "field":        "Champ",
-    "value":        "Valeur",
-    "rank":         "Rang",
-    "cn_type":      "Type CN",
-    "coin_desc":    "Description de la Monnaie",
-    "conf_col":     "Confiance",
-    "region":       "Région",
-    "date":         "Date",
-    "mint":         "Atelier",
-    "denom":        "Dénomination",
-    "material":     "Matériau",
-    "obv":          "Avers",
-    "rev":          "Revers",
-    "period":       "Période",
-    "cn_ref":       "Référence CN"
+    "prepared_by": "Préparé par: DeepCoin AI",
+    "source": "Source: ",
+    "field": "Champ",
+    "value": "Valeur",
+    "rank": "Rang",
+    "cn_type": "Type CN",
+    "coin_desc": "Description de la Monnaie",
+    "conf_col": "Confiance",
+    "region": "Région",
+    "date": "Date",
+    "mint": "Atelier",
+    "denom": "Dénomination",
+    "material": "Matériau",
+    "obv": "Avers",
+    "rev": "Revers",
+    "period": "Période",
+    "cn_ref": "Référence CN"
 }
 
 
@@ -114,27 +114,27 @@ _RE_CONTEXT = re.compile(r"\[CONTEXT\s*(?:\d+|CNN|N)?\s*(?:—[^\]]*)?\]", re.I)
 # Markdown patterns produced by some LLM responses when the model ignores the
 # "plain prose only" instruction.  Order matters — bold before italic.
 _MD_PATTERNS = [
-    (re.compile(r"\*{3}(.+?)\*{3}"),    r"\1"),   # ***bold-italic*** → text
-    (re.compile(r"\*{2}(.+?)\*{2}"),    r"\1"),   # **bold** → text
-    (re.compile(r"\*(.+?)\*"),          r"\1"),   # *italic* → text
-    (re.compile(r"_{2}(.+?)_{2}"),      r"\1"),   # __bold__ → text
-    (re.compile(r"_(.+?)_"),            r"\1"),   # _italic_ → text
+    (re.compile(r"\*{3}(.+?)\*{3}"), r"\1"),   # ***bold-italic*** → text
+    (re.compile(r"\*{2}(.+?)\*{2}"), r"\1"),   # **bold** → text
+    (re.compile(r"\*(.+?)\*"), r"\1"),   # *italic* → text
+    (re.compile(r"_{2}(.+?)_{2}"), r"\1"),   # __bold__ → text
+    (re.compile(r"_(.+?)_"), r"\1"),   # _italic_ → text
     (re.compile(r"`{1,3}(.+?)`{1,3}"), r"\1"),   # `code` / ```code``` → text
-    (re.compile(r"(?m)^\s*#{1,6}\s+"),  ""),     # ## Heading at line-start → stripped
-    (re.compile(r"#{2,}\s*"),           ""),     # inline ## / #### (LLM artefact)
+    (re.compile(r"(?m)^\s*#{1,6}\s+"), ""),     # ## Heading at line-start → stripped
+    (re.compile(r"#{2,}\s*"), ""),     # inline ## / #### (LLM artefact)
 ]
 
 # Greek → Latin transliteration (dict-based)
 _GREEK_MAP: dict = {
-    "Α":"A",  "Β":"B",  "Γ":"G",  "Δ":"D",  "Ε":"E",  "Ζ":"Z",
-    "Η":"E",  "Θ":"TH", "Ι":"I",  "Κ":"K",  "Λ":"L",  "Μ":"M",
-    "Ν":"N",  "Ξ":"X",  "Ο":"O",  "Π":"P",  "Ρ":"R",  "Σ":"S",
-    "Τ":"T",  "Υ":"Y",  "Φ":"PH", "Χ":"KH", "Ψ":"PS", "Ω":"O",
-    "α":"a",  "β":"b",  "γ":"g",  "δ":"d",  "ε":"e",  "ζ":"z",
-    "η":"e",  "θ":"th", "ι":"i",  "κ":"k",  "λ":"l",  "μ":"m",
-    "ν":"n",  "ξ":"x",  "ο":"o",  "π":"p",  "ρ":"r",  "σ":"s",
-    "ς":"s",  "τ":"t",  "υ":"y",  "φ":"ph", "χ":"kh", "ψ":"ps",
-    "ω":"o",
+    "Α": "A", "Β": "B", "Γ": "G", "Δ": "D", "Ε": "E", "Ζ": "Z",
+    "Η": "E", "Θ": "TH", "Ι": "I", "Κ": "K", "Λ": "L", "Μ": "M",
+    "Ν": "N", "Ξ": "X", "Ο": "O", "Π": "P", "Ρ": "R", "Σ": "S",
+    "Τ": "T", "Υ": "Y", "Φ": "PH", "Χ": "KH", "Ψ": "PS", "Ω": "O",
+    "α": "a", "β": "b", "γ": "g", "δ": "d", "ε": "e", "ζ": "z",
+    "η": "e", "θ": "th", "ι": "i", "κ": "k", "λ": "l", "μ": "m",
+    "ν": "n", "ξ": "x", "ο": "o", "π": "p", "ρ": "r", "σ": "s",
+    "ς": "s", "τ": "t", "υ": "y", "φ": "ph", "χ": "kh", "ψ": "ps",
+    "ω": "o",
 }
 
 # Typographic characters that NFD decomposition cannot resolve to ASCII.
@@ -151,7 +151,7 @@ _TYPO_MAP: dict = {
     "\u2013": "-",   # EN DASH                       –
     "\u2014": "-",   # EM DASH                       —
     "\u2015": "-",   # HORIZONTAL BAR                ―
-    "\u2026": "...", # HORIZONTAL ELLIPSIS           …
+    "\u2026": "...",  # HORIZONTAL ELLIPSIS           …
     "\u00DF": "ss",  # LATIN SMALL LETTER SHARP S    ß  (German: Geiß → Geiss)
     "\u00C6": "AE",  # LATIN CAPITAL LIGATURE AE     Æ
     "\u00E6": "ae",  # LATIN SMALL   LIGATURE AE     æ
@@ -212,8 +212,8 @@ def _s(text: str) -> str:
 
     # Step 3b — normalise German date notation from corpus-nummorum.eu
     #   The KB stores dates in German: "500-400 v.Chr." = "500-400 BC"
-    t = re.sub(r"\bv\.\s*Chr\.", "BC",  t)
-    t = re.sub(r"\bn\.\s*Chr\.", "AD",  t)
+    t = re.sub(r"\bv\.\s*Chr\.", "BC", t)
+    t = re.sub(r"\bn\.\s*Chr\.", "AD", t)
 
     # Step 3b — collapse runs of spaces / clean up leftover punctuation gaps
     t = re.sub(r"  +", " ", t).strip()
@@ -295,10 +295,10 @@ def _enrich_label(type_id, include_date: bool = False) -> str:
         rec = get_rag_engine().get_by_id(int(type_id))
         if not rec:
             return f"CN {type_id}"
-        mat   = (rec.get("material",     "") or "").strip().title()
+        mat = (rec.get("material", "") or "").strip().title()
         denom = (rec.get("denomination", "") or "").strip().title()
-        mint  = (rec.get("mint",         "") or "").strip()
-        date  = (rec.get("date",         "") or "").strip()
+        mint = (rec.get("mint", "") or "").strip()
+        date = (rec.get("date", "") or "").strip()
         # Strip parenthetical qualifiers from denom: "Large Denomination (Bronze)" -> "Large Denomination"
         denom = re.sub(r'\s*\([^)]*\)', '', denom).strip()
         # Strip archaeological period appended to date: "c. 500-450 BC Archaic Period" -> "c. 500-450 BC"
@@ -324,7 +324,7 @@ def _enrich_label(type_id, include_date: bool = False) -> str:
             denom = ""
         # NOTE: use module-level re — no local import needed
         parts = " ".join(p for p in (mat, denom) if p)
-        base  = f"{parts} - {mint}" if (parts and mint) else (parts or mint or f"CN {type_id}")
+        base = f"{parts} - {mint}" if (parts and mint) else (parts or mint or f"CN {type_id}")
         if include_date and date and len(date) <= 30:
             return f"{base}, {date}"
         return base
@@ -373,13 +373,13 @@ class Synthesis:
 
     def synthesize(self, state: dict) -> str:
         """Returns a structured plain-text summary (no Markdown, no special chars)."""
-        cnn   = state.get("cnn_prediction", {})
+        cnn = state.get("cnn_prediction", {})
         route = state.get("route_taken", "unknown")
-        h     = state.get("historian_result", {})
-        ts    = datetime.now().strftime("%Y-%m-%d  %H:%M:%S")
-        img   = _basename(state.get("image_path", ""))
+        h = state.get("historian_result", {})
+        ts = datetime.now().strftime("%Y-%m-%d  %H:%M:%S")
+        img = _basename(state.get("image_path", ""))
         label = cnn.get("label", "N/A")
-        conf  = cnn.get("confidence", 0.0)
+        conf = cnn.get("confidence", 0.0)
 
         lines = [
             "=" * 62,
@@ -436,9 +436,9 @@ class Synthesis:
         from fpdf import FPDF
         from fpdf.enums import XPos, YPos
 
-        cnn   = state.get("cnn_prediction", {})
+        cnn = state.get("cnn_prediction", {})
         route = state.get("route_taken", "unknown")
-        h     = state.get("historian_result", {})
+        h = state.get("historian_result", {})
         language = state.get("language", "en")
 
         # Basic translations dictionary
@@ -448,10 +448,10 @@ class Synthesis:
             "Route": "Voie" if language == "fr" else "Route",
             "Confidence": "Confiance" if language == "fr" else "Confidence",
         }
-        v     = state.get("validator_result", {})
-        inv   = state.get("investigator_result", {})
-        img   = _basename(state.get("image_path", ""))
-        ts    = datetime.now().strftime("%d %B %Y    %H:%M")
+        v = state.get("validator_result", {})
+        inv = state.get("investigator_result", {})
+        img = _basename(state.get("image_path", ""))
+        ts = datetime.now().strftime("%d %B %Y    %H:%M")
 
         # ── page setup ────────────────────────────────────────────────────────
         # Use _PDF subclass so every page automatically gets the branded footer
@@ -469,13 +469,25 @@ class Synthesis:
         f.ln(6)
 
         # ── CNN classification ────────────────────────────────────────────────
-        _section_title(f, "Classification CNN" if language=="fr" else "CNN Classification", lang=language)
+        _section_title(f, "Classification CNN" if language == "fr" else "CNN Classification", lang=language)
         _kv_table(f, [
-            ("Meilleure Correspondance" if state.get("language", "en") == "fr" else "Best Match",      _s(_enrich_label(str(cnn.get("label", "N/A"))))),
-            ("Confiance" if state.get("language", "en") == "fr" else "Confidence",      f"{cnn.get('confidence', 0):.1%}"),
-            ("Modèle" if state.get("language", "en") == "fr" else "Model",           "EfficientNet-B3  (438 classes)"),
-            ("Voie d'Analyse" if state.get("language", "en") == "fr" else "Analysis Route",  {"historian": "Historian", "validator": "Validator", "investigator": "Investigator"}.get(route, route.upper()) if state.get("language", "en") != "fr" else {"historian": "Historien", "validator": "Validateur", "investigator": "Enquêteur Visuel"}.get(route, route.upper())),
-            ("Application TTA" if state.get("language", "en") == "fr" else "TTA Applied", "Oui" if cnn.get("tta_used") else "Non" if state.get("language", "en") == "fr" else "Yes" if cnn.get("tta_used") else "No"),
+            ("Meilleure Correspondance" if state.get("language", "en") ==
+             "fr" else "Best Match", _s(_enrich_label(str(cnn.get("label", "N/A"))))),
+            ("Confiance" if state.get("language", "en") ==
+             "fr" else "Confidence", f"{cnn.get('confidence', 0):.1%}"),
+            ("Modèle" if state.get("language", "en") == "fr" else "Model", "EfficientNet-B3  (438 classes)"),
+            ("Voie d'Analyse" if state.get("language",
+                                           "en") == "fr" else "Analysis Route",
+             {"historian": "Historian",
+              "validator": "Validator",
+              "investigator": "Investigator"}.get(route,
+                                                  route.upper()) if state.get("language",
+                                                                              "en") != "fr" else {"historian": "Historien",
+                                                                                                  "validator": "Validateur",
+                                                                                                  "investigator": "Enquêteur Visuel"}.get(route,
+                                                                                                                                          route.upper())),
+            ("Application TTA" if state.get("language", "en") == "fr" else "TTA Applied", "Oui" if cnn.get(
+                "tta_used") else "Non" if state.get("language", "en") == "fr" else "Yes" if cnn.get("tta_used") else "No"),
         ])
 
         top5 = cnn.get("top5", [])
@@ -495,22 +507,23 @@ class Synthesis:
         if h:
             _section_title(f, labels["hist_record_title"], lang=language)
             rows = [
-                (labels.get("mint", "Atelier"),         h.get("mint",           "")),
-                (labels.get("region", "Région"),       h.get("region",         "")),
-                (labels.get("date", "Date"),         h.get("date",           "")),
-                (labels.get("period", "Period"),       h.get("period",         "")),
-                (labels.get("material", "Material"),     h.get("material",       "")),
-                (labels.get("denom", "Denomination"),    h.get("denomination",   "")),
-                (labels.get("obv", "Obverse"),       h.get("obverse",        "")),
-                (labels.get("rev", "Reverse"),       h.get("reverse",        "")),
-                ("Personnes" if language=="fr" else "Persons", h.get("persons",        "")),
-                (labels.get("cn_ref", "CN Reference"),  str(h.get("type_id",    ""))),
+                (labels.get("mint", "Atelier"), h.get("mint", "")),
+                (labels.get("region", "Région"), h.get("region", "")),
+                (labels.get("date", "Date"), h.get("date", "")),
+                (labels.get("period", "Period"), h.get("period", "")),
+                (labels.get("material", "Material"), h.get("material", "")),
+                (labels.get("denom", "Denomination"), h.get("denomination", "")),
+                (labels.get("obv", "Obverse"), h.get("obverse", "")),
+                (labels.get("rev", "Reverse"), h.get("reverse", "")),
+                ("Personnes" if language == "fr" else "Persons", h.get("persons", "")),
+                (labels.get("cn_ref", "CN Reference"), str(h.get("type_id", ""))),
             ]
             _kv_table(f, [(k, _s(val)) for k, val in rows if val])
 
             if h.get("narrative"):
                 f.ln(4)
-                _subsection_title(f, "Commentaire d\'Expert" if language=="fr" else "Expert Commentary", lang=language)
+                _subsection_title(f, "Commentaire d\'Expert" if language ==
+                                  "fr" else "Expert Commentary", lang=language)
                 _body_paragraph(f, h["narrative"])
 
             if h.get("source_url"):
@@ -520,12 +533,16 @@ class Synthesis:
 
         # ── forensic validation ───────────────────────────────────────────────
         if v:
-            _section_title(f, "Validation Forensique" if language == "fr" else "Forensic Validation", lang=language)
+            _section_title(f, "Validation Forensique" if language ==
+                           "fr" else "Forensic Validation", lang=language)
             _status_badge(f, v.get("match", True))
             _kv_table(f, [
-                ("Statut" if language=="fr" else "Statut" if language=="fr" else "Status",            _s(v.get("status", "").upper())),
-                ("Matériau Détecté" if language=="fr" else "Matériau Détecté" if language=="fr" else "Detected Material", _s(v.get("detected_material", ""))),
-                ("Matériau Attendu" if language=="fr" else "Matériau Attendu" if language=="fr" else "Expected Material", _s(v.get("expected_material", ""))),
+                ("Statut" if language == "fr" else "Statut" if language ==
+                 "fr" else "Status", _s(v.get("status", "").upper())),
+                ("Matériau Détecté" if language == "fr" else "Matériau Détecté" if language ==
+                 "fr" else "Detected Material", _s(v.get("detected_material", ""))),
+                ("Matériau Attendu" if language == "fr" else "Matériau Attendu" if language ==
+                 "fr" else "Expected Material", _s(v.get("expected_material", ""))),
             ])
             if v.get("warning"):
                 f.ln(3)
@@ -534,7 +551,8 @@ class Synthesis:
 
         # ── visual investigation ──────────────────────────────────────────────
         if inv:
-            _section_title(f, "Investigation Visuelle" if language=="fr" else "Visual Investigation", lang=language)
+            _section_title(f, "Investigation Visuelle" if language ==
+                           "fr" else "Visual Investigation", lang=language)
             if inv.get("visual_description"):
                 # Trim verbose pre-analysis preamble: show only the structured
                 # section text (METAL: / OBVERSE: / etc.) without the LLM's
@@ -545,7 +563,8 @@ class Synthesis:
             feats = inv.get("detected_features", {})
             if feats:
                 f.ln(3)
-                _subsection_title(f, "Attributs Détectés" if language=="fr" else "Detected Attributes", lang=language)
+                _subsection_title(f, "Attributs Détectés" if language ==
+                                  "fr" else "Detected Attributes", lang=language)
                 _kv_table(f, [
                     (k.replace("_", " ").title(), _s(str(val)))
                     for k, val in feats.items()
@@ -555,14 +574,17 @@ class Synthesis:
             kb = inv.get("kb_matches", [])
             if kb:
                 f.ln(3)
-                _subsection_title(f, "Recherches Associées Base de Connaissances" if language=="fr" else "Closest Knowledge Base Matches", lang=language)
+                _subsection_title(f, "Recherches Associées Base de Connaissances" if language ==
+                                  "fr" else "Closest Knowledge Base Matches", lang=language)
                 _kb_table(f, kb[:3])
 
             if inv.get("suggested_type_id"):
                 f.ln(3)
-                tid  = inv['suggested_type_id']
+                tid = inv['suggested_type_id']
                 name = _s(_enrich_label(tid))
-                _info_box(f, f"Meilleure correspondance visuelle: {name}  (CN {tid})" if language=="fr" else f"Best visual match: {name}  (CN {tid})")
+                _info_box(
+                    f,
+                    f"Meilleure correspondance visuelle: {name}  (CN {tid})" if language == "fr" else f"Best visual match: {name}  (CN {tid})")
             f.ln(5)
 
         # ── save ──────────────────────────────────────────────────────────────
@@ -605,12 +627,12 @@ class _PDF:
                 self_pdf.set_text_color(180, 200, 230)
                 self_pdf.set_font("Helvetica", "", 8)
                 self_pdf.cell(110, 5,
-                    "DeepCoin-Core  |  Dhia Chaieb  |  ESPRIT School of Engineering  |  YEBNI")
+                              "DeepCoin-Core  |  Dhia Chaieb  |  ESPRIT School of Engineering  |  YEBNI")
                 self_pdf.set_xy(self_pdf.w - 65, self_pdf.h - 10)
                 # {nb} is replaced by fpdf2 with the total page count
                 self_pdf.cell(45, 5,
-                    f"Page {self_pdf.page_no()}/{{nb}}",
-                    align="R")
+                              f"Page {self_pdf.page_no()}/{{nb}}",
+                              align="R")
                 self_pdf.set_text_color(*_C_TEXT)
 
         pdf = DeepCoinPDF()
@@ -681,15 +703,21 @@ def _draw_result_stripe(f, cnn: dict, route: str, lang: str = "en") -> None:
         knows the system.
     """
     from fpdf.enums import XPos, YPos
-    label      = str(cnn.get("label", "N/A"))
-    conf       = cnn.get("confidence", 0.0)
+    label = str(cnn.get("label", "N/A"))
+    conf = cnn.get("confidence", 0.0)
     conf_color = _conf_color(conf)
-    route_lbl  = _safe({"historian": "Historian", "validator": "Validator", "investigator": "Investigator"}.get(route, route.upper()) if  lang  != "fr" else {"historian": "Historien", "validator": "Validateur", "investigator": "Enquêteur Visuel"}.get(route, route.upper()))
+    route_lbl = _safe({"historian": "Historian",
+                       "validator": "Validator",
+                       "investigator": "Investigator"}.get(route,
+                                                           route.upper()) if lang != "fr" else {"historian": "Historien",
+                                                                                                "validator": "Validateur",
+                                                                                                "investigator": "Enquêteur Visuel"}.get(route,
+                                                                                                                                        route.upper()))
 
     # Human-readable coin identity from KB  (e.g. "Silver Drachm — Maroneia")
     human_name = _safe(_enrich_label(label))
 
-    y  = f.get_y()
+    y = f.get_y()
     ew = _ew(f)
 
     # Background stripe — 22 mm tall to fit coin name + sub-label on two lines
@@ -702,7 +730,7 @@ def _draw_result_stripe(f, cnn: dict, route: str, lang: str = "en") -> None:
     f.set_font("Helvetica", "B", 11)
     f.set_text_color(*_C_BRAND_DARK)
     if conf < 0.40:
-        f.cell(86, 8, _LABELS_FR["unclassified"] if lang=="fr" else _LABELS_EN["unclassified"])
+        f.cell(86, 8, _LABELS_FR["unclassified"] if lang == "fr" else _LABELS_EN["unclassified"])
     else:
         name = human_name[:50] + ("..." if len(human_name) > 50 else "")
         f.cell(86, 8, name)
@@ -712,7 +740,8 @@ def _draw_result_stripe(f, cnn: dict, route: str, lang: str = "en") -> None:
     f.set_font("Helvetica", "", 8)
     f.set_text_color(*_C_MUTED)
     if conf < 0.40:
-        f.cell(86, 6, (_LABELS_FR["best_candidate"] if lang=="fr" else _LABELS_EN["best_candidate"]).format(label=label))
+        f.cell(86, 6, (_LABELS_FR["best_candidate"] if lang ==
+               "fr" else _LABELS_EN["best_candidate"]).format(label=label))
     else:
         f.cell(86, 6, f"Corpus Nummorum \xb7 CN {label}")
 
@@ -726,7 +755,7 @@ def _draw_result_stripe(f, cnn: dict, route: str, lang: str = "en") -> None:
     f.set_xy(pill_x, pill_y)
     f.set_font("Helvetica", "B", 9)
     f.set_text_color(*_C_WHITE)
-    conf_lbl = _LABELS_FR['confidence_lbl'] if lang=='fr' else _LABELS_EN['confidence_lbl']
+    conf_lbl = _LABELS_FR['confidence_lbl'] if lang == 'fr' else _LABELS_EN['confidence_lbl']
     f.cell(pill_w, pill_h, f"  {conf_lbl}: {conf:.1%}", align="L")
 
     # Route label — right aligned
@@ -824,7 +853,7 @@ def _kv_table(f, rows: list, lang: str = "en") -> None:
     f.set_font("Helvetica", "B", 9)
     f.set_text_color(*_C_BRAND_DARK)
     f.set_x(f.l_margin)
-    labels = _LABELS_FR if lang=="fr" else _LABELS_EN
+    labels = _LABELS_FR if lang == "fr" else _LABELS_EN
     f.cell(col_k, hdr_h, f"  {labels['field']}", border=1, fill=True,
            new_x=XPos.RIGHT, new_y=YPos.TOP)
     f.cell(col_v, hdr_h, f"  {labels['value']}", border=1, fill=True,
@@ -844,13 +873,13 @@ def _kv_table(f, rows: list, lang: str = "en") -> None:
         val_lines = f.multi_cell(col_v, row_h, val_text,
                                  dry_run=True, output="LINES")
 
-        n_lines  = max(len(key_lines), len(val_lines), 1)
-        total_h  = n_lines * row_h
+        n_lines = max(len(key_lines), len(val_lines), 1)
+        total_h = n_lines * row_h
         # PREVENT mid-row page breaks: add a page NOW if the row won't fit.
         # 14 mm is reserved for the branded footer band at the bottom.
         if f.get_y() + total_h > f.h - f.b_margin - 14:
             f.add_page()
-        start_y  = f.get_y()
+        start_y = f.get_y()
 
         # ── Step 2: key column — full-height rectangle then text ──────────────
         f.set_fill_color(*fill_color)
@@ -892,11 +921,11 @@ def _confidence_table(f, top5: list, lang: str = "en") -> None:
         immediately interpretable (e.g. "Silver Drachm — Maroneia").
     """
     from fpdf.enums import XPos, YPos
-    ew    = _ew(f)
-    c1    = 14   # Rank
-    c2    = 28   # CN Type (numeric ID)
-    c4    = 30   # Confidence
-    c3    = ew - c1 - c2 - c4  # Coin Description (fills remaining ~98 mm)
+    ew = _ew(f)
+    c1 = 14   # Rank
+    c2 = 28   # CN Type (numeric ID)
+    c4 = 30   # Confidence
+    c3 = ew - c1 - c2 - c4  # Coin Description (fills remaining ~98 mm)
     row_h = 7
 
     # Guard: if header + all rows won't fit, start on a new page
@@ -909,8 +938,9 @@ def _confidence_table(f, top5: list, lang: str = "en") -> None:
     f.set_font("Helvetica", "B", 9)
     f.set_text_color(*_C_BRAND_DARK)
     f.set_x(f.l_margin)
-    labels = _LABELS_FR if lang=="fr" else _LABELS_EN
-    for lbl, w in [(labels["rank"], c1), (labels["cn_type"], c2), (labels["coin_desc"], c3), (labels["conf_col"], c4)]:
+    labels = _LABELS_FR if lang == "fr" else _LABELS_EN
+    for lbl, w in [(labels["rank"], c1), (labels["cn_type"], c2),
+                   (labels["coin_desc"], c3), (labels["conf_col"], c4)]:
         f.cell(w, row_h, f"  {lbl}", border=1, fill=True,
                new_x=XPos.RIGHT, new_y=YPos.TOP)
     f.set_xy(f.l_margin, f.get_y() + row_h)
@@ -925,10 +955,10 @@ def _confidence_table(f, top5: list, lang: str = "en") -> None:
         if len(_desc) > 48:
             _desc = _desc[:45] + "..."
         for val, w in [
-            (str(i + 1),                                  c1),
-            (_s(raw_lbl),                                  c2),
-            (_desc,                                        c3),
-            (f"{t.get('confidence', 0):.1%}",             c4),
+            (str(i + 1), c1),
+            (_s(raw_lbl), c2),
+            (_desc, c3),
+            (f"{t.get('confidence', 0):.1%}", c4),
         ]:
             f.cell(w, row_h, f"  {val}", border="LBR", fill=True,
                    new_x=XPos.RIGHT, new_y=YPos.TOP)
@@ -973,10 +1003,10 @@ def _kb_table(f, matches: list, lang: str = "en") -> None:
         sense of relative similarity without implying false precision.
     """
     from fpdf.enums import XPos, YPos
-    ew    = _ew(f)
-    c1    = 22   # Match %
-    c3    = 44   # Date
-    c2    = ew - c1 - c3  # Coin Identity (fills remaining ~104 mm)
+    ew = _ew(f)
+    c1 = 22   # Match %
+    c3 = 44   # Date
+    c2 = ew - c1 - c3  # Coin Identity (fills remaining ~104 mm)
     row_h = 7
 
     # Normalise scores to 0-100 % relative to top hit
@@ -1003,15 +1033,15 @@ def _kb_table(f, matches: list, lang: str = "en") -> None:
         f.set_font("Helvetica", "", 9)
         f.set_text_color(*_C_TEXT)
         f.set_x(f.l_margin)
-        sim     = hit.get("score", 0) / max_s * 100
-        tid     = hit.get("type_id", "")
+        sim = hit.get("score", 0) / max_s * 100
+        tid = hit.get("type_id", "")
         # Coin identity: enriched description + CN number as reference
         identity = _s(_enrich_label(tid))
         identity_cell = f"{identity}  (CN {tid})" if identity != f"CN {tid}" else f"CN {tid}"
         for val, w in [
-            (f"{sim:.0f}%",              c1),
-            (_s(identity_cell),          c2),
-            (_clean_kb_date(hit.get("date", "")),   c3),
+            (f"{sim:.0f}%", c1),
+            (_s(identity_cell), c2),
+            (_clean_kb_date(hit.get("date", "")), c3),
         ]:
             f.cell(w, row_h, f"  {val}", border="LBR", fill=True,
                    new_x=XPos.RIGHT, new_y=YPos.TOP)
@@ -1062,7 +1092,7 @@ def _source_line(f, url: str, lang: str = "en") -> None:
     f.set_font("Helvetica", "I", 8)
     f.set_text_color(*_C_MUTED)
     f.set_x(f.l_margin)
-    labels = _LABELS_FR if lang=="fr" else _LABELS_EN
+    labels = _LABELS_FR if lang == "fr" else _LABELS_EN
     f.cell(0, 5, f"{labels['source']}{_s(url)}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     f.set_text_color(*_C_TEXT)
 
@@ -1161,14 +1191,15 @@ def _draw_gradcam_section(f, gradcam_path: str, lang: str = "en") -> None:
     """
     from fpdf.enums import XPos, YPos
 
-    _section_title(f, "Explication Visuelle (Grad-CAM)" if lang=="fr" else "Visual Explanation (Grad-CAM)", lang=lang)
+    _section_title(f, "Explication Visuelle (Grad-CAM)" if lang ==
+                   "fr" else "Visual Explanation (Grad-CAM)", lang=lang)
 
     page_break_guard = f.h - f.b_margin - 90  # need ~90 mm: image height + caption
     if f.get_y() > page_break_guard:
         f.add_page()
 
-    y_start  = f.get_y()
-    x_left   = f.l_margin
+    y_start = f.get_y()
+    x_left = f.l_margin
     img_size = 80   # mm — square layout matches 299×299 px source
 
     # Left column: heatmap image
@@ -1182,7 +1213,7 @@ def _draw_gradcam_section(f, gradcam_path: str, lang: str = "en") -> None:
     f.set_xy(x_caption, y_start)
     f.set_font("Helvetica", "B", 9)
     f.set_text_color(*_C_BRAND_MID)
-    labels = _LABELS_FR if lang=="fr" else _LABELS_EN
+    labels = _LABELS_FR if lang == "fr" else _LABELS_EN
     f.cell(0, 6, _s(labels["gradcam_title"].upper()), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     f.set_xy(x_caption, y_start + 8)
     f.set_font("Helvetica", "", 8)
@@ -1212,24 +1243,24 @@ def _draw_gradcam_section(f, gradcam_path: str, lang: str = "en") -> None:
         ]
     else:
         caption_lines = [
-        "Each pixel is coloured by how much",
-        "it contributed to the classification.",
-        "",
-        "RED / YELLOW — high importance.",
-        "The model focused here.",
-        "",
-        "BLUE — low importance.",
-        "These regions had little influence",
-        "on the prediction.",
-        "",
-        "A well-calibrated CNN highlights",
-        "the portrait, legend, or reverse",
-        "symbol — not the background.",
-        "",
-        "If background heats up, the model",
-        "may have learned spurious correlations",
-        "from the training images.",
-    ]
+            "Each pixel is coloured by how much",
+            "it contributed to the classification.",
+            "",
+            "RED / YELLOW — high importance.",
+            "The model focused here.",
+            "",
+            "BLUE — low importance.",
+            "These regions had little influence",
+            "on the prediction.",
+            "",
+            "A well-calibrated CNN highlights",
+            "the portrait, legend, or reverse",
+            "symbol — not the background.",
+            "",
+            "If background heats up, the model",
+            "may have learned spurious correlations",
+            "from the training images.",
+        ]
     for line in caption_lines:
         f.set_xy(x_caption, f.get_y())
         f.cell(0, 4, _s(line), new_x=XPos.LMARGIN, new_y=YPos.NEXT)

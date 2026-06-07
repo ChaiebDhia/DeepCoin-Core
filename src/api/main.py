@@ -43,6 +43,7 @@ Lifespan pattern — WHY @asynccontextmanager instead of @app.on_event:
 """
 
 from __future__ import annotations
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 import logging
 import os
@@ -58,21 +59,21 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from dotenv import load_dotenv
 
-from src.api._store          import ensure_store, count as history_count
-from src.api.auth            import require_api_key
-from src.api.auth.router     import router as auth_router
-from src.api.limiter         import limiter
-from src.api.logging_config  import configure_logging
-from src.api.routes.classify     import router as classify_router
-from src.api.routes.history      import router as history_router
-from src.api.routes.subscribers  import router as subscribers_router
-from src.api.routes.explore      import router as explore_router
-from src.api.routes.admin        import router as admin_router
-from src.api.routes.admin_coins  import router as admin_coins_router
-from src.api.routes.chat         import router as chat_router
+from src.api._store import ensure_store, count as history_count
+from src.api.auth import require_api_key
+from src.api.auth.router import router as auth_router
+from src.api.limiter import limiter
+from src.api.logging_config import configure_logging
+from src.api.routes.classify import router as classify_router
+from src.api.routes.history import router as history_router
+from src.api.routes.subscribers import router as subscribers_router
+from src.api.routes.explore import router as explore_router
+from src.api.routes.admin import router as admin_router
+from src.api.routes.admin_coins import router as admin_coins_router
+from src.api.routes.chat import router as chat_router
 from src.api.routes.chat_sessions import router as chat_sessions_router
-from src.api.routes.kb            import router as kb_router
-from src.api.routes.contact       import router as contact_router
+from src.api.routes.kb import router as kb_router
+from src.api.routes.contact import router as contact_router
 from src.api.routes.active_learning import router as active_learning_router
 
 from src import __version__
@@ -80,14 +81,14 @@ from src import __version__
 logger = logging.getLogger(__name__)
 
 # ── paths (used by health + PDF serving) ──────────────────────────────────────
-_ROOT         = Path(__file__).resolve().parent.parent.parent
+_ROOT = Path(__file__).resolve().parent.parent.parent
 # Load environment file now that _ROOT is defined
 load_dotenv(str(_ROOT / ".env"), encoding='utf-8')
-_MODEL_PATH   = _ROOT / "models" / "best_model.pth"
+_MODEL_PATH = _ROOT / "models" / "best_model.pth"
 _MAPPING_PATH = _ROOT / "models" / "class_mapping.pth"
-_CHROMA_DIR   = _ROOT / "data" / "metadata" / "chroma_db_rag"
-_REPORTS_DIR  = _ROOT / "reports"
-_UPLOADS_DIR  = _ROOT / "data" / "uploads"
+_CHROMA_DIR = _ROOT / "data" / "metadata" / "chroma_db_rag"
+_REPORTS_DIR = _ROOT / "reports"
+_UPLOADS_DIR = _ROOT / "data" / "uploads"
 
 # Process start time — used by /api/metrics uptime counter
 _START_TIME = time.time()
@@ -186,27 +187,27 @@ async def lifespan(app: FastAPI):
 _env = os.getenv("ENV", "development")
 
 app = FastAPI(
-    title       = "DeepCoin API",
-    description = (
+    title="DeepCoin API",
+    description=(
         "Archaeological coin classification and historical analysis.\n\n"
         "**Pipeline**: `EfficientNet-B3 CNN` → `LangGraph agents` → `PDF report`\n\n"
         "**Coverage**: Corpus Nummorum (9,716 coin types in KB, 438 in CNN)\n\n"
         "**Institution**: ESPRIT School of Engineering × YEBNI, Tunisia"
     ),
-    version     = __version__,
-    lifespan    = lifespan,
+    version=__version__,
+    lifespan=lifespan,
     # P4 — disable interactive docs in production so internal API surface is
     # not publicly browsable. Set ENV=production in your .env for deployment.
     # docs_url uses /api/docs so the Next.js proxy rewrite
     # (/api/* → http://127.0.0.1:8000/api/*) forwards it correctly.
     # Using /docs would be blocked because Next.js handles /docs itself.
-    docs_url      = None if _env == "production" else "/api/docs",
-    redoc_url     = None if _env == "production" else "/api/redoc",
+    docs_url=None if _env == "production" else "/api/docs",
+    redoc_url=None if _env == "production" else "/api/redoc",
     # openapi_url must share the /api/ prefix so the Next.js proxy forwards it.
     # Default is /openapi.json — the Swagger UI would fail to fetch it because
     # Next.js serves /openapi.json itself (returns 404).  /api/openapi.json is
     # forwarded to FastAPI by the afterFiles rewrite in next.config.ts.
-    openapi_url   = None if _env == "production" else "/api/openapi.json",
+    openapi_url=None if _env == "production" else "/api/openapi.json",
 )
 
 # \u2500\u2500 SlowAPI rate-limit exception handler \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -220,31 +221,34 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # .env default:  ALLOWED_ORIGINS=http://localhost:3000
 # Production:    ALLOWED_ORIGINS=https://deepcoin.yebni.com
 #
-_raw_origins     = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000")
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000")
 _allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 logger.debug("CORS allowed origins: %s", _allowed_origins)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins     = _allowed_origins,
-    allow_credentials = True,
-    allow_methods     = ["GET", "POST", "DELETE"],
-    allow_headers     = ["Content-Type", "Authorization", "X-API-Key"],
+    allow_origins=_allowed_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Content-Type", "Authorization", "X-API-Key"],
 )
 
 # P7 — GZip compress responses ≥ 500 bytes.
 # JSON responses from /api/history (lists of records) compress ~8× savings.
 # minimum_size=500 avoids overhead on tiny payloads (health, root).
-from starlette.types import ASGIApp, Receive, Scope, Send
+
+
 class ConditionalGZipMiddleware:
     def __init__(self, app: ASGIApp, minimum_size: int = 500):
         self.app_to_wrap = app
         self.gzip = GZipMiddleware(app, minimum_size=minimum_size)
+
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "http" and scope.get("path", "").startswith("/api/chat/stream"):
             await self.app_to_wrap(scope, receive, send)
             return
         await self.gzip(scope, receive, send)
+
 
 app.add_middleware(ConditionalGZipMiddleware, minimum_size=500)
 
@@ -253,10 +257,12 @@ app.add_middleware(ConditionalGZipMiddleware, minimum_size=500)
 #       generates a UUID4 if absent. Echoes the ID in every response header.
 # WHY:  Lets you correlate a front-end error report ("request id: abc-123") with
 #       the exact log line in Loki/Datadog without grepping through timestamps.
+
+
 @app.middleware("http")
 async def add_request_id(request, call_next):
     import uuid as _uuid
-    req_id   = request.headers.get("X-Request-ID") or str(_uuid.uuid4())
+    req_id = request.headers.get("X-Request-ID") or str(_uuid.uuid4())
     response = await call_next(request)
     response.headers["X-Request-ID"] = req_id
     return response
@@ -271,17 +277,21 @@ async def add_request_id(request, call_next):
 #   This is the standard reverse-proxy pattern for monorepo deployments.
 #
 app.include_router(auth_router)                                                # /auth/*
-app.include_router(classify_router,   prefix="/api", tags=["Classification"])   # /api/classify
-app.include_router(history_router,    prefix="/api", tags=["History"])           # /api/history
+app.include_router(classify_router, prefix="/api", tags=["Classification"])   # /api/classify
+app.include_router(history_router, prefix="/api", tags=["History"])           # /api/history
 app.include_router(subscribers_router)                                          # /api/subscribers
 app.include_router(explore_router)                                              # /api/explore  (public)
 app.include_router(admin_router)                                                # /api/admin/*  (privileged)
-app.include_router(admin_coins_router)                                          # /api/admin/coins/* (privileged)
+# /api/admin/coins/* (privileged)
+app.include_router(admin_coins_router)
 app.include_router(chat_router)                                                 # /api/chat     (AI Q&A)
 app.include_router(chat_sessions_router)                                        # /api/chat/sessions (history)
-app.include_router(kb_router)                                                   # /api/kb/types      (KB browser)
-app.include_router(contact_router)                                               # /api/contact + /api/admin/contact
-app.include_router(active_learning_router)                                       # /api/admin/active-learning/* (admin only)
+# /api/kb/types      (KB browser)
+app.include_router(kb_router)
+# /api/contact + /api/admin/contact
+app.include_router(contact_router)
+# /api/admin/active-learning/* (admin only)
+app.include_router(active_learning_router)
 
 
 # ── PDF report serving ────────────────────────────────────────────────────────
@@ -312,10 +322,10 @@ async def serve_report(filename: str):
         raise HTTPException(status_code=404, detail=f"Report '{safe}' not found.")
 
     return FileResponse(
-        path         = report_path,
-        media_type   = "application/pdf",
-        filename     = safe,
-        headers      = {"Content-Disposition": f'attachment; filename="{safe}"'},
+        path=report_path,
+        media_type="application/pdf",
+        filename=safe,
+        headers={"Content-Disposition": f'attachment; filename="{safe}"'},
     )
 
 
@@ -347,9 +357,9 @@ async def serve_gradcam(filename: str):
         raise HTTPException(status_code=404, detail=f"Grad-CAM file '{safe}' not found.")
 
     return FileResponse(
-        path       = gradcam_path,
-        media_type = "image/png",
-        headers    = {"Cache-Control": "max-age=2592000"},   # 30 days, matches TTL
+        path=gradcam_path,
+        media_type="image/png",
+        headers={"Cache-Control": "max-age=2592000"},   # 30 days, matches TTL
     )
 
 
@@ -382,28 +392,28 @@ async def health():
         gatekeeper   : app.state.gk is initialised (model in VRAM)
         llm_provider : at least one LLM env var is set
     """
-    model_ok   = _MODEL_PATH.exists()
+    model_ok = _MODEL_PATH.exists()
     mapping_ok = _MAPPING_PATH.exists()
-    chroma_ok  = _CHROMA_DIR.exists() and any(_CHROMA_DIR.iterdir())
-    gk_ok      = hasattr(app.state, "gk") and app.state.gk is not None
-    llm_ok     = any([
+    chroma_ok = _CHROMA_DIR.exists() and any(_CHROMA_DIR.iterdir())
+    gk_ok = hasattr(app.state, "gk") and app.state.gk is not None
+    llm_ok = any([
         os.getenv("GITHUB_TOKEN"),
         os.getenv("GOOGLE_API_KEY"),
         os.getenv("OLLAMA_HOST"),
     ])
 
     components = {
-        "model_file":   "ok" if model_ok   else "MISSING — models/best_model.pth not found",
+        "model_file": "ok" if model_ok else "MISSING — models/best_model.pth not found",
         "mapping_file": "ok" if mapping_ok else "MISSING — models/class_mapping.pth not found",
-        "chroma_db":    "ok" if chroma_ok  else "MISSING — run scripts/rebuild_chroma.py",
-        "gatekeeper":   "ok" if gk_ok      else "not_loaded",
-        "llm_provider": "ok" if llm_ok     else "no key set — structured fallback only",
+        "chroma_db": "ok" if chroma_ok else "MISSING — run scripts/rebuild_chroma.py",
+        "gatekeeper": "ok" if gk_ok else "not_loaded",
+        "llm_provider": "ok" if llm_ok else "no key set — structured fallback only",
     }
 
     all_critical = model_ok and mapping_ok and chroma_ok and gk_ok
     return {
-        "status":     "healthy" if all_critical else "degraded",
-        "version":    __version__,
+        "status": "healthy" if all_critical else "degraded",
+        "version": __version__,
         "components": components,
     }
 
@@ -432,11 +442,12 @@ async def metrics():
     import asyncio
     import datetime
 
-    uptime_s      = round(time.time() - _START_TIME, 1)
-    reports_total = sum(1 for f in _REPORTS_DIR.iterdir() if f.suffix == ".pdf") if _REPORTS_DIR.exists() else 0
+    uptime_s = round(time.time() - _START_TIME, 1)
+    reports_total = sum(1 for f in _REPORTS_DIR.iterdir() if f.suffix ==
+                        ".pdf") if _REPORTS_DIR.exists() else 0
     uploads_total = sum(1 for _ in _UPLOADS_DIR.iterdir()) if _UPLOADS_DIR.exists() else 0
     history_total = await asyncio.to_thread(history_count)
-    model_loaded  = 1 if (hasattr(app.state, "gk") and app.state.gk is not None) else 0
+    model_loaded = 1 if (hasattr(app.state, "gk") and app.state.gk is not None) else 0
 
     lines = [
         "# HELP deepcoin_uptime_seconds Seconds since API process started",
@@ -465,8 +476,7 @@ async def root():
     return {
         "service": "DeepCoin API",
         "version": __version__,
-        "docs":    "/docs",
-        "health":  "/api/health",
+        "docs": "/docs",
+        "health": "/api/health",
         "metrics": "/api/metrics",
     }
-

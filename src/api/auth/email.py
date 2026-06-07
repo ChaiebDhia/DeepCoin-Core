@@ -33,11 +33,11 @@ _PASSWORD_RESET_EXPIRE_HOURS = int(os.getenv("PASSWORD_RESET_EXPIRE_HOURS", "1")
 
 
 def _smtp_user() -> str:
-  return os.getenv("SMTP_USER", "").strip()
+    return os.getenv("SMTP_USER", "").strip()
 
 
 def _smtp_password() -> str:
-  return os.getenv("SMTP_PASSWORD", "").strip()
+    return os.getenv("SMTP_PASSWORD", "").strip()
 
 
 def _send_operator_copy() -> bool:
@@ -194,7 +194,8 @@ async def _send(
                 logger.error("Failed to write to email_logs: %s", log_exc)
 
 
-async def send_verification_email(to_email: str, token: str, db: AsyncSession | None = None, user_id: str | None = None) -> bool:
+async def send_verification_email(to_email: str, token: str, db: AsyncSession |
+                                  None = None, user_id: str | None = None) -> bool:
     verify_url = f"{_APP_URL}/verify-email?token={token}"
 
     html = f"""
@@ -207,22 +208,22 @@ async def send_verification_email(to_email: str, token: str, db: AsyncSession | 
     </head>
     <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif; background: #f8fafc; margin: 0; padding: 20px;">
       <div style="max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.1);">
-        
+
         <!-- Header Band -->
         <div style="background: linear-gradient(135deg, #020617 0%, #0f172a 100%); padding: 40px 20px; text-align: center;">
           <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">DeepCoin</h1>
           <p style="color: #cbd5e1; margin: 8px 0 0 0; font-size: 13px;">Archaeological Coin Intelligence Platform</p>
         </div>
-        
+
         <!-- Content -->
         <div style="padding: 40px 30px;">
           <h2 style="color: #0f172a; font-size: 24px; margin: 0 0 16px 0; font-weight: bold;">Verify Your Email Address</h2>
-          
+
           <p style="color: #334155; line-height: 1.6; margin: 0 0 16px 0; font-size: 15px;">
-            Thank you for registering with DeepCoin! 
+            Thank you for registering with DeepCoin!
             Click the button below to activate your account. <strong style="color: #0f172a;">This link expires in 24 hours.</strong>
           </p>
-          
+
           <!-- Action Button -->
           <div style="text-align: center; margin: 32px 0;">
             <a href="{verify_url}"
@@ -230,7 +231,7 @@ async def send_verification_email(to_email: str, token: str, db: AsyncSession | 
               Verify Email Address
             </a>
           </div>
-          
+
           <p style="color: #64748b; font-size: 13px; line-height: 1.5; margin: 0 0 16px 0;">
             Or copy and paste this link into your browser:
             <br>
@@ -238,16 +239,16 @@ async def send_verification_email(to_email: str, token: str, db: AsyncSession | 
               {verify_url}
             </code>
           </p>
-          
+
           <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;">
-          
+
           <p style="color: #64748b; font-size: 12px; line-height: 1.5; margin: 0;">
             <strong>Did you not create this account?</strong><br>
             If you did not create a DeepCoin account, you can safely ignore this email.
             No further action is needed.
           </p>
         </div>
-        
+
         <!-- Footer -->
         <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 30px; text-align: center;">
           <p style="color: #64748b; font-size: 12px; margin: 0;">
@@ -262,7 +263,8 @@ async def send_verification_email(to_email: str, token: str, db: AsyncSession | 
     return await _send(to_email, "Verify your DeepCoin email address", html, db, user_id)
 
 
-async def send_password_reset_email(to_email: str, token: str, db: AsyncSession | None = None, user_id: str | None = None) -> bool:
+async def send_password_reset_email(to_email: str, token: str, db: AsyncSession |
+                                    None = None, user_id: str | None = None) -> bool:
     reset_url = f"{_APP_URL}/reset-password?token={token}"
 
     html = f"""
@@ -275,22 +277,22 @@ async def send_password_reset_email(to_email: str, token: str, db: AsyncSession 
     </head>
     <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif; background: #f8fafc; margin: 0; padding: 20px;">
       <div style="max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.1);">
-        
+
         <!-- Header Band -->
         <div style="background: linear-gradient(135deg, #020617 0%, #0f172a 100%); padding: 40px 20px; text-align: center;">
           <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">DeepCoin</h1>
           <p style="color: #cbd5e1; margin: 8px 0 0 0; font-size: 13px;">Archaeological Coin Intelligence Platform</p>
         </div>
-        
+
         <!-- Content -->
         <div style="padding: 40px 30px;">
           <h2 style="color: #0f172a; font-size: 24px; margin: 0 0 16px 0; font-weight: bold;">Reset Your Password</h2>
-          
+
           <p style="color: #334155; line-height: 1.6; margin: 0 0 16px 0; font-size: 15px;">
             We received a request to reset your DeepCoin password.
             Click the button below to set a new password. <strong style="color: #0f172a;">This link expires in {_PASSWORD_RESET_EXPIRE_HOURS} hour(s).</strong>
           </p>
-          
+
           <!-- Action Button -->
           <div style="text-align: center; margin: 32px 0;">
             <a href="{reset_url}"
@@ -298,7 +300,7 @@ async def send_password_reset_email(to_email: str, token: str, db: AsyncSession 
               Reset Password
             </a>
           </div>
-          
+
           <p style="color: #64748b; font-size: 13px; line-height: 1.5; margin: 0 0 16px 0;">
             Or copy and paste this link into your browser:
             <br>
@@ -306,9 +308,9 @@ async def send_password_reset_email(to_email: str, token: str, db: AsyncSession 
               {reset_url}
             </code>
           </p>
-          
+
           <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;">
-          
+
           <p style="color: #64748b; font-size: 12px; line-height: 1.5; margin: 0;">
             <strong>Did you not request this?</strong><br>
             If you did not request a password reset, you can safely ignore this email.
@@ -316,7 +318,7 @@ async def send_password_reset_email(to_email: str, token: str, db: AsyncSession 
             <strong>Security Tip:</strong> Never share this link with anyone, and never give your password to someone who asks for it via email.
           </p>
         </div>
-        
+
         <!-- Footer -->
         <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 30px; text-align: center;">
           <p style="color: #64748b; font-size: 12px; margin: 0;">

@@ -23,6 +23,8 @@ Output contract (what every agent receives from this class):
   }
 """
 
+from albumentations.pytorch import ToTensorV2
+import albumentations as A
 import logging
 import time
 import threading
@@ -42,15 +44,13 @@ logger = logging.getLogger(__name__)
 
 
 # ── Path constants ─────────────────────────────────────────────────────────────
-_ROOT          = Path(__file__).resolve().parent.parent.parent   # project root
-MODEL_PATH     = _ROOT / "models" / "best_model.pth"
-MAPPING_PATH   = _ROOT / "models" / "class_mapping.pth"
+_ROOT = Path(__file__).resolve().parent.parent.parent   # project root
+MODEL_PATH = _ROOT / "models" / "best_model.pth"
+MAPPING_PATH = _ROOT / "models" / "class_mapping.pth"
 
 # ── TTA augmentation passes ────────────────────────────────────────────────────
 # 5 lightweight transforms used at test time to average out prediction noise.
 # Each is applied AFTER the base val transforms (norm + tensor conversion).
-import albumentations as A
-from albumentations.pytorch import ToTensorV2
 
 _TTA_TRANSFORMS = [
     # Pass 1 — no extra augmentation (clean baseline)
@@ -164,7 +164,7 @@ def _auto_crop_coin(img_bgr: np.ndarray) -> np.ndarray:
     if max(h, w) < 400:
         return img_bgr
 
-    gray    = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (9, 9), 2)
 
     def _apply_crop(cx: int, cy: int, r: int) -> np.ndarray | None:
@@ -200,15 +200,15 @@ def _auto_crop_coin(img_bgr: np.ndarray) -> np.ndarray:
             return crop
 
     # ── Strategy 2: Largest near-circular contour ─────────────────────────────
-    edges    = cv2.Canny(blurred, 30, 100)
+    edges = cv2.Canny(blurred, 30, 100)
     # Dilate to close small edge gaps on worn coins
-    kernel   = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    edges    = cv2.dilate(edges, kernel, iterations=1)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    edges = cv2.dilate(edges, kernel, iterations=1)
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     best_contour = None
-    best_area    = 0.0
-    min_area     = h * w * 0.05   # coin must cover ≥ 5% of the image
+    best_area = 0.0
+    min_area = h * w * 0.05   # coin must cover ≥ 5% of the image
 
     for cnt in contours:
         area = cv2.contourArea(cnt)
@@ -223,14 +223,14 @@ def _auto_crop_coin(img_bgr: np.ndarray) -> np.ndarray:
         if circularity < 0.45:             # reject non-circular contours
             continue
         if area > best_area:
-            best_area    = area
+            best_area = area
             best_contour = cnt
 
     if best_contour is not None:
         bx, by, bw, bh = cv2.boundingRect(best_contour)
         cx_c = bx + bw // 2
         cy_c = by + bh // 2
-        r_c  = max(bw, bh) // 2
+        r_c = max(bw, bh) // 2
         crop = _apply_crop(cx_c, cy_c, r_c)
         if crop is not None:
             logger.debug("_auto_crop_coin: contour hit — area=%.0f circ=%.2f", best_area, circularity)
@@ -242,7 +242,7 @@ def _auto_crop_coin(img_bgr: np.ndarray) -> np.ndarray:
     if min(h, w) >= 400:
         m_h, m_w = h // 10, w // 10
         logger.debug("_auto_crop_coin: centre-crop fallback")
-        return img_bgr[m_h : h - m_h, m_w : w - m_w]
+        return img_bgr[m_h: h - m_h, m_w: w - m_w]
 
     # Nothing useful found — return original
     return img_bgr
@@ -276,7 +276,7 @@ class CoinInference:
             device if device else ("cuda" if torch.cuda.is_available() else "cpu")
         )
         logger.info("CoinInference: device=%s", self.device)
-        
+
         self._inference_lock = threading.Lock()
         self._model_path = model_path
         self._mapping_path = mapping_path
@@ -326,16 +326,16 @@ class CoinInference:
         #   Run  python scripts/calibrate_temperature.py  to generate this file.
         _temp_path = Path(model_path).parent / "temperature.pth"
         if _temp_path.exists():
-            _temp_data        = torch.load(_temp_path, map_location="cpu", weights_only=True)
+            _temp_data = torch.load(_temp_path, map_location="cpu", weights_only=True)
             self._temperature = float(_temp_data["temperature"])
             logger.info(
                 "CoinInference: temperature T=%.6f loaded  "
                 "(NLL %.5f → %.5f, ECE %.4f → %.4f)",
                 self._temperature,
                 _temp_data.get("val_nll_before", float("nan")),
-                _temp_data.get("val_nll_after",  float("nan")),
-                _temp_data.get("ece_before",     float("nan")),
-                _temp_data.get("ece_after",      float("nan")),
+                _temp_data.get("val_nll_after", float("nan")),
+                _temp_data.get("ece_before", float("nan")),
+                _temp_data.get("ece_after", float("nan")),
             )
         else:
             self._temperature = 1.0
@@ -346,8 +346,9 @@ class CoinInference:
             )
 
         val_acc = checkpoint.get("val_acc", "unknown")
-        epoch   = checkpoint.get("epoch", "unknown")
+        epoch = checkpoint.get("epoch", "unknown")
         logger.info("CoinInference: model loaded — epoch=%s  val_acc=%s", epoch, val_acc)
+
     def reload_model(self) -> None:
         """
         Hot-swaps the model weights in RAM (Zero-Downtime Pipeline).
@@ -400,7 +401,7 @@ class CoinInference:
         # np.frombuffer() wraps the in-memory bytes with zero copies;
         # cv2.imdecode() decodes from memory → no file path reaches the C runtime.
         with open(str(path), "rb") as _fh:
-            raw     = np.frombuffer(_fh.read(), dtype=np.uint8)
+            raw = np.frombuffer(_fh.read(), dtype=np.uint8)
         img_bgr = cv2.imdecode(raw, cv2.IMREAD_COLOR)
         if img_bgr is None:
             raise ValueError(f"OpenCV could not decode image: {path}")
@@ -427,11 +428,11 @@ class CoinInference:
         # Convert BGR → LAB, apply CLAHE to L channel only, convert back.
         # WHY L only: A and B carry colour (patina) — enhancing them distorts
         # the oxidation hues that numismatists use to date coins.
-        lab        = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2LAB)
-        l, a, b    = cv2.split(lab)
-        l_eq       = self._clahe.apply(l)
-        lab_eq     = cv2.merge((l_eq, a, b))
-        img_bgr    = cv2.cvtColor(lab_eq, cv2.COLOR_LAB2BGR)
+        lab = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        l_eq = self._clahe.apply(l)
+        lab_eq = cv2.merge((l_eq, a, b))
+        img_bgr = cv2.cvtColor(lab_eq, cv2.COLOR_LAB2BGR)
 
         # ── Step 2: Aspect-preserving resize to 299×299 ──────────────────────
         # WHY: EfficientNet-B3 was calibrated on 299×299 images during training.
@@ -441,16 +442,16 @@ class CoinInference:
         # pre-processed. Simple cv2.resize() would distort coin geometry.
         # We replicate _resize_and_pad() from prep_engine.py exactly:
         #   scale so longest edge = 299 → zero-pad shortest edge to 299.
-        _SIZE   = 299
-        h, w    = img_bgr.shape[:2]
-        scale   = _SIZE / max(h, w)
-        new_h   = int(h * scale)
-        new_w   = int(w * scale)
-        interp  = cv2.INTER_AREA if scale < 1 else cv2.INTER_CUBIC
+        _SIZE = 299
+        h, w = img_bgr.shape[:2]
+        scale = _SIZE / max(h, w)
+        new_h = int(h * scale)
+        new_w = int(w * scale)
+        interp = cv2.INTER_AREA if scale < 1 else cv2.INTER_CUBIC
         resized = cv2.resize(img_bgr, (new_w, new_h), interpolation=interp)
-        canvas  = np.zeros((_SIZE, _SIZE, 3), dtype=np.uint8)
-        y_off   = (_SIZE - new_h) // 2
-        x_off   = (_SIZE - new_w) // 2
+        canvas = np.zeros((_SIZE, _SIZE, 3), dtype=np.uint8)
+        y_off = (_SIZE - new_h) // 2
+        x_off = (_SIZE - new_w) // 2
         canvas[y_off:y_off + new_h, x_off:x_off + new_w] = resized
         img_bgr = canvas
 
@@ -545,9 +546,9 @@ class CoinInference:
             # idx_to_class keys are stored as strings in the mapping file
             label = self.idx_to_class.get(str(idx), self.idx_to_class.get(idx, f"class_{idx}"))
             top5.append({
-                "rank":       rank,
-                "class_id":   idx,
-                "label":      label,
+                "rank": rank,
+                "class_id": idx,
+                "label": label,
                 "confidence": round(conf, 4),   # pure temperature-scaled value
             })
 
@@ -568,24 +569,24 @@ class CoinInference:
         #   The clean architecture: confidence = model certainty,
         #                           vote_fraction = TTA agreement (separate concern).
         return {
-            "class_id":          best["class_id"],
-            "label":             best["label"],
-            "confidence":        base_confidence,
-            "top5":              top5,
+            "class_id": best["class_id"],
+            "label": best["label"],
+            "confidence": base_confidence,
+            "top5": top5,
             "inference_time_ms": inference_time_ms,
-            "tta_used":          tta_used,
-            "vote_fraction":     round(vote_fraction, 4) if vote_fraction is not None else None,
-            "tta_passes":        n_tta_passes,
-            "temperature":       round(self._temperature, 6),
+            "tta_used": tta_used,
+            "vote_fraction": round(vote_fraction, 4) if vote_fraction is not None else None,
+            "tta_passes": n_tta_passes,
+            "temperature": round(self._temperature, 6),
         }
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
     def predict(
         self,
-        image_path : str | Path,
-        tta        : bool = False,
-        gradcam    : bool = False,
+        image_path: str | Path,
+        tta: bool = False,
+        gradcam: bool = False,
     ) -> dict:
         """
         Classify a single coin image, optionally adding a Grad-CAM heatmap.
@@ -631,18 +632,18 @@ class CoinInference:
             #   If only 2/8 passes agree → the average may look OK numerically
             #   but the individual passes disagreed, signalling real ambiguity.
             #   vote_fraction feeds into _build_result() confidence blending.
-            all_probs:  list[torch.Tensor] = []
-            top1_votes: list[int]          = []
+            all_probs: list[torch.Tensor] = []
+            top1_votes: list[int] = []
 
             for transform in _TTA_TRANSFORMS:
                 tensor = self._preprocess(img_rgb, transform=transform)
-                p      = self._forward(tensor)
+                p = self._forward(tensor)
                 all_probs.append(p)
                 top1_votes.append(int(p.argmax().item()))  # per-pass top-1
 
-            probs           = torch.stack(all_probs).mean(dim=0)   # averaged
-            predicted_top1  = int(probs.argmax().item())           # averaged top-1
-            vote_fraction   = top1_votes.count(predicted_top1) / len(top1_votes)
+            probs = torch.stack(all_probs).mean(dim=0)   # averaged
+            predicted_top1 = int(probs.argmax().item())           # averaged top-1
+            vote_fraction = top1_votes.count(predicted_top1) / len(top1_votes)
 
             logger.debug(
                 "predict: TTA vote %d/%d for class %s (vote_fraction=%.3f)",
@@ -652,15 +653,15 @@ class CoinInference:
             )
         else:
             tensor = self._preprocess(img_rgb)
-            probs  = self._forward(tensor)
+            probs = self._forward(tensor)
 
         elapsed_ms = int((time.time() - t_start) * 1000)
         result = self._build_result(
             probs,
             elapsed_ms,
-            tta_used      = tta,
-            vote_fraction = vote_fraction,
-            n_tta_passes  = len(_TTA_TRANSFORMS) if tta else 1,
+            tta_used=tta,
+            vote_fraction=vote_fraction,
+            n_tta_passes=len(_TTA_TRANSFORMS) if tta else 1,
         )
 
         # ── Optional Grad-CAM heatmap ─────────────────────────────────────────
@@ -679,17 +680,17 @@ class CoinInference:
             try:
                 from src.core.gradcam import generate_gradcam
                 import cv2 as _cv2
-                gradcam_tensor   = self._preprocess(img_rgb)          # [1,3,299,299]
-                original_bgr     = _cv2.cvtColor(img_rgb, _cv2.COLOR_RGB2BGR)
-                gcam_save_path   = str(Path(image_path).with_suffix("")) + "_gradcam.png"
+                gradcam_tensor = self._preprocess(img_rgb)          # [1,3,299,299]
+                original_bgr = _cv2.cvtColor(img_rgb, _cv2.COLOR_RGB2BGR)
+                gcam_save_path = str(Path(image_path).with_suffix("")) + "_gradcam.png"
                 with self._inference_lock:
-                    gcam_path        = generate_gradcam(
-                        model        = self.model,
-                        image_tensor = gradcam_tensor,
-                        original_bgr = original_bgr,
-                        class_idx    = result["class_id"],
-                        save_path    = gcam_save_path,
-                        device       = self.device,
+                    gcam_path = generate_gradcam(
+                        model=self.model,
+                        image_tensor=gradcam_tensor,
+                        original_bgr=original_bgr,
+                        class_idx=result["class_id"],
+                        save_path=gcam_save_path,
+                        device=self.device,
                     )
                 result["gradcam_path"] = str(gcam_path) if gcam_path else None
             except Exception as _gcam_err:
