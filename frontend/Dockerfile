@@ -70,10 +70,12 @@ COPY . .
 # Build-time environment variables.
 # NEXT_PUBLIC_* vars are inlined at build time — they must be set NOW.
 # Auth secrets are runtime-only — never set them as build args.
-ARG NEXT_PUBLIC_CLASSIFY_URL=http://localhost/api
+ARG NEXT_PUBLIC_CLASSIFY_URL=http://localhost:8000
 ARG NEXT_PUBLIC_API_KEY=""
+ARG NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=0
 ENV NEXT_PUBLIC_CLASSIFY_URL=${NEXT_PUBLIC_CLASSIFY_URL} \
     NEXT_PUBLIC_API_KEY=${NEXT_PUBLIC_API_KEY} \
+    NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=${NEXT_PUBLIC_GOOGLE_AUTH_ENABLED} \
     NEXT_TELEMETRY_DISABLED=1 \
     NODE_ENV=production
 

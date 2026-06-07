@@ -39,8 +39,9 @@ LABEL org.opencontainers.image.title="DeepCoin MLflow" \
       org.opencontainers.image.authors="Dhia Chaieb <dhia.chaieb@esprit.tn>"
 
 # Install MLflow + the S3 artifact store driver (boto3).
-# --no-cache-dir keeps the image layer lean (no pip wheel cache saved to disk).
-RUN pip install --default-timeout=1000 --retries=5 --no-cache-dir \
+# Use pip cache during install to avoid hash verification issues when offline.
+# Build layer caching still occurs at the RUN statement level.
+RUN pip install --default-timeout=1000 --retries=5 \
         "mlflow>=2.21.0,<3.0" \
         "boto3>=1.35"
 

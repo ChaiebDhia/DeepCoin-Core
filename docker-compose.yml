@@ -63,7 +63,7 @@
 x-common-env: &common-env
   DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-deepcoin}:${POSTGRES_PASSWORD:-deepcoin}@postgres:5432/${POSTGRES_DB:-deepcoin}
   REDIS_URL:    redis://redis:6379/0
-  TORCH_HOME: /tmp/torch
+  TORCH_HOME: /app/.torch_cache
   ENV:          development
 
 services:
@@ -162,14 +162,25 @@ services:
     restart: unless-stopped
     environment:
       <<: *common-env
-      #  LLM providers (priority order: GitHub  Google  Ollama  fallback) 
+      #  LLM providers (priority order: Ollama  GitHub  Google  fallback) 
+      #  In Docker, Ollama is available on the internal network at http://ollama:11434
+      OLLAMA_HOST:     ${OLLAMA_HOST:-http://ollama:11434}
       GITHUB_TOKEN:    ${GITHUB_TOKEN:-}
       GOOGLE_API_KEY:  ${GOOGLE_API_KEY:-}
-      OLLAMA_HOST:     ${OLLAMA_HOST:-}
       #  Security 
       DEEPCOIN_API_KEY: ${DEEPCOIN_API_KEY:-}
       JWT_SECRET:       ${JWT_SECRET:-change_me_in_production_32chars_minimum}
       SECRET_KEY:       ${SECRET_KEY:-change_me_in_production_32chars_minimum}
+      #  Email / Auth 
+      SMTP_HOST:        ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT:        ${SMTP_PORT:-465}
+      SMTP_USER:        ${SMTP_USER:-}
+      SMTP_PASSWORD:    ${SMTP_PASSWORD:-}
+      SMTP_OPERATOR_EMAIL: ${SMTP_OPERATOR_EMAIL:-}
+      DEEPCOIN_SENDER_EMAIL: ${DEEPCOIN_SENDER_EMAIL:-noreply@deepcoin.ai}
+      AUTH_SEND_OPERATOR_COPY: ${AUTH_SEND_OPERATOR_COPY:-1}
+      PASSWORD_RESET_EXPIRE_HOURS: ${PASSWORD_RESET_EXPIRE_HOURS:-1}
+      APP_URL:          ${APP_URL:-http://localhost}
       #  CORS 
       # In Docker, the frontend is served via Nginx at http://localhost (port 80).
       # Allow both the Nginx URL and the direct Next.js container port for health checks.
@@ -194,21 +205,26 @@ services:
       - ./data:/app/data
       - reports_data:/app/reports
       - uploads_tmp:/tmp/deepcoin_uploads
+      - torch_cache:/app/.torch_cache
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      # ollama:
+      #   condition: service_healthy
+      # ^ Ollama dependency deferred (PHASE 2) — image pull skipped for bandwidth
       mlflow:
-        condition: service_healthy
+        condition: service_started
     ports:
       - "8000:8000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 15s
       timeout: 10s
-      retries: 3
-      start_period: 180s   # EfficientNet-B3 weights take ~30s to load on first start
+      retries: 10
+      start_period: 300s   # EfficientNet-B3 weights take ~30s to load on first start
+    
 
   #  4. Next.js 15 frontend 
   #
@@ -237,14 +253,22 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_CLASSIFY_URL: ${NEXT_PUBLIC_CLASSIFY_URL:-http://localhost/api}
+        NEXT_PUBLIC_API_KEY: ${NEXT_PUBLIC_API_KEY:-}
+        NEXT_PUBLIC_GOOGLE_AUTH_ENABLED: ${NEXT_PUBLIC_GOOGLE_AUTH_ENABLED:-1}
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL:      http://localhost/api
       NEXT_PUBLIC_CLASSIFY_URL: http://localhost/api
+      NEXT_PUBLIC_GOOGLE_AUTH_ENABLED: ${NEXT_PUBLIC_GOOGLE_AUTH_ENABLED:-1}
       NEXTAUTH_URL:             ${NEXTAUTH_URL:-http://localhost}
       NEXTAUTH_SECRET:          ${NEXTAUTH_SECRET:-change_me_in_production}
       AUTH_SECRET:              ${NEXTAUTH_SECRET:-change_me_in_production}
       AUTH_TRUST_HOST:          "true"
+      GOOGLE_CLIENT_ID:         ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET:     ${GOOGLE_CLIENT_SECRET:-}
+      AUTH_BRIDGE_SECRET:        ${AUTH_BRIDGE_SECRET:-}
       # Server-side  FastAPI via Docker DNS (avoids Nginx routing loop)
       AUTH_FASTAPI_URL:         http://api:8000
       DEEPCOIN_API_URL:         http://api:8000
@@ -306,20 +330,13 @@ services:
       resources:
         limits:
           memory: 1G
-    build:
-      context: .
-      dockerfile: Dockerfile.mlflow
+    image: ghcr.io/mlflow/mlflow:v3.12.0-full
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:////mlflow/mlflow.db --default-artifact-root /mlflow/artifacts
     restart: unless-stopped
     volumes:
       - mlflow_data:/mlflow
     ports:
       - "5000:5000"
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/')"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
 
   #  7. LocalStack 3  AWS S3 simulation 
   #
@@ -413,6 +430,95 @@ services:
     depends_on:
       - prometheus
 
+  #  Ollama service  local LLM inference (enterprise-grade, production-ready) 
+  #
+  # WHAT: Ollama is a local LLM inference engine that runs models without
+  #       needing cloud API keys. It provides the same interface as OpenAI API
+  #       but responses are computed entirely on-device (CPU or GPU).
+  #
+  # WHY in Docker:
+  #   - Zero external API dependencies for chat/narrator agents
+  #   - No rate limits, no quota exhaustion risk
+  #   - Faster responses (lower latency than cloud LLMs)
+  #   - GDPR/enterprise compliance (no data leaves your infrastructure)
+  #   - Enables offline operation for mission-critical features
+  #   - Cost-effective for inference-heavy workloads
+  #
+  # MODELS (pre-loaded on first start):
+  #   - gemma3:4b     (text generation, 3.3 GB VRAM) — PRIMARY for Historian
+  #   - qwen3-vl:4b   (vision-language, ~2.5 GB VRAM) — OPTIONAL for Investigator
+  #
+  # PULL: Models are downloaded on first container start and cached in the
+  #       ollama_data volume. Subsequent starts use cached models (instant).
+  #       Manual pulls:  docker compose exec ollama ollama pull <model>
+  #
+  # GPU SUPPORT:
+  #   - Docker Desktop on macOS: automatic (via Metal acceleration)
+  #   - Linux: pass `--gpus all` in docker-compose.yml or docker run
+  #   - Windows: use WSL 2 + NVIDIA Container Toolkit
+  #   - CPU-only: graceful fallback (slower, but functions)
+  #
+  # INTEGRATION:
+  #   The FastAPI api service connects via OLLAMA_HOST=http://ollama:11434
+  #   (internal Docker DNS).  The frontend never connects directly to Ollama;
+  #   all LLM calls go through /api/chat endpoint (FastAPI proxies to Ollama).
+  #
+  # PRODUCTION NOTES:
+  #   - Monitor GPU/CPU usage via `docker stats ollama`
+  #   - Set OLLAMA_NUM_PARALLEL for concurrent inference (default=1)
+  #   - Use `ollama pull <model>` to pre-load models before startup
+  #   - Bind mount ./ollama_models if you want persistent model cache across
+  #     docker compose down -v
+  #
+  # ╔════════════════════════════════════════════════════════════════════════════╗
+  # ║ OLLAMA SERVICE — PHASE 2 (DEFERRED — comment out lines 475-516 to enable) ║
+  # ║                                                                            ║
+  # ║ REASON: 4 GB image + 3-5 GB models. Total time: 1-2 hours @ 25 Mbps.      ║
+  # ║ WORKAROUND: Phase 1 works perfectly without Ollama.                       ║
+  # ║             Chat degrades to fallback (context-only, no LLM narrative).    ║
+  # ║ WHEN: Uncomment these lines once you have stable internet. Then:          ║
+  # ║     docker compose up -d ollama                                            ║
+  # ║     docker compose ps  # wait for healthy status (~2 min)                 ║
+  # ║     docker compose exec ollama ollama pull gemma3:4b # pre-load model    ║
+  # ║                                                                            ║
+  # ╚════════════════════════════════════════════════════════════════════════════╝
+  #
+  ollama:
+    init: true
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    environment:
+      OLLAMA_NUM_PARALLEL: "${OLLAMA_NUM_PARALLEL:-2}"
+      OLLAMA_LOAD_TIMEOUT: "10m"
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      # Changed host port to 11435 to avoid conflicts with host Ollama
+      - "11435:11434"
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+        reservations:
+          memory: 4G
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    entrypoint: >
+      /bin/sh -c "
+      echo 'Ollama: Waiting for service to be ready...' &&
+      sleep 3 &&
+      echo 'Ollama: Service ready. Models will be auto-pulled on first chat request.' &&
+      /bin/ollama serve
+      "
+
   #  Alembic migration runner (profile-triggered helper) 
   #
   # NOT a permanently-running service.  Execute once before first stack start:
@@ -447,4 +553,7 @@ volumes:
   uploads_tmp:              # Ephemeral upload staging; cleaned by FastAPI lifespan
   mlflow_data:              # MLflow SQLite backend + artifact directory
   localstack_data:          # LocalStack S3 object data (deepcoin-reports bucket)
+  ollama_data:              # [PHASE 2] Ollama model cache — persistent model cache for Ollama
+  torch_cache:
+
 

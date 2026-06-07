@@ -57,7 +57,15 @@ RUN python -m venv /opt/venv \
 # Only changes to requirements.txt bust this layer (not source code changes).
 COPY requirements.txt .
 
-RUN /opt/venv/bin/pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu && /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
+RUN /opt/venv/bin/pip install --upgrade pip setuptools wheel && \
+    /opt/venv/bin/pip install --default-timeout=1000 torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu && \
+    /opt/venv/bin/pip install --default-timeout=1000 -r requirements.txt
+
+# NOTE: skip pre-downloading torchvision/torch.hub during build.
+# Importing torchvision at build-time can fail due to binary/operator
+# mismatches between the wheel built in this layer and the runtime.
+# The service loads the trained checkpoint from models/best_model.pth
+# at runtime, so we do not need a torch.hub pre-cache here.
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 2: runtime — lean image, no build tools
@@ -78,6 +86,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy the finished venv from the builder stage
 COPY --from=builder /opt/venv /opt/venv
+
+# Note: no pre-cached torch hub is copied; runtime will load local checkpoint
 
 # Environment:
 #   PATH      — venv binaries first (uvicorn, alembic, python)
