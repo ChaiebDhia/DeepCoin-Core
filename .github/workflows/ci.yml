@@ -151,6 +151,15 @@ jobs:
       # Runs unit + integration together so coverage is counted once across
       # both suites.  --tb=short keeps failure output readable in the Actions
       # log without printing full tracebacks for every failed assertion.
+      - name: Cache HuggingFace models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-all-MiniLM-L6-v2-v1
+
+      - name: Pre-download sentence-transformer model
+        run: |
+          python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
       - name: Run tests with coverage
         run: |
           pytest tests/ -v --tb=short \
