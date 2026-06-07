@@ -1,36 +1,90 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DeepCoin Frontend (Next.js 15)
 
-## Getting Started
+This frontend is the product UI for DeepCoin-Core, not a template app. It connects to the FastAPI backend for classification, report history, chat, auth flows, and admin tools.
 
-First, run the development server:
+## What this frontend includes
+
+- Analyze flow with drag-drop uploader and mission-control agent pipeline
+- 3-state CNN result UX (Identified / Consistent Match / Deep Search)
+- Grad-CAM++ visualization card and report links
+- History pages, detail pages, feedback capture, and admin dashboard
+- Chat UI with streaming responses and source display
+- i18n support (English/French) and light/dark themes
+
+## Local development
+
+From the `frontend/` directory:
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Default local URL: `http://localhost:3000`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Required environment variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The frontend reads values from `.env.local` (or compose env in Docker).
 
-## Learn More
+```dotenv
+# API endpoint used by browser in dev
+NEXT_PUBLIC_CLASSIFY_URL=http://127.0.0.1:8000
 
-To learn more about Next.js, take a look at the following resources:
+# Enable/disable Google provider in the client bundle
+NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=1
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# NextAuth + bridge wiring
+NEXTAUTH_SECRET=
+AUTH_BRIDGE_SECRET=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Docker notes
 
-## Deploy on Vercel
+This project relies on build-time inlining for `NEXT_PUBLIC_*` variables.
+If you change `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED`, rebuild the frontend image.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```powershell
+docker compose build web
+docker compose up -d web
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Local-first AI mode (Ollama)
+
+The frontend does not call Ollama directly. It calls the backend, and the backend decides provider routing.
+
+To run local-first and avoid paid keys:
+
+1. Start `ollama` service in compose.
+2. Pull models in the Ollama container.
+3. Keep `GITHUB_TOKEN` and `GOOGLE_API_KEY` unset in backend env.
+4. Ensure `OLLAMA_HOST` is configured for backend.
+
+## Build and type-check
+
+```bash
+npm run lint
+npm run build
+```
+
+## Troubleshooting
+
+- Google provider not visible:
+	- Verify `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=1`
+	- Rebuild frontend image after changing `NEXT_PUBLIC_*`
+	- Confirm `/api/auth/providers` returns `google`
+- Auth endpoint returns 502 behind nginx:
+	- Restart nginx to refresh upstream resolution
+- API calls fail on localhost:
+	- Use `127.0.0.1` in `NEXT_PUBLIC_CLASSIFY_URL` to avoid IPv6 mismatch
+
+## Recruiter quick checks
+
+```powershell
+# providers (google + credentials)
+Invoke-WebRequest -UseBasicParsing http://localhost/api/auth/providers | Select-Object -ExpandProperty Content
+
+# frontend health (if exposed by proxy)
+Invoke-WebRequest -UseBasicParsing http://localhost | Select-Object -ExpandProperty StatusCode
+```
