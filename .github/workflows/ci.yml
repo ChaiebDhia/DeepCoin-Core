@@ -43,6 +43,18 @@
 #   compile, and takes ~3 minutes.  `tsc --noEmit` uses the compiler already
 #   in node_modules and only checks types — same errors but much faster.
 #   Build failures surface naturally when the app is deployed.
+#
+# WHY combined test + coverage step (not separate unit/integration):
+#   Running pytest once with --cov produces a single, accurate coverage report
+#   covering both unit and integration tests together.  Running twice would
+#   double-count lines executed in both suites, skewing the percentage.
+#   The coverage XML is uploaded as an artifact so it can be consumed by
+#   external tools (Codecov, SonarQube) without re-running the tests.
+#
+# WHY upload coverage only on python-version == '3.12':
+#   The matrix runs 3.11 and 3.12 in parallel.  Uploading from both produces
+#   two identical artifacts with a name collision.  3.12 = production version,
+#   so its report is the authoritative one.
 # ============================================================
 
 name: DeepCoin CI
@@ -129,24 +141,34 @@ jobs:
           flake8 src/ tests/
 
       # ── Format check ─────────────────────────────────────────────────────
-      # NOTE: black check has been turned off because of custom alignment styles 
+      # NOTE: black check has been turned off because of custom alignment styles
       # (disabling multiple PEP8 spacing checks in flake8 would conflict with black)
       # - name: Check formatting with black
       #   run: |
       #     black --check --line-length=110 src/ tests/
 
-      # ── Unit tests ───────────────────────────────────────────────────────
-      - name: Run unit tests
+      # ── Full test suite with coverage ────────────────────────────────────
+      # Runs unit + integration together so coverage is counted once across
+      # both suites.  --tb=short keeps failure output readable in the Actions
+      # log without printing full tracebacks for every failed assertion.
+      - name: Run tests with coverage
         run: |
-          pytest tests/unit/ -v --tb=short -q
+          pytest tests/ -v --tb=short \
+            --cov=src \
+            --cov-report=xml:coverage.xml \
+            --cov-report=term-missing \
+            -q
 
-      # ── Integration tests ────────────────────────────────────────────────
-      # Runs AFTER unit tests so a unit failure is reported first.
-      - name: Run integration tests
-        run: |
-          pytest tests/integration/ -v --tb=short -q
+      # ── Upload coverage XML (3.12 only — authoritative production version) ─
+      - name: Upload coverage report
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+          if-no-files-found: warn
 
-      # ── Upload test results (optional — visible in GitHub Actions UI) ────
+      # ── Upload test DB artifact (always — useful for debugging failures) ─
       - name: Upload test result artifact
         if: always()
         uses: actions/upload-artifact@v4
