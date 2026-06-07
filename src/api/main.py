@@ -243,6 +243,7 @@ class ConditionalGZipMiddleware:
     def __init__(self, app: ASGIApp, minimum_size: int = 500):
         self.app_to_wrap = app
         self.gzip = GZipMiddleware(app, minimum_size=minimum_size)
+        
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "http" and scope.get("path", "").startswith("/api/chat/stream"):
             await self.app_to_wrap(scope, receive, send)
