@@ -41,7 +41,8 @@ Lifespan pattern — WHY @asynccontextmanager instead of @app.on_event:
 
 ═══════════════════════════════════════════════════════════════════════════
 """
-
+from prometheus_fastapi_instrumentator import Instrumentator
+Instrumentator().instrument(app).expose(app, endpoint="/metrics-auto")
 from __future__ import annotations
 from starlette.types import ASGIApp, Receive, Scope, Send
 
