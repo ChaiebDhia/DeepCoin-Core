@@ -66,3 +66,4 @@ slowapi>=0.1.9
 python-json-logger>=3.0.0
 fpdf2>=2.8.2
 prometheus-client>=0.20.0
+prometheus-fastapi-instrumentator>=0.9.0
