@@ -82,7 +82,7 @@ logger = logging.getLogger(__name__)
 # ── paths (used by health + PDF serving) ──────────────────────────────────────
 _ROOT         = Path(__file__).resolve().parent.parent.parent
 # Load environment file now that _ROOT is defined
-load_dotenv(str(_ROOT / ".env"))
+load_dotenv(str(_ROOT / ".env"), encoding='utf-8')
 _MODEL_PATH   = _ROOT / "models" / "best_model.pth"
 _MAPPING_PATH = _ROOT / "models" / "class_mapping.pth"
 _CHROMA_DIR   = _ROOT / "data" / "metadata" / "chroma_db_rag"

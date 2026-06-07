@@ -29,14 +29,15 @@ logger = logging.getLogger(__name__)
 
 _SENDER_EMAIL = os.getenv("DEEPCOIN_SENDER_EMAIL", "DeepCoin <noreply@deepcoin.ai>")
 _APP_URL = os.getenv("APP_URL", "http://localhost:3000")
+_PASSWORD_RESET_EXPIRE_HOURS = int(os.getenv("PASSWORD_RESET_EXPIRE_HOURS", "1"))
 
 
 def _smtp_user() -> str:
-    return os.getenv("SMTP_USER", "")
+  return os.getenv("SMTP_USER", "").strip()
 
 
 def _smtp_password() -> str:
-    return os.getenv("SMTP_PASSWORD", "")
+  return os.getenv("SMTP_PASSWORD", "").strip()
 
 
 def _send_operator_copy() -> bool:

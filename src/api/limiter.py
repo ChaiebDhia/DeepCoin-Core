@@ -81,4 +81,8 @@ def user_or_ip_key(request: Request) -> str:
 
 # In production behind Nginx, set FORWARDED_ALLOW_IPS=* in uvicorn so
 # X-Forwarded-For is trusted and the real client IP is used for the IP path.
-limiter = Limiter(key_func=user_or_ip_key)
+#
+# IMPORTANT: point config_filename to a file that does not exist so SlowAPI does
+# not auto-read the real .env on import, which avoids Windows cp1252 decoding
+# errors when the file contains UTF-8 chars.
+limiter = Limiter(key_func=user_or_ip_key, config_filename=".slowapi.env")
