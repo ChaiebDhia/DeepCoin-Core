@@ -1,22 +1,11 @@
 import { cookies } from "next/headers";
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Providers      from "@/providers";
 import { Header }    from "@/components/ui/header";
 import { Footer }    from "@/components/ui/footer";
 import { MainLayout } from "@/components/ui/MainLayout";
 import TutorialModal from "@/components/ui/TutorialModal";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title:       "DeepCoin — Ancient Coin Intelligence",
@@ -40,7 +29,7 @@ export default async function RootLayout({
     <html lang={locale} suppressHydrationWarning data-scroll-behavior="smooth">
       <body
         suppressHydrationWarning
-        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col transition-colors duration-200`}
+        className="antialiased min-h-screen flex flex-col transition-colors duration-200"
       >
         <Providers locale={locale} messages={messages}>
           <Header />

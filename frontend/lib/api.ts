@@ -46,6 +46,14 @@ import type {
   KbBrowseResponse,
 } from "@/types/api";
 
+function normaliseDirectApiBase(raw: string): string {
+  const trimmed = raw.trim().replace(/\/$/, "");
+  if (!trimmed) return "";
+  return trimmed
+    .replace(/\/api\/classify$/i, "")
+    .replace(/\/api$/i, "");
+}
+
 // ── Axios instance ────────────────────────────────────────────────────────────
 
 /**
@@ -74,7 +82,7 @@ export const apiClient = axios.create({
  *   Falls back to "/api" (proxy) so existing deploys don't break.
  */
 const classifyApiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_CLASSIFY_URL ?? "/api",
+  baseURL: normaliseDirectApiBase(process.env.NEXT_PUBLIC_CLASSIFY_URL ?? ""),
   timeout: 600_000,   // 10 minutes — covers battery-throttled Ollama (gemma3:4b can take 5+ min on low power)
 });
 
@@ -527,8 +535,7 @@ export async function getHealth(): Promise<HealthResponse> {
  * NEXT_PUBLIC_CLASSIFY_URL is "http://127.0.0.1:8000/api/classify".
  */
 const _DIRECT_API_BASE: string = (() => {
-  const raw = process.env.NEXT_PUBLIC_CLASSIFY_URL ?? "";
-  return raw.replace(/\/api\/classify$/, "").replace(/\/$/, "");
+  return normaliseDirectApiBase(process.env.NEXT_PUBLIC_CLASSIFY_URL ?? "");
 })();
 
 export function pdfDownloadUrl(pdfUrl: string): string {
@@ -1023,8 +1030,8 @@ export async function chatQueryStream(
   callbacks:           ChatStreamCallbacks,
   signal?:             AbortSignal,
 ): Promise<void> {
-  const CLASSIFY_BASE = process.env.NEXT_PUBLIC_CLASSIFY_URL ?? "";
-  const url = `${CLASSIFY_BASE}/api/chat/stream`;
+  const CLASSIFY_BASE = normaliseDirectApiBase(process.env.NEXT_PUBLIC_CLASSIFY_URL ?? "");
+  const url = new URL("/api/chat/stream", CLASSIFY_BASE || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000")).toString();
   
   // Send language cookie to instruct LLM
   const isServer = typeof window === "undefined";

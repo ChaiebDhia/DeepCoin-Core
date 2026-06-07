@@ -29,7 +29,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Mail, Lock, User, Coins, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 import { signIn } from "next-auth/react";
 
-// FastAPI base URL — NEXT_PUBLIC so the browser can call it directly
+// FastAPI base URL — NEXT_PUBLIC so the browser can call it directly.
+// This must point at the host-exposed backend port, not the Next.js proxy.
 const API_BASE = process.env.NEXT_PUBLIC_CLASSIFY_URL ?? "http://127.0.0.1:8000";
 
 export function RegisterForm() {
