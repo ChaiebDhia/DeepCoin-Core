@@ -1,42 +1,493 @@
 {
-  "annotations": { "list": [] },
+  "schemaVersion": 38,
+  "title": "DeepCoin — AI Platform Observability",
+  "uid": "deepcoin-v2",
+  "version": 2,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "timezone": "browser",
+  "tags": ["deepcoin", "ai", "production"],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
   "panels": [
+
     {
+      "id": 1,
       "type": "text",
-      "title": "DeepCoin Overview",
-      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
-      "options": { "content": "# DeepCoin Observability\n\nPrometheus (scraping `/api/metrics`) + Grafana overview dashboard.", "mode": "markdown" }
+      "title": "",
+      "gridPos": { "h": 2, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "content": "## DeepCoin AI Platform  |  EfficientNet-B3 · LangGraph · FastAPI · Next.js 15\nReal-time observability for all inference, auth, and pipeline components. Scrape: `/api/metrics` via Prometheus every 15s.",
+        "mode": "markdown"
+      }
     },
+
     {
-      "type": "graph",
-      "title": "API Request Rate (per second)",
+      "id": 10,
+      "type": "row",
+      "title": "System health",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 2 }
+    },
+
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "API status",
+      "description": "Prometheus target up/down",
+      "targets": [{ "expr": "up{job=\"api\"}", "legendFormat": "api" }],
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 3 },
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "textMode": "auto" },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "1": { "text": "UP", "color": "green" }, "0": { "text": "DOWN", "color": "red" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        }
+      }
+    },
+
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "CNN model loaded",
+      "description": "EfficientNet-B3 in memory",
+      "targets": [{ "expr": "deepcoin_model_loaded", "legendFormat": "model" }],
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 3 },
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center" },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "1": { "text": "LOADED", "color": "green" }, "0": { "text": "NOT LOADED", "color": "red" } } }
+          ]
+        }
+      }
+    },
+
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "API uptime",
+      "targets": [{ "expr": "deepcoin_uptime_seconds", "legendFormat": "uptime" }],
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 3 },
+      "options": { "colorMode": "value", "graphMode": "area" },
+      "fieldConfig": {
+        "defaults": { "unit": "s", "color": { "mode": "fixed", "fixedColor": "blue" } }
+      }
+    },
+
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "Total coin analyses",
+      "targets": [{ "expr": "deepcoin_history_total", "legendFormat": "total" }],
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 3 },
+      "options": { "colorMode": "value", "graphMode": "area" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixed", "fixedColor": "purple" } }
+      }
+    },
+
+    {
+      "id": 15,
+      "type": "stat",
+      "title": "PDF reports on disk",
+      "targets": [{ "expr": "deepcoin_reports_total", "legendFormat": "reports" }],
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 3 },
+      "options": { "colorMode": "value", "graphMode": "area" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixed", "fixedColor": "orange" } }
+      }
+    },
+
+    {
+      "id": 16,
+      "type": "stat",
+      "title": "Pending uploads",
+      "targets": [{ "expr": "deepcoin_uploads_total", "legendFormat": "uploads" }],
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 3 },
+      "options": { "colorMode": "value", "graphMode": "area" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixed", "fixedColor": "teal" } }
+      }
+    },
+
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Inference throughput",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 7 }
+    },
+
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Analyses per minute",
+      "description": "Rate of coin classifications — spike = burst usage, drop = outage",
+      "targets": [{
+        "expr": "rate(deepcoin_history_total[1m]) * 60",
+        "legendFormat": "analyses/min"
+      }],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 15, "gradientMode": "opacity", "spanNulls": true },
+          "unit": "reqps",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 0.5 }, { "color": "red", "value": 2 }]
+          }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } }
+    },
+
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Upload queue depth over time",
+      "description": "Growing queue = slow disk or high burst",
+      "targets": [{
+        "expr": "deepcoin_uploads_total",
+        "legendFormat": "pending uploads"
+      }],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "semi-dark-orange" },
+          "custom": { "lineWidth": 2, "fillOpacity": 20, "gradientMode": "opacity", "spanNulls": true },
+          "min": 0
+        }
+      }
+    },
+
+    {
+      "id": 30,
+      "type": "row",
+      "title": "HTTP request layer",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 }
+    },
+
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "HTTP request rate by endpoint",
+      "description": "Uses process_cpu_seconds_total as proxy — replace with starlette_requests_total if you add prometheus-fastapi-instrumentator",
       "targets": [
-        { "expr": "rate(http_requests_total[1m])", "legendFormat": "req/s" }
+        { "expr": "rate(process_cpu_seconds_total[1m])", "legendFormat": "CPU rate (proxy)" }
       ],
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 3 }
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 1.5, "fillOpacity": 10, "spanNulls": true },
+          "unit": "short",
+          "min": 0
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" } }
     },
+
     {
-      "type": "graph",
-      "title": "API Latency (p95)",
+      "id": 32,
+      "type": "gauge",
+      "title": "API memory usage",
+      "description": "Resident set size — CNN model + ChromaDB index = ~600 MB baseline",
+      "targets": [{ "expr": "process_resident_memory_bytes", "legendFormat": "RSS" }],
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 17 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "max": 4294967296,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 2147483648 },
+              { "color": "red", "value": 3221225472 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "showThresholdLabels": true, "showThresholdMarkers": true }
+    },
+
+    {
+      "id": 33,
+      "type": "gauge",
+      "title": "Open file descriptors",
+      "description": "Leak indicator — should stay flat in steady state",
+      "targets": [{ "expr": "process_open_fds", "legendFormat": "open fds" }],
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 17 },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1024,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 500 },
+              { "color": "red", "value": 900 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "showThresholdLabels": true }
+    },
+
+    {
+      "id": 40,
+      "type": "row",
+      "title": "AI pipeline metrics",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 25 }
+    },
+
+    {
+      "id": 41,
+      "type": "timeseries",
+      "title": "Cumulative analyses vs reports (PDF generation rate)",
+      "description": "Gap = analyses without PDF (guest users or PDF disabled)",
       "targets": [
-        { "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95" }
+        { "expr": "deepcoin_history_total", "legendFormat": "total analyses" },
+        { "expr": "deepcoin_reports_total", "legendFormat": "PDFs generated" }
       ],
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 3 }
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 26 },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 8, "spanNulls": true },
+          "min": 0
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" } }
     },
+
     {
-      "type": "graph",
-      "title": "Prometheus Targets Up",
-      "targets": [ { "expr": "up", "legendFormat": "up" } ],
-      "gridPos": { "h": 4, "w": 12, "x": 0, "y": 11 }
+      "id": 42,
+      "type": "stat",
+      "title": "PDF generation rate",
+      "description": "Reports / total analyses (should stay high if users expect PDFs)",
+      "targets": [{
+        "expr": "deepcoin_reports_total / clamp_min(deepcoin_history_total, 1) * 100",
+        "legendFormat": "PDF rate %"
+      }],
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 26 },
+      "options": { "colorMode": "background", "graphMode": "area" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0, "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 30 }, { "color": "green", "value": 60 }]
+          }
+        }
+      }
     },
+
     {
-      "type": "graph",
-      "title": "ChromaDB Disk Usage (bytes)",
-      "targets": [ { "expr": "node_filesystem_bytes_used{mountpoint=\"/app/data\"}", "legendFormat": "used" } ],
-      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 11 }
+      "id": 43,
+      "type": "stat",
+      "title": "Uptime (formatted)",
+      "targets": [{ "expr": "deepcoin_uptime_seconds", "legendFormat": "uptime" }],
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 26 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dtdhms",
+          "color": { "mode": "fixed", "fixedColor": "blue" }
+        }
+      },
+      "options": { "colorMode": "value", "graphMode": "none", "textMode": "value" }
+    },
+
+    {
+      "id": 44,
+      "type": "timeseries",
+      "title": "Model loaded status over time",
+      "description": "Drops to 0 = crash / OOM / unexpected restart",
+      "targets": [{ "expr": "deepcoin_model_loaded", "legendFormat": "model in memory" }],
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 30 },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0, "max": 1,
+          "color": { "mode": "fixed", "fixedColor": "green" },
+          "custom": { "lineWidth": 2, "fillOpacity": 30, "spanNulls": false },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        }
+      }
+    },
+
+    {
+      "id": 50,
+      "type": "row",
+      "title": "Process health (Python runtime)",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 34 }
+    },
+
+    {
+      "id": 51,
+      "type": "timeseries",
+      "title": "CPU time (user + system)",
+      "targets": [
+        { "expr": "rate(process_cpu_seconds_total[1m])", "legendFormat": "CPU rate" }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 35 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": { "lineWidth": 1.5, "fillOpacity": 15, "spanNulls": true },
+          "min": 0
+        }
+      }
+    },
+
+    {
+      "id": 52,
+      "type": "timeseries",
+      "title": "Resident memory (RSS)",
+      "targets": [
+        { "expr": "process_resident_memory_bytes", "legendFormat": "RSS" },
+        { "expr": "process_virtual_memory_bytes", "legendFormat": "Virtual" }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 35 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": { "lineWidth": 1.5, "fillOpacity": 10, "spanNulls": true },
+          "min": 0
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" } }
+    },
+
+    {
+      "id": 53,
+      "type": "timeseries",
+      "title": "Python GC collections (gen 0/1/2)",
+      "description": "Gen 2 spikes = major GC pauses — watch during heavy inference",
+      "targets": [
+        { "expr": "rate(python_gc_collections_total{generation=\"0\"}[1m])", "legendFormat": "gen 0 (minor)" },
+        { "expr": "rate(python_gc_collections_total{generation=\"1\"}[1m])", "legendFormat": "gen 1" },
+        { "expr": "rate(python_gc_collections_total{generation=\"2\"}[1m])", "legendFormat": "gen 2 (major)" }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 35 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "lineWidth": 1.5, "fillOpacity": 8, "spanNulls": true },
+          "min": 0
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" } }
+    },
+
+    {
+      "id": 60,
+      "type": "row",
+      "title": "Alerting summary",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 43 }
+    },
+
+    {
+      "id": 61,
+      "type": "alertlist",
+      "title": "Active alerts",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 44 },
+      "options": {
+        "alertName": "",
+        "dashboardAlerts": false,
+        "groupBy": [],
+        "groupMode": "default",
+        "maxItems": 20,
+        "showHeader": true,
+        "stateFilter": { "error": true, "firing": true, "noData": false, "normal": false, "pending": true },
+        "viewMode": "list"
+      }
+    },
+
+    {
+      "id": 62,
+      "type": "stat",
+      "title": "Prometheus scrape success",
+      "targets": [{ "expr": "up{job=\"api\"}", "legendFormat": "scrape ok" }],
+      "gridPos": { "h": 3, "w": 6, "x": 12, "y": 44 },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "1": { "text": "OK", "color": "green" }, "0": { "text": "FAIL", "color": "red" } } }
+          ]
+        }
+      },
+      "options": { "colorMode": "background" }
+    },
+
+    {
+      "id": 63,
+      "type": "stat",
+      "title": "Last scrape timestamp",
+      "targets": [{ "expr": "scrape_duration_seconds{job=\"api\"}", "legendFormat": "scrape ms" }],
+      "gridPos": { "h": 3, "w": 6, "x": 18, "y": 44 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 0.5 }, { "color": "red", "value": 2 }]
+          }
+        }
+      },
+      "options": { "colorMode": "background" }
+    },
+
+    {
+      "id": 64,
+      "type": "stat",
+      "title": "Model load health",
+      "targets": [{ "expr": "deepcoin_model_loaded", "legendFormat": "loaded" }],
+      "gridPos": { "h": 3, "w": 6, "x": 12, "y": 47 },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "1": { "text": "HEALTHY", "color": "green" }, "0": { "text": "NOT LOADED", "color": "red" } } }
+          ]
+        }
+      },
+      "options": { "colorMode": "background" }
+    },
+
+    {
+      "id": 65,
+      "type": "stat",
+      "title": "Analysis growth 24h",
+      "targets": [{ "expr": "increase(deepcoin_history_total[24h])", "legendFormat": "new analyses" }],
+      "gridPos": { "h": 3, "w": 6, "x": 18, "y": 47 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "fixed", "fixedColor": "purple" }
+        }
+      },
+      "options": { "colorMode": "value", "graphMode": "area" }
     }
-  ],
-  "schemaVersion": 27,
-  "title": "DeepCoin Overview",
-  "version": 1
+
+  ]
 }
