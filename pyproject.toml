@@ -55,6 +55,7 @@ dev = [
     "black>=24.0.0",
     "flake8>=7.0.0",
     "flake8-bugbear>=24.0",    # stricter linting rules
+    "pytest-cov>=4.0",
 ]
 
 # ── Tool configurations ───────────────────────────────────────────────────────
