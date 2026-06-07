@@ -39,7 +39,6 @@ minutes per submission.  The correct design:
 """
 
 
-
 import logging
 import subprocess
 import threading
@@ -55,7 +54,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/admin/active-learning", tags=["Active Learning"])
 
-_ROOT       = Path(__file__).resolve().parent.parent.parent.parent
+_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _OUTPUT_DIR = _ROOT / "data" / "active_learning"
 _REPORT_PATH = _OUTPUT_DIR / "EXPORT_REPORT.txt"
 
@@ -69,13 +68,13 @@ class ALCandidate(BaseModel):
     Fields deliberately minimal — the full record is retrievable via
     GET /api/history/{id} if needed.
     """
-    record_id:     str
+    record_id: str
     original_label: str
     correct_label: str
-    confidence:    float
-    route_taken:   str
-    note:          str | None = None
-    timestamp:     str
+    confidence: float
+    route_taken: str
+    note: str | None = None
+    timestamp: str
 
 
 class ALCandidatesResponse(BaseModel):
@@ -90,7 +89,7 @@ class ALCandidatesResponse(BaseModel):
         "there are N corrections waiting" and a sample of them.
         For a full export, POST /export is the correct endpoint.
     """
-    total:      int
+    total: int
     candidates: list[ALCandidate]
 
 
@@ -99,10 +98,10 @@ class ALExportResponse(BaseModel):
     Response shape for POST /api/admin/active-learning/export.
     """
     candidates: int
-    exported:   int
-    skipped:    int
+    exported: int
+    skipped: int
     output_dir: str
-    message:    str
+    message: str
 
 
 # ── routes ────────────────────────────────────────────────────────────────────
@@ -125,16 +124,16 @@ def get_candidates() -> ALCandidatesResponse:
     records = get_feedback_candidates()
     candidates: list[ALCandidate] = []
     for r in records[:50]:   # cap at 50 for the response payload
-        cnn      = r.get("cnn", {})
+        cnn = r.get("cnn", {})
         feedback = r.get("feedback", {})
         candidates.append(ALCandidate(
-            record_id      = r.get("id", ""),
-            original_label = str(cnn.get("label", r.get("label", ""))),
-            correct_label  = feedback.get("correct_type_id", "unknown"),
-            confidence     = float(cnn.get("confidence", r.get("confidence", 0.0))),
-            route_taken    = r.get("route_taken", ""),
-            note           = feedback.get("note") or None,
-            timestamp      = r.get("timestamp", ""),
+            record_id=r.get("id", ""),
+            original_label=str(cnn.get("label", r.get("label", ""))),
+            correct_label=feedback.get("correct_type_id", "unknown"),
+            confidence=float(cnn.get("confidence", r.get("confidence", 0.0))),
+            route_taken=r.get("route_taken", ""),
+            note=feedback.get("note") or None,
+            timestamp=r.get("timestamp", ""),
         ))
     return ALCandidatesResponse(total=len(records), candidates=candidates)
 
@@ -211,6 +210,7 @@ def get_report() -> dict:
         logger.error("Failed to read export report: %s", exc)
         raise HTTPException(status_code=500, detail="Could not read report file") from exc
 
+
 @router.post(
     "/train",
     summary="Trigger Model Retraining (Background Process)",
@@ -219,7 +219,7 @@ def get_report() -> dict:
 def trigger_training() -> dict:
     """
     Triggers scripts/train.py as a detached background process (Zero-Downtime Pipeline).
-    Does NOT block the FastAPI event loop. 
+    Does NOT block the FastAPI event loop.
     """
     logger.info("Triggering active learning training in background...")
     try:
@@ -246,7 +246,7 @@ def reload_model(request: Request) -> dict:
     Called by an admin from the dashboard OR manually via Webhook.
     """
     logger.info("Received request to reload model weights.")
-    if hasattr(request.app.state, "gk") and getattr(request.app.state, "gk") is not None:
+    if hasattr(request.app.state, "gk") and request.app.state.gk is not None:
         try:
             request.app.state.gk.reload_cnn_model()
             return {"message": "Model hot-swapped successfully.", "status": "ok"}
