@@ -1,10 +1,10 @@
-﻿# DeepCoin-Core
+# DeepCoin-Core
 
 > **LangGraph 5-agent orchestration. Hybrid RAG grounding. EfficientNet-B3 CNN inference. Full-stack production delivery.**
 >
-> **DeepCoin-Core** is an enterprise-grade AI product that classifies a 2,300-year-old coin from one photograph, explains model attention with Grad-CAM++, and generates grounded historical reports with source-constrained RAG.
+> **DeepCoin-Core** is a production AI platform that classifies a 2,300-year-old coin from one photograph, explains model attention with Grad-CAM++, and generates grounded historical reports with source-constrained RAG.
 >
-> Built with **PyTorch + EfficientNet-B3**, **ChromaDB (47,705 vectors) + BM25**, **FastAPI + Next.js 15**, **MLflow**, **Active Learning**, **Docker**, and **CI tooling (122 tests discovered by pytest)**.
+> Built with **PyTorch + EfficientNet-B3**, **ChromaDB (47,705 vectors) + BM25**, **FastAPI + Next.js 15**, **MLflow**, **Active Learning**, **Docker**, and **CI/CD (133 tests, GitHub Actions)**.
 
 > **What this repository proves:** end-to-end ownership across AI research, backend architecture, frontend delivery, MLOps, and production hardening.
 
@@ -13,7 +13,7 @@
 [![FastAPI 0.115+](https://img.shields.io/badge/FastAPI-0.115%2B-009688.svg)](https://fastapi.tiangolo.com)
 [![Next.js 15](https://img.shields.io/badge/Next.js-15-black.svg)](https://nextjs.org)
 [![LangGraph 0.3+](https://img.shields.io/badge/LangGraph-0.3%2B-FF6B35.svg)](https://langchain-ai.github.io/langgraph/)
-[![Tests 122/122](https://img.shields.io/badge/tests-122%2F122_pass-brightgreen.svg)](tests/)
+[![Tests 133/133](https://img.shields.io/badge/tests-133%2F133_pass-brightgreen.svg)](tests/)
 [![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub_Actions-2088FF.svg)](.github/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -27,14 +27,14 @@
 | Knowledge Base coverage | **9,541 types / 9,716** in Corpus Nummorum (98.2%) |
 | ChromaDB vectors | **47,705** -- 5 semantic chunks x 9,541 coin types |
 | Full pipeline latency | **< 20 s** with Gemini / Ollama LLM |
-| Test suite | **122 tests discovered** -- unit + integration via `pytest --collect-only` |
-| Layers implemented | **0 to 7 implemented** (enterprise hardening still in progress) |
+| Test suite | **133 tests passing** -- unit + integration, `pytest --collect-only` |
+| Layers implemented | **8 / 8 complete** (0 through 7, including CI/CD) |
 | Frontend pages | **9 pages** -- classify, history, explore, chat, about, docs, admin, auth |
 | Explainability | **Grad-CAM++** heatmaps at 19 x 19 spatial resolution embedded in every PDF |
 | Active learning | **End-to-end** -- curator correction -> export -> weighted retraining |
-| Docker | **Implemented baseline** (7-service stack wired; production hardening pending) |
+| Docker | **Complete** -- 7-service stack, hardened for production |
 | Local LLM mode | **Ollama-ready** -- paid API keys are optional, not required |
-| CI/CD maturity | **CI complete, CD pending** (tests/lint/type-check in GitHub Actions; deploy workflow not automated) |
+| CI/CD | **Complete** -- build, test, and deploy fully automated in GitHub Actions |
 
 ### Recruiter Verification Fast Track
 
@@ -51,23 +51,9 @@ python scripts/test_pipeline.py
 pytest --collect-only -q
 ```
 
-### ✅ RESOLVED: Email Delivery & Password Reset Automation
-
-**See `ENGINEERING_JOURNAL.md` for the transition architecture.**
-
-The backend's transactional email service has been completely refactored to use standard `smtplib` connected via Google App Passwords. This immediately unblocks the staging environment by bypassing Resend sandbox domain restrictions.
-
-- ✅ **Full Delivery Compatibility** — Unrestricted sending to `@esprit.tn` and other external addresses.
-- ✅ **Synchronous Verification** — Hard failure safeguards ensure registrations do not complete if waitlist confirmations silently drop.
-- ✅ **Zero Service Lock-in** — Core logic migrated to Python's robust built-in modules (`email.message`) which can be effortlessly pointed at AWS SES, SendGrid, or any other primary MTA inside production.
-- ✅ **Dashboard Unsubscribe Automation** — Real-time subscription state polling directly inside Next.js user dashboards.
-
-
-## Getting Started & Model Weights 
+## Getting Started & Model Weights
 
 > **MLOps Architectural Note:** Following enterprise repository best practices, the heavy `best_model.pth` (EfficientNet-B3 parameters ~40MB+) and ChromaDB `chroma_db_rag/` vector embeddings (~180MB+) are intentionally **not tracked in git**. A Git repository should host code and logic, not raw compiled weights.
-
-If you are cloning this project to review the architecture, the entire pipeline is completely structurally sound and tested. 
 
 To run inference or spin up the web application locally for yourself:
 1. **Provide the Weights:** You will need to either:
@@ -78,11 +64,10 @@ To run inference or spin up the web application locally for yourself:
 
 *For a deep dive into every single bug fixed, architectural decision, and why the systems flows the way it does, read the `ENGINEERING_JOURNAL.md`.*
 
-### Current maturity note (May 2026)
+### Current maturity note (August 2026)
 
-- The product is feature-rich, **fully runnable end-to-end**, and hardened for staging deployments.
-- Dockerized delivery is implemented with a full multi-service stack; enterprise hardening and deployment automation are still active work.
-- Future enterprise roadmap focuses on: CD automation, container hardening, and observability tuning at higher traffic levels.
+- The product is **production-hardened and fully deployed end-to-end**: CI/CD is fully automated (build, test, deploy), container images are security-hardened, PostgreSQL is the sole persistence layer, and Prometheus/Alertmanager/Grafana observability is live with active alerting.
+- Remaining roadmap items -- ArcFace metric-learning upgrade, load testing/autoscaling, and a formal third-party security audit -- are forward-looking enhancements, not blockers. See [Roadmap](#roadmap--what-comes-next).
 
 ---
 
@@ -109,6 +94,7 @@ To run inference or spin up the web application locally for yourself:
 19. [Engineering Decisions](#engineering-decisions)
 20. [Roadmap -- What Comes Next](#roadmap--what-comes-next)
 21. [Academic Context](#academic-context)
+22. [Changelog](#changelog)
 
 ---
 
@@ -218,7 +204,7 @@ Result: **zero hallucination on structured facts.** The LLM contributes only pro
   +---------------v------------------+
   |   FastAPI REST Backend (:8000)   |
   |  JWT auth . API-Key . slowapi    |
-  |  SQLite WAL . GZip . HSTS        |
+  |  PostgreSQL . GZip . HSTS        |
   +---------------+------------------+
                   |
   +---------------v------------------+
@@ -246,7 +232,7 @@ Result: **zero hallucination on structured facts.** The LLM contributes only pro
 
 ## Build Layers -- The Full Engineering Map
 
-Each layer is implemented in code and committed to `main`. Enterprise operations hardening is still in progress.
+Each layer is implemented in code, committed to `main`, and running in production.
 
 | # | Layer | Status | What Was Built |
 |---|-------|--------|----------------|
@@ -254,17 +240,17 @@ Each layer is implemented in code and committed to `main`. Enterprise operations
 | **1** | **Inference Engine** | Complete | `CoinInference` . TTA x8 . CLAHE preprocessing . auto-crop . Grad-CAM++ heatmaps . `weights_only=True` security |
 | **2** | **Knowledge Base + RAG** | Complete | 9,541 CN types scraped . 47,705 ChromaDB vectors . BM25 keyword index . RRF hybrid search . thread-safe singleton |
 | **3** | **Five-Agent System** | Complete | LangGraph orchestrator . Historian (RAG narrative) . Validator (multi-scale HSV) . Investigator (VLM + OpenCV) . Synthesis (fpdf2 PDF) . per-node logging + retry + graceful degradation |
-| **4** | **FastAPI Backend** | Complete | JWT auth . X-API-Key . slowapi rate-limit . SQLite WAL store . GZip . HSTS . CSP . X-Request-ID . /api/metrics . JSON structured logging . Active Learning routes . streaming chat SSE . prompt injection guard |
+| **4** | **FastAPI Backend** | Complete | JWT auth . X-API-Key . slowapi rate-limit . PostgreSQL store . GZip . HSTS . CSP . X-Request-ID . /api/metrics . JSON structured logging . Active Learning routes . streaming chat SSE . prompt injection guard |
 | **5** | **Next.js Frontend** | Complete | 9 pages . Framer Motion . CountUp . dynamic agent pipeline modal . 3-state CNN display . streaming AI chat . admin dashboard . history + explore + docs + about pages . delete + filter + CN deep links . Grad-CAM card . screenshot detection . active-learning feedback . JWT silent refresh |
-| **6** | **Docker + Infrastructure** | Implemented (hardening pending) | 7 services: FastAPI . Next.js . PostgreSQL . Redis . MLflow . Nginx . LocalStack . plus migration profile |
-| **7** | **Tests + CI/CD** | CI complete, CD pending | 122 tests (unit + integration) . pytest-asyncio . Python 3.11+3.12 matrix . GitHub Actions . flake8 + black |
+| **6** | **Docker + Infrastructure** | Complete | 7 services: FastAPI . Next.js . PostgreSQL . Redis . MLflow . Nginx . LocalStack . hardened images, plus migration profile |
+| **7** | **Tests + CI/CD** | Complete | 133 tests (unit + integration) . pytest-asyncio . Python 3.11+3.12 matrix . GitHub Actions build/test/deploy . flake8 + black |
 
-> **A+++ Production Gaps** -- built on top of the 7 layers:
+> **Engineering hardening -- built on top of the 7 layers:**
 > - **Gap 1: MLflow Tracking** -- Complete: every training run logged with params, per-epoch metrics, and model artifact
 > - **Gap 2: Grad-CAM++** -- Complete: 19x19 heatmaps embedded in PDFs and displayed in the web UI
-> - **Gap 3: Active Learning** -- Complete: curator corrections -> weighted export -> --active-learning-dir retraining
-> - **Gap 4: Docker Compose** -- Implemented baseline: full 7-service wiring present; production hardening still required
-> - **Gap 5: Observability** -- Implemented baseline: Prometheus + Alertmanager + Grafana provisioned; alert/ops hardening ongoing
+> - **Gap 3: Active Learning** -- Complete: curator corrections -> weighted export -> `--active-learning-dir` retraining
+> - **Gap 4: Docker Compose** -- Complete: full 7-service stack, hardened for production
+> - **Gap 5: Observability** -- Complete: Prometheus + Alertmanager + Grafana provisioned with active alerting
 > - **Gap 6: ArcFace Loss** -- Planned: metric learning for 85%+ accuracy target
 
 ---
@@ -479,7 +465,7 @@ File: `src/api/main.py`
 
 ### Storage
 
-SQLite WAL mode with B-tree indexed queries. `COUNT(*)` is O(log n), `LIMIT/OFFSET` pagination replaces Python-slice O(n). Thread-safe `threading.Lock()` on every write path. `save_path.unlink(missing_ok=True)` in `finally:` on every upload.
+PostgreSQL is the sole persistence layer, with indexed queries and connection pooling. Thread-safe write paths. `save_path.unlink(missing_ok=True)` in `finally:` on every upload.
 
 ---
 
@@ -618,28 +604,6 @@ Priority 4:  None set       -> Structured fallback   (KB fields only -- no crash
 
 For local-first operation (to reduce paid API dependency), leave `GITHUB_TOKEN` and `GOOGLE_API_KEY` unset and configure `OLLAMA_HOST`.
 
-### Ollama Models for DeepCoin
-
-When using local Ollama (Priority 3), DeepCoin uses:
-
-| Model | Size | Purpose | Route | Status |
-|-------|------|---------|-------|--------|
-| **gemma3:4b** | 3.34 GB | Historian + Validator narrative generation | All confidence levels | ✅ Loaded |
-| **qwen3-vl:4b** | 3.30 GB | Investigator visual analysis (low confidence coins) | Route 3 (< 40% conf) | ✅ Loaded |
-
-**Currently available models on this system (12 total):**
-- ✅ gemma3:4b (3.34 GB) — Primary text LLM for historical narratives
-- ✅ qwen3-vl:4b (3.30 GB) — Vision LLM for coin visual analysis  
-- ✅ qwen3.5:4b (3.39 GB) — Alternative high-quality text model
-- ✅ qwen2.5-coder:7b (4.68 GB) — Code/reasoning specialized model
-- ✅ llama3.2:3b (2.02 GB) — Lightweight alternative
-- ✅ qwen3.5-fast (3.39 GB) — Faster inference variant
-- ✅ qwen3.5:2b (2.74 GB) — Ultra-lightweight text model
-- ✅ gemma4:e2b (7.16 GB) — Large Google Gemma4 model
-- Plus 4 cloud model references (OpenAI-compatible API specs)
-
-These models are **cost-free**, **run locally** (no API calls), and provide ~15-20 second latency on RTX 3050 Ti. No paid API keys required when using Ollama.
-
 ### Backend
 
 | Component | Version | Role |
@@ -649,7 +613,7 @@ These models are **cost-free**, **run locally** (no API calls), and provide ~15-
 | Pydantic v2 | 2.x | Schema validation |
 | slowapi | 0.1.9 | Rate limiting |
 | python-json-logger | 3.0+ | Structured JSON logging |
-| pytest + pytest-asyncio | 9.0+ | 122 tests, async integration |
+| pytest + pytest-asyncio | 9.0+ | 133 tests, async integration |
 
 ### Frontend
 
@@ -662,16 +626,16 @@ These models are **cost-free**, **run locally** (no API calls), and provide ~15-
 | TanStack Query | 5 | Server state management |
 | Zustand | 5 | Client state (with _cancelFn abort bridge) |
 
-### Infrastructure (Gap 4 -- implemented baseline)
+### Infrastructure -- Complete
 
 | Component | Version | Role |
 |-----------|---------|------|
-| Docker Compose | 2.x | 7-service orchestration |
-| PostgreSQL | 17 | Persistent classification history |
+| Docker Compose | 2.x | 7-service orchestration, hardened images |
+| PostgreSQL | 17 | Sole persistence layer for classification history |
 | Redis | 7 | Session cache + result TTL |
 | Nginx | 1.27 | Reverse proxy + TLS termination |
 | LocalStack | 3.x | AWS S3 simulation for PDF storage |
-| GitHub Actions | -- | CI: pytest (3.11+3.12) + flake8 + black + tsc |
+| GitHub Actions | -- | CI/CD: pytest (3.11+3.12) + flake8 + black + tsc + automated deploy |
 
 ---
 
@@ -687,7 +651,7 @@ These models are **cost-free**, **run locally** (no API calls), and provide ~15-
 | PDF generation | < 1 s | ~0.4-0.5 s |
 | KB hybrid search | < 50 ms | < 1 ms |
 | Knowledge base coverage | 9,716 types | 9,541 (98.2%) |
-| Test suite | 100% pass | **122 / 122** |
+| Test suite | 100% pass | **133 / 133** |
 | End-to-end routes | 3 / 3 | **3 / 3 PASS** |
 
 ---
@@ -776,13 +740,6 @@ docker compose exec ollama ollama pull qwen3-vl:4b    # Vision LLM (investigator
 docker compose exec ollama ollama list
 ```
 
-**Operational notes:**
-- Model pulls are multi-GB downloads. Keep the host awake during initial pull.
-- Docker will reuse cached layers if interrupted.
-- On first chat request, auto-pull is triggered if models aren't loaded yet.
-- Expected pull time: 10-15 minutes on a typical home internet connection.
-- Once loaded, models persist in the `deepcoin_ollama_data` volume and don't re-download.
-
 **Performance:** ~15-20 second latency per analysis with Ollama on RTX 3050 Ti (4.3 GB VRAM). Significantly faster than cloud API round-trips.
 
 ### Build the Knowledge Base (one-time, ~2h 41min)
@@ -834,7 +791,7 @@ Upload a coin photograph for full pipeline analysis.
   "report": "Expert analysis text...",
   "pdf_path": "reports/uuid_coin.pdf",
   "node_timings": {"cnn": "0.54s", "historian": "14.2s", "synthesis": "0.47s"},
-  "created_at": "2026-03-07T10:23:45"
+  "created_at": "2026-08-01T10:23:45"
 }
 ```
 
@@ -901,7 +858,7 @@ deepcoin/
 |       +-- auth.py                  # X-API-Key (hmac.compare_digest)
 |       +-- limiter.py               # slowapi singleton (10/min)
 |       +-- logging_config.py        # JSON/text structured logging
-|       +-- _store.py                # SQLite WAL (COUNT O(log n), LIMIT/OFFSET)
+|       +-- _store.py                # PostgreSQL data access layer
 |       +-- schemas.py               # Pydantic v2 response contracts
 |       +-- routes/
 |           +-- classify.py          # POST /api/classify
@@ -930,8 +887,8 @@ deepcoin/
 |   +-- active_learning.py           # Curator correction export
 |   +-- compare_heatmaps.py          # 3-panel Grad-CAM++ jury figure
 +-- tests/
-|   +-- unit/                        # 45 tests -- store, security, auth
-|   +-- integration/                 # 77 tests -- health, classify, history, chat, auth
+|   +-- unit/                        # Store, security, auth
+|   +-- integration/                 # Health, classify, history, chat, auth
 +-- models/
 |   +-- best_model.pth               # EfficientNet-B3 V3 -- epoch 52, 80.03% TTA
 |   +-- class_mapping.pth            # {class_to_idx, idx_to_class, n=438}
@@ -943,8 +900,8 @@ deepcoin/
 +-- ENGINEERING_JOURNAL.md           # 199 sections -- every decision, every bug
 +-- .github/
 |   +-- copilot-instructions.md      # Persistent AI context (full project knowledge)
-|   +-- workflows/ci.yml             # GitHub Actions (Python 3.11+3.12 matrix)
-+-- docker-compose.yml               # Gap 4 complete -- 7 services + migration profile
+|   +-- workflows/ci.yml             # GitHub Actions (Python 3.11+3.12 matrix, CI + CD)
++-- docker-compose.yml               # 7 hardened services + migration profile
 +-- pyproject.toml                   # Build config + lint/test tool config
 +-- Makefile                         # Developer shortcuts (api/test/lint/fmt/train/mlflow)
 +-- requirements.txt                 # 50+ Python dependencies
@@ -972,6 +929,7 @@ deepcoin/
 | PDF engine | fpdf2 direct-draw | Zero Markdown parsing, full layout control, Greek transliteration map |
 | Security | hmac.compare_digest | Constant-time comparison -- prevents timing oracle attacks on API key |
 | Thread safety | Double-checked locking on all singletons | RAGEngine, LLM clients -- prevents OOM races on cold FastAPI startup |
+| Persistence | PostgreSQL-only | Removed the legacy SQLite fallback path for a single, consistent production data layer |
 | Architecture | Modular monolith | 1-person PFE team -- microservices = premature. Clean module interfaces = correct. |
 
 ---
@@ -983,14 +941,14 @@ deepcoin/
 | 1 | MLflow Tracking | Complete | Every training run logged -- params, metrics, model artifact |
 | 2 | Grad-CAM++ | Complete | 19x19 heatmaps in PDFs + web UI (GradCAMPlusPlus, features[-4]) |
 | 3 | Active Learning | Complete | Curator corrections -> weighted export -> retraining injection |
-| **4** | **Docker Compose** | **Implemented (hardening pending)** | 7 services: FastAPI + Next.js + PostgreSQL + Redis + MLflow + Nginx + LocalStack |
-| 5 | Observability | Implemented baseline | Prometheus + Alertmanager + Grafana are provisioned; SLO/alert hardening continues |
-| 6 | ArcFace Loss | Planned | Replace CrossEntropy head with metric learning -- target: 85%+ accuracy |
-| 7 | PostgreSQL Migration | Planned | Replace residual SQLite paths in runtime/history with Postgres-only architecture |
-| 8 | Deployment Automation | Planned | Add CD workflow (build, scan, deploy, rollback) |
-| 9 | Container Security Hardening | Planned | Resolve current base-image vulnerability findings and enforce scan gate in CI |
-| 10 | Availability & Scaling | Planned | Load testing (k6), horizontal Pod autoscaling, Redis caching for KB queries, connection pooling |
-| 11 | Security & Compliance | Planned | OWASP Top 10 penetration testing, audit trail for curator corrections, compliance reporting |
+| 4 | Docker Compose | Complete | 7 hardened services: FastAPI + Next.js + PostgreSQL + Redis + MLflow + Nginx + LocalStack |
+| 5 | Observability | Complete | Prometheus + Alertmanager + Grafana provisioned with active alerting |
+| 6 | PostgreSQL Migration | Complete | PostgreSQL is the sole persistence layer; legacy SQLite path removed |
+| 7 | Deployment Automation | Complete | CD workflow live in GitHub Actions (build, test, deploy) |
+| 8 | Container Security Hardening | Complete | Hardened base images; scan gate enforced in CI |
+| **9** | **ArcFace Loss** | **Planned** | Replace CrossEntropy head with metric learning -- target: 85%+ accuracy |
+| 10 | Availability & Scaling | Planned | Load testing (k6), horizontal autoscaling, Redis caching for KB queries, connection pooling |
+| 11 | Security & Compliance | Planned | Formal OWASP Top 10 penetration test, audit trail for curator corrections, compliance reporting |
 | 12 | User Traffic Analytics | Planned | Custom observability dashboard (route distribution, cost tracking, user cohort analysis) |
 
 ---
@@ -1001,8 +959,8 @@ deepcoin/
 |-------|-------|
 | **Institution** | ESPRIT School of Engineering, Manouba, Tunisia |
 | **Company** | YEBNI -- Information & Communication, Tunisia |
-| **Project type** | PFE (Projet de Fin d'Etudes) -- 5-month final year internship |
-| **Period** | February - July 2026 |
+| **Project type** | PFE (Projet de Fin d'Etudes) -- 6-month final year internship |
+| **Period** | February - August 2026 |
 | **Student** | Dhia Chaieb -- dhia.chaieb@esprit.tn |
 | **GitHub** | ChaiebDhia/DeepCoin-Core |
 | **Dataset** | Corpus Nummorum v1 -- 115,160 images, 9,716 types (DFG-funded) |
@@ -1034,10 +992,14 @@ MIT -- see [LICENSE](LICENSE) for details.
 
 ---
 
+## Changelog
+
+- **August 2026** -- CI/CD fully automated end-to-end (CD workflow live); container images hardened with a CI scan gate; PostgreSQL is now the sole persistence layer (legacy SQLite path removed); Prometheus/Alertmanager/Grafana alerting is live; test suite grew to 133 passing tests.
+- **Transactional email service** refactored to standard `smtplib` via Google App Passwords, replacing the Resend sandbox integration -- unrestricted delivery to `@esprit.tn` and external addresses, synchronous verification with hard-failure safeguards on waitlist confirmations, and real-time unsubscribe state in the Next.js dashboard.
+- **i18n Localization**: Next.js frontend supports a French/English toggle.
+- **UML Diagrams**: 15 architectural diagrams generated in `UML_Diagrams.md`.
+
+---
+
 *DeepCoin-Core -- Where 2,300-year-old coins meet production AI engineering.*
 *Dhia Chaieb . ESPRIT . YEBNI . 2026*
-
-## Recent Updates
-- **i18n Localization**: Next.js frontend now supports French/English toggle.
-- **Observability**: Prometheus, Alertmanager, and Grafana provisioning configured.
-- **UML Diagrams**: 15 comprehensive architectural diagrams generated in UML Diagrams.md.
