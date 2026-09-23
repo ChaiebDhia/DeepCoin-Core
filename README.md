@@ -93,7 +93,7 @@ To run inference or spin up the web application locally for yourself:
 18. [Project Structure](#project-structure)
 19. [Engineering Decisions](#engineering-decisions)
 20. [Roadmap -- What Comes Next](#roadmap--what-comes-next)
-21. [Academic Context](#academic-context)
+21. [Context](#context)
 22. [Changelog](#changelog)
 
 ---
@@ -953,13 +953,13 @@ deepcoin/
 
 ---
 
-## Academic Context
+## Context
 
 | Field | Value |
 |-------|-------|
 | **Institution** | ESPRIT School of Engineering, Manouba, Tunisia |
 | **Company** | YEBNI -- Information & Communication, Tunisia |
-| **Project type** | PFE (Projet de Fin d'Etudes) -- 6-month final year internship |
+| **Project type** | PFE -- 6-month |
 | **Period** | February - August 2026 |
 | **Student** | Dhia Chaieb -- dhia.chaieb@esprit.tn |
 | **GitHub** | ChaiebDhia/DeepCoin-Core |
