@@ -206,7 +206,7 @@ def _nll(T_arr: np.ndarray, logits_np: np.ndarray, labels_np: np.ndarray) -> flo
     T = float(T_arr[0])
     if T <= 0.0:
         return 1e9    # hard positivity constraint
-    logits_t = torch.tensor(logits_np / T, dtype=torch.float32)
+    logits_t = torch.tensor(logits_np.astype('float64') / T, dtype=torch.float64)
     labels_t = torch.tensor(labels_np,     dtype=torch.long)
     loss = torch.nn.functional.cross_entropy(logits_t, labels_t).item()
     return float(loss)
