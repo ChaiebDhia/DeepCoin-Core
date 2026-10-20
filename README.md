@@ -17,6 +17,13 @@
 [![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub_Actions-2088FF.svg)](.github/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+## Corrections (Oct 2026)
+- Reproduced on the 1,152-image held-out test set: 79.25% single-pass, 79.60% with 5-view test-time augmentation. Earlier figures (79.08% test, 80.03% with 8 views) are not reproduced.
+- The temperature-scaling step was a silent no-op (T = 1.0) because of a float32 optimiser stall in scripts/calibrate_temperature.py. A float64 refit gave T = 0.65 on a calibration set that appears to overlap training data, so it is not deployed until validated on unseen data.
+- The claim "scans score 15-28% vs 80-96% for photos" is retracted: it compared model confidence on hand-picked images, not accuracy. Scan sample size is n=7.
+- The 439th model output is an empty admin_uploads folder; real classes: 438. Some classes have only 5-7 images, so the "at least 10 images per class" filter statement is wrong.
+- Reproduce the per-source evaluation with: python scripts/eval_by_source.py, then python scripts/routing_check.py
+
 ---
 
 ## At a Glance
