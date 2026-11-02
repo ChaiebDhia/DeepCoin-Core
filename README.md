@@ -17,12 +17,16 @@
 [![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub_Actions-2088FF.svg)](.github/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+**Demo video (upload, prediction, Grad-CAM++ heatmap, PDF report):** https://drive.google.com/file/d/1h9oCTjKPBjwKcJZIw8yGZdergeoiyrFR/view?usp=sharing  
+*The monitoring stack (Prometheus, Grafana) and the active-learning loop are not shown in this cut.*
+
 ## Corrections (Oct 2026)
 - Reproduced on the 1,152-image held-out test set: 79.25% single-pass, 79.60% with 5-view test-time augmentation. Earlier figures (79.08% test, 80.03% with 8 views) are not reproduced.
 - The temperature-scaling step was a silent no-op (T = 1.0) because of a float32 optimiser stall in scripts/calibrate_temperature.py. A float64 refit gave T = 0.65 on a calibration set that appears to overlap training data, so it is not deployed until validated on unseen data.
 - The claim "scans score 15-28% vs 80-96% for photos" is retracted: it compared model confidence on hand-picked images, not accuracy. Scan sample size is n=7.
 - The 439th model output is an empty admin_uploads folder; real classes: 438. Some classes have only 5-7 images, so the "at least 10 images per class" filter statement is wrong.
 - Reproduce the per-source evaluation with: python scripts/eval_by_source.py, then python scripts/routing_check.py
+- Headline numbers everywhere below use the reproduced figures. Numbers that came from the original run and have not been re-measured are marked as such.
 
 ---
 
@@ -30,7 +34,7 @@
 
 | What | Numbers |
 |------|---------|
-| CNN accuracy (TTA x8, 438 classes) | **80.03%** -- benchmark result on a hard fine-grained classification task |
+| CNN accuracy (held-out test, 1,152 images, 438 classes) | **79.60%** with 5-view TTA, **79.25%** single pass (reproduced Oct 2026) |
 | Knowledge Base coverage | **9,541 types / 9,716** in Corpus Nummorum (98.2%) |
 | ChromaDB vectors | **47,705** -- 5 semantic chunks x 9,541 coin types |
 | Full pipeline latency | **< 20 s** with Gemini / Ollama LLM |
@@ -39,7 +43,7 @@
 | Frontend pages | **9 pages** -- classify, history, explore, chat, about, docs, admin, auth |
 | Explainability | **Grad-CAM++** heatmaps at 19 x 19 spatial resolution embedded in every PDF |
 | Active learning | **End-to-end** -- curator correction -> export -> weighted retraining |
-| Docker | **Complete** -- 7-service stack, hardened for production |
+| Docker | **Complete** -- 11-service Compose stack (app, data, MLflow, monitoring, local LLM) plus a one-off migration job |
 | Local LLM mode | **Ollama-ready** -- paid API keys are optional, not required |
 | CI/CD | **Complete** -- build, test, and deploy fully automated in GitHub Actions |
 
@@ -71,10 +75,10 @@ To run inference or spin up the web application locally for yourself:
 
 *For a deep dive into every single bug fixed, architectural decision, and why the systems flows the way it does, read the `ENGINEERING_JOURNAL.md`.*
 
-### Current maturity note (August 2026)
+### Current maturity note (November 2026)
 
-- The product is **production-hardened and fully deployed end-to-end**: CI/CD is fully automated (build, test, deploy), container images are security-hardened, PostgreSQL is the sole persistence layer, and Prometheus/Alertmanager/Grafana observability is live with active alerting.
-- Remaining roadmap items -- ArcFace metric-learning upgrade, load testing/autoscaling, and a formal third-party security audit -- are forward-looking enhancements, not blockers. See [Roadmap](#roadmap--what-comes-next).
+- The product runs end-to-end under Docker Compose with automated CI/CD (build, test, deploy workflow), security-hardened container images, PostgreSQL as the sole persistence layer, and Prometheus/Alertmanager/Grafana monitoring with alert rules. It is **not publicly hosted**, has **no load test** and **no third-party security audit** yet.
+- Remaining roadmap items -- ArcFace metric-learning upgrade, load testing/autoscaling, and a formal third-party security audit -- are the next steps. See [Roadmap](#roadmap--what-comes-next).
 
 ---
 
@@ -121,7 +125,7 @@ Museums, auction houses, and research institutions need a system that can:
 DeepCoin-Core addresses all six requirements -- not as a demo, but as production software with security hardening, monitoring, and comprehensive test coverage.
 
 > **PFE (Final Year Engineering Internship)** -- ESPRIT (Ecole Supérieure Privée d'Ingénierie et de Technologies) x YEBNI, Tunisia
-> Student: **Dhia Chaieb** | dhia.chaieb@esprit.tn | GitHub: ChaiebDhia
+> Student: **Dhia Chaieb** | dhiashayeb6@gmail.com | GitHub: ChaiebDhia
 
 ---
 
@@ -137,11 +141,11 @@ The key technique is **transfer learning** (fine-tuning):
 
 1. EfficientNet-B3 was pre-trained by Google on 1.2 million ImageNet photographs -- teaching it universal visual concepts.
 2. We then continued training it for ~100 minutes on **7,677 ancient coin images** across **438 coin types** from the Corpus Nummorum catalogue.
-3. The result: **80.03% classification accuracy** on 438 classes -- a task that would take a human expert years to develop equivalent breadth.
+3. The result: **79.60% top-1 accuracy** (5-view TTA, 1,152 held-out images) on 438 classes.
 
-**Why 80.03% is a serious result:** This is 438-way fine-grained visual classification on ancient archaeological objects -- worn, corroded, photographed under inconsistent lighting, with identical visual features across subtly different types. The baseline (random guessing) is 0.23%. Context matters enormously.
+**Why ~80% is a meaningful result, and its limits:** This is 438-way fine-grained visual classification on ancient archaeological objects -- worn, corroded, photographed under inconsistent lighting, with identical visual features across subtly different types. The baseline (random guessing) is 0.23%. Context matters enormously. The held-out set is small (1,152 images, and some classes have only 5-7 images in total), so per-class numbers are noisy.
 
-**Scientific contribution discovered during testing:** During inference diagnostics, we found that BNF 1966 Bibliotheque nationale de France catalog scans of training-set coins score only 15-28% even for trained types, while the standard composite `_p` photographs score 80-96%. This is an **intra-dataset distribution shift** -- the model is working correctly; the input photograph style is the variable. This finding is documented in Engineering Journal Section 184 and is directly relevant to any museum digitising from analog historical catalogs.
+**Open question (an earlier claim was retracted):** early diagnostics suggested that catalogue scans of trained coin types score lower than standard photographs. That comparison used model confidence on a handful of hand-picked images (n = 7), not accuracy, so it is **not** a finding. `scripts/eval_by_source.py` is the proper per-source evaluation; results will be added here once measured.
 
 ### RAG -- Making the LLM Cite Its Sources
 
@@ -169,7 +173,7 @@ INSTRUCTION: Using ONLY the contexts above (cite [CONTEXT N]),
              Do not add any fact not present in the context.
 ```
 
-Result: **zero hallucination on structured facts.** The LLM contributes only prose quality -- it cannot invent a wrong date or wrong mint because those fields come directly from the Corpus Nummorum Knowledge Base.
+Result: structured fields (date, mint, material, legends) are **copied from the Knowledge Base, not generated**, and the prompt forbids adding facts. Free-text prose is not yet formally evaluated for faithfulness (see Roadmap).
 
 ---
 
@@ -188,7 +192,7 @@ Result: **zero hallucination on structured facts.** The LLM contributes only pro
                    |
   +----------------v-----------------+
   |         EfficientNet-B3          |
-  |  438 classes . 80.03% TTA acc.   |
+  |  438 classes . 79.6% TTA acc.    |
   |  -> class + confidence + top5    |
   |  -> Grad-CAM++ heatmap (19x19)   |
   +----+----------+----------+-------+
@@ -243,20 +247,20 @@ Each layer is implemented in code, committed to `main`, and running in productio
 
 | # | Layer | Status | What Was Built |
 |---|-------|--------|----------------|
-| **0** | **CNN Training** | Complete | EfficientNet-B3 fine-tuning . AMP . Mixup . WeightedSampler . CosineAnnealingLR . 80.03% TTA |
+| **0** | **CNN Training** | Complete | EfficientNet-B3 fine-tuning . AMP . Mixup . WeightedSampler . CosineAnnealingLR . 79.60% held-out (TTA x5) |
 | **1** | **Inference Engine** | Complete | `CoinInference` . TTA x8 . CLAHE preprocessing . auto-crop . Grad-CAM++ heatmaps . `weights_only=True` security |
 | **2** | **Knowledge Base + RAG** | Complete | 9,541 CN types scraped . 47,705 ChromaDB vectors . BM25 keyword index . RRF hybrid search . thread-safe singleton |
 | **3** | **Five-Agent System** | Complete | LangGraph orchestrator . Historian (RAG narrative) . Validator (multi-scale HSV) . Investigator (VLM + OpenCV) . Synthesis (fpdf2 PDF) . per-node logging + retry + graceful degradation |
 | **4** | **FastAPI Backend** | Complete | JWT auth . X-API-Key . slowapi rate-limit . PostgreSQL store . GZip . HSTS . CSP . X-Request-ID . /api/metrics . JSON structured logging . Active Learning routes . streaming chat SSE . prompt injection guard |
 | **5** | **Next.js Frontend** | Complete | 9 pages . Framer Motion . CountUp . dynamic agent pipeline modal . 3-state CNN display . streaming AI chat . admin dashboard . history + explore + docs + about pages . delete + filter + CN deep links . Grad-CAM card . screenshot detection . active-learning feedback . JWT silent refresh |
-| **6** | **Docker + Infrastructure** | Complete | 7 services: FastAPI . Next.js . PostgreSQL . Redis . MLflow . Nginx . LocalStack . hardened images, plus migration profile |
+| **6** | **Docker + Infrastructure** | Complete | 11 services: FastAPI . Next.js . PostgreSQL . Redis . MLflow . Nginx . LocalStack . Prometheus . Alertmanager . Grafana . Ollama . hardened images, plus migration profile |
 | **7** | **Tests + CI/CD** | Complete | 133 tests (unit + integration) . pytest-asyncio . Python 3.11+3.12 matrix . GitHub Actions build/test/deploy . flake8 + black |
 
 > **Engineering hardening -- built on top of the 7 layers:**
 > - **Gap 1: MLflow Tracking** -- Complete: every training run logged with params, per-epoch metrics, and model artifact
 > - **Gap 2: Grad-CAM++** -- Complete: 19x19 heatmaps embedded in PDFs and displayed in the web UI
 > - **Gap 3: Active Learning** -- Complete: curator corrections -> weighted export -> `--active-learning-dir` retraining
-> - **Gap 4: Docker Compose** -- Complete: full 7-service stack, hardened for production
+> - **Gap 4: Docker Compose** -- Complete: full 11-service stack, hardened images
 > - **Gap 5: Observability** -- Complete: Prometheus + Alertmanager + Grafana provisioned with active alerting
 > - **Gap 6: ArcFace Loss** -- Planned: metric learning for 85%+ accuracy target
 
@@ -267,7 +271,7 @@ Each layer is implemented in code, committed to `main`, and running in productio
 | Agent | File | What It Does |
 |-------|------|-------------|
 | **Gatekeeper** | `gatekeeper.py` | LangGraph state machine. Routes by confidence threshold. Per-node timing. Exponential-backoff retry on 429/503. Graceful try/except on every node -- pipeline never crashes, errors appear in the report instead of crashing the server. |
-| **Historian** | `historian.py` | Fetches 5 semantic [CONTEXT N] chunks from the RAG engine. Calls Gemini / Ollama `gemma3:4b` with a grounded citation prompt. Zero hallucination on structured facts. |
+| **Historian** | `historian.py` | Fetches 5 semantic [CONTEXT N] chunks from the RAG engine. Calls Gemini / Ollama `gemma3:4b` with a grounded citation prompt. Structured fields come from the KB, not from the LLM. |
 | **Investigator** | `investigator.py` | For low-confidence coins. Calls a Vision LLM (`qwen3-vl:4b`) or falls back to pure OpenCV (HSV histogram + Sobel edge density). Cross-references ALL 9,541 KB types -- finds closest cultural matches for coins not in the training set. |
 | **Validator** | `validator.py` | Multi-scale HSV metal detection at 3 crop sizes (40%/60%/80%), majority vote. Handles Ag2S sulphide patina (S_max raised 40->70). KB-CNN consensus override prevents false bronze/silver mismatches. |
 | **Synthesis** | `synthesis.py` | Assembles all agent outputs into a professional fpdf2 PDF. Navy header, bordered tables, page numbers, Grad-CAM++ heatmap, colour confidence pill, transliterated Greek legends. |
@@ -314,7 +318,7 @@ The system is designed for graceful degradation: even low-confidence or out-of-d
 |-----------|--------|
 | Backbone | EfficientNet-B3 (compound scaling: depth + width + resolution simultaneously) |
 | Pre-training | ImageNet -- 1.2M images, 1,000 classes (Google Brain) |
-| Fine-tuning source | Corpus Nummorum v1 -- 438 types, 7,677 images (filtered from 115,160 raw at >=10/class) |
+| Fine-tuning source | Corpus Nummorum v1 -- 438 types, 7,677 images (filtered from 115,160 raw images; 5 to 204 images per class) |
 | Input shape | 299 x 299 x 3 RGB |
 | Feature vector | 1,536-dimensional (penultimate layer) |
 | Classification head | Dropout(0.4) -> Linear(1536, 438) |
@@ -354,13 +358,13 @@ Raw photo
 | Metric | Value |
 |--------|-------|
 | Best epoch | 52 / 100 |
-| Validation accuracy | 79.25% |
-| Test accuracy (single pass) | 79.08% |
-| **Test accuracy (TTA x8)** | **80.03%** |
-| Macro F1 (438 classes) | 0.7763 |
+| Test accuracy, single pass (1,152 held-out images) | 79.25% (reproduced Oct 2026) |
+| **Test accuracy, 5-view TTA** | **79.60%** (reproduced Oct 2026) |
+| Previously reported | 79.08% single pass / 80.03% TTA x8 (**not reproduced**) |
+| Macro F1 (438 classes) | 0.7763 from the original run; re-measure with `scripts/eval_by_source.py` |
 | Training time | ~103 min on RTX 3050 Ti |
 
-TTA x8: original + H-flip + V-flip + both flips + 4 x 85% corner crops. Averaged softmax -> +0.78% accuracy gain.
+TTA: the inference engine supports an 8-pass mode (original, H-flip, V-flip, both flips, 4 x 85% corner crops; averaged softmax). The reproduced evaluation used 5 views and gained +0.35 points (79.25% to 79.60%).
 
 MLflow tracks every training run: all hyperparameters, per-epoch metrics, and the model artifact. Compare runs at `http://localhost:5000`.
 
@@ -379,13 +383,13 @@ Every prediction generates a **Grad-CAM++ heatmap** showing which pixels caused 
 | Previous configuration | `features[-1]` -- 10 x 10 grid (3.6x coarser) |
 | Colour map | cv2.COLORMAP_JET -- blue (no attention) -> red (peak attention) |
 
-The three-panel comparison figure (`scripts/compare_heatmaps.py`) proves model health:
+The three-panel comparison figure (`scripts/compare_heatmaps.py`) illustrates three cases (qualitative, n = 3):
 
 | Panel | Coin | Confidence | Heatmap Character |
 |-------|------|------------|-------------------|
-| HIGH | CN 1015 `_p` composite | 86% | Dense red on face + legend -- healthy |
-| LOW | CN 220 BNF 1966 catalog scan | 28% | Diffuse but centred -- photo style mismatch, not model failure |
-| OOD | CN 10111 (not in training set) | 11.9% | Rim + background -- graceful degradation |
+| HIGH | CN 1015 `_p` composite | 86% | Dense red on face + legend |
+| LOW | CN 220 BNF 1966 catalog scan | 28% | Diffuse but centred -- single example, cause not established |
+| OOD | CN 10111 (not in training set) | 11.9% | Rim + background -- falls back to the Investigator route |
 
 The heatmap PNG is embedded directly in every generated PDF report and displayed in the web UI as a GradCamCard with a red-yellow-blue colour-scale legend.
 
@@ -637,7 +641,7 @@ For local-first operation (to reduce paid API dependency), leave `GITHUB_TOKEN` 
 
 | Component | Version | Role |
 |-----------|---------|------|
-| Docker Compose | 2.x | 7-service orchestration, hardened images |
+| Docker Compose | 2.x | 11-service orchestration, hardened images |
 | PostgreSQL | 17 | Sole persistence layer for classification history |
 | Redis | 7 | Session cache + result TTL |
 | Nginx | 1.27 | Reverse proxy + TLS termination |
@@ -650,8 +654,8 @@ For local-first operation (to reduce paid API dependency), leave `GITHUB_TOKEN` 
 
 | Metric | Target | Current |
 |--------|--------|---------|
-| CNN test accuracy (TTA x8, 438 classes) | > 80% | **80.03%** |
-| CNN macro F1 (438 classes) | > 0.75 | **0.7763** |
+| CNN test accuracy (5-view TTA, 1,152 held-out images, 438 classes) | > 80% | **79.60%** (target not yet met) |
+| CNN macro F1 (438 classes) | > 0.75 | 0.7763 (original run, to be re-measured) |
 | Historian route latency | < 25 s | ~15-20 s (Ollama gemma3:4b) |
 | Validator route latency | < 15 s | ~9.8 s |
 | Investigator route (OpenCV fallback) | < 5 s | ~3.1 s |
@@ -719,7 +723,7 @@ Note: if you want local Ollama to be the active provider path, keep `GITHUB_TOKE
 
 ```powershell
 # 1) Start core services
-docker compose up -d --build postgres redis api web nginx mlflow localstack prometheus grafana
+docker compose up -d --build postgres redis api web nginx mlflow localstack prometheus alertmanager grafana
 
 # 2) Apply database migrations
 docker compose run --rm migrator
@@ -886,7 +890,7 @@ deepcoin/
 |       +-- admin/page.tsx           # Admin dashboard
 +-- scripts/
 |   +-- train.py                     # CNN training V3 (MLflow-wired, AMP, Mixup)
-|   +-- evaluate_tta.py              # TTA evaluation (+0.78% = 80.03%)
+|   +-- evaluate_tta.py              # TTA evaluation
 |   +-- predict.py                   # CLI inference
 |   +-- test_pipeline.py             # End-to-end test (3 routes, 3/3 PASS)
 |   +-- build_knowledge_base.py      # CN scraper (--all-types, --resume)
@@ -897,7 +901,7 @@ deepcoin/
 |   +-- unit/                        # Store, security, auth
 |   +-- integration/                 # Health, classify, history, chat, auth
 +-- models/
-|   +-- best_model.pth               # EfficientNet-B3 V3 -- epoch 52, 80.03% TTA
+|   +-- best_model.pth               # EfficientNet-B3 V3 -- epoch 52, 79.60% TTA (5 views)
 |   +-- class_mapping.pth            # {class_to_idx, idx_to_class, n=438}
 +-- data/
 |   +-- processed/                   # 7,677 images x 438 classes (299x299 JPEG)
@@ -908,7 +912,7 @@ deepcoin/
 +-- .github/
 |   +-- copilot-instructions.md      # Persistent AI context (full project knowledge)
 |   +-- workflows/ci.yml             # GitHub Actions (Python 3.11+3.12 matrix, CI + CD)
-+-- docker-compose.yml               # 7 hardened services + migration profile
++-- docker-compose.yml               # 11 services + migration profile
 +-- pyproject.toml                   # Build config + lint/test tool config
 +-- Makefile                         # Developer shortcuts (api/test/lint/fmt/train/mlflow)
 +-- requirements.txt                 # 50+ Python dependencies
@@ -928,11 +932,11 @@ deepcoin/
 | GPU efficiency | AMP float16 + GradScaler | Halves VRAM, ~2x epoch speed on RTX 3050 Ti |
 | Explainability | Grad-CAM++ at features[-4] 19x19 | 3.6x finer resolution than features[-1] 10x10; sharper multi-instance attention |
 | Agent framework | LangGraph (not CrewAI) | Conditional routing + cycles + explicit state + production-ready |
-| KB scope | All 9,541 CN types | CNN is image-constrained (438 at >=10/class); KB is text -- no image threshold applies |
+| KB scope | All 9,541 CN types | CNN is image-constrained (438 classes with enough usable images); KB is text -- no image threshold applies |
 | Chunking | 5 semantic chunks / coin | Targeted embeddings -- "silver coin" hits material chunk, not a blurred blob |
 | Search | BM25 + ChromaDB + RRF | BM25 catches exact keyword hits; vectors catch semantic similarity; RRF merges both |
 | Reranking | RRF formula (not cross-encoder) | 9,541 records -- formula achieves ~95% of reranker accuracy at zero latency |
-| LLM grounding | [CONTEXT N] citation blocks | LLM writes, KB provides facts -- zero hallucination on structured fields |
+| LLM grounding | [CONTEXT N] citation blocks | LLM writes, KB provides facts -- structured fields are copied from the KB |
 | PDF engine | fpdf2 direct-draw | Zero Markdown parsing, full layout control, Greek transliteration map |
 | Security | hmac.compare_digest | Constant-time comparison -- prevents timing oracle attacks on API key |
 | Thread safety | Double-checked locking on all singletons | RAGEngine, LLM clients -- prevents OOM races on cold FastAPI startup |
@@ -948,7 +952,7 @@ deepcoin/
 | 1 | MLflow Tracking | Complete | Every training run logged -- params, metrics, model artifact |
 | 2 | Grad-CAM++ | Complete | 19x19 heatmaps in PDFs + web UI (GradCAMPlusPlus, features[-4]) |
 | 3 | Active Learning | Complete | Curator corrections -> weighted export -> retraining injection |
-| 4 | Docker Compose | Complete | 7 hardened services: FastAPI + Next.js + PostgreSQL + Redis + MLflow + Nginx + LocalStack |
+| 4 | Docker Compose | Complete | 11 services: FastAPI + Next.js + PostgreSQL + Redis + MLflow + Nginx + LocalStack + Prometheus + Alertmanager + Grafana + Ollama |
 | 5 | Observability | Complete | Prometheus + Alertmanager + Grafana provisioned with active alerting |
 | 6 | PostgreSQL Migration | Complete | PostgreSQL is the sole persistence layer; legacy SQLite path removed |
 | 7 | Deployment Automation | Complete | CD workflow live in GitHub Actions (build, test, deploy) |
@@ -968,18 +972,18 @@ deepcoin/
 | **Company** | YEBNI -- Information & Communication, Tunisia |
 | **Project type** | PFE -- 6-month |
 | **Period** | February - August 2026 |
-| **Student** | Dhia Chaieb -- dhia.chaieb@esprit.tn |
+| **Student** | Dhia Chaieb -- dhiashayeb6@gmail.com |
 | **GitHub** | ChaiebDhia/DeepCoin-Core |
 | **Dataset** | Corpus Nummorum v1 -- 115,160 images, 9,716 types (DFG-funded) |
 | **Domain** | Fine-grained visual recognition + archaeological numismatics |
 
 ### Research Questions Addressed
 
-1. **Can transfer learning from ImageNet reliably classify ancient coins?** Yes -- 80.03% TTA on 438-way fine-grained classification.
-2. **Does hybrid BM25+vector search outperform vector-only for numismatic retrieval?** Yes -- exact keyword recall improves on material/mint queries.
-3. **Can RAG grounding eliminate LLM hallucination on structured numismatic facts?** Yes -- [CONTEXT N] citation format produces zero invented dates or mints in testing.
-4. **Can graceful degradation replace "I don't know" with useful output?** Yes -- all 3 routing paths produce valid reports including for out-of-distribution coins.
-5. **Is low confidence caused by model failure or input distribution shift?** Neither necessarily -- BNF 1966 catalog scans score 15-28% even for trained types vs 80-96% for standard composite photos. A novel intra-dataset distribution shift finding documented in Engineering Journal Section 184.
+1. **Can transfer learning from ImageNet reliably classify ancient coins?** Largely yes: 79.60% top-1 (5-view TTA) on 438 classes, measured on a 1,152-image held-out set. The set is small, so treat per-class figures as noisy.
+2. **Does hybrid BM25+vector search outperform vector-only for numismatic retrieval?** Not yet measured. A retrieval benchmark is planned.
+3. **Can RAG grounding reduce LLM hallucination on structured numismatic facts?** By construction, structured fields (date, mint, material) are copied from the knowledge base rather than generated. Prose faithfulness has not been formally evaluated yet.
+4. **Can graceful degradation replace "I don't know" with useful output?** All 3 routing paths return a structured report, including for out-of-distribution coins (3 / 3 end-to-end routes pass).
+5. **Is low confidence caused by model failure or input distribution shift?** Open. An earlier claim here was retracted (see Corrections); `scripts/eval_by_source.py` is the proper test.
 
 ---
 
@@ -1001,6 +1005,7 @@ MIT -- see [LICENSE](LICENSE) for details.
 
 ## Changelog
 
+- **November 2026** -- Re-ran the evaluation from scratch. Headline accuracy corrected to 79.60% (5-view TTA) / 79.25% (single pass) on 1,152 held-out images; one claim retracted; documentation aligned with the 11-service Compose stack.
 - **August 2026** -- CI/CD fully automated end-to-end (CD workflow live); container images hardened with a CI scan gate; PostgreSQL is now the sole persistence layer (legacy SQLite path removed); Prometheus/Alertmanager/Grafana alerting is live; test suite grew to 133 passing tests.
 - **Transactional email service** refactored to standard `smtplib` via Google App Passwords, replacing the Resend sandbox integration -- unrestricted delivery to `@esprit.tn` and external addresses, synchronous verification with hard-failure safeguards on waitlist confirmations, and real-time unsubscribe state in the Next.js dashboard.
 - **i18n Localization**: Next.js frontend supports a French/English toggle.
